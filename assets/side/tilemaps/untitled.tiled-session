@@ -1,0 +1,56 @@
+{
+    "Map/SizeTest": {
+        "height": 4300,
+        "width": 2
+    },
+    "activeFile": "test.tmx",
+    "expandedProjectPaths": [
+        "."
+    ],
+    "fileStates": {
+        "Buildings.tsx": {
+            "scaleInDock": 2,
+            "scaleInEditor": 2
+        },
+        "Deco.tsx": {
+            "scaleInDock": 2,
+            "scaleInEditor": 1
+        },
+        "Tiles.tsx": {
+            "scaleInDock": 4,
+            "scaleInEditor": 1
+        },
+        "test.tmx": {
+            "scale": 2,
+            "selectedLayer": 1,
+            "viewCenter": {
+                "x": 107.25,
+                "y": 130.25
+            }
+        }
+    },
+    "last.exportedFilePath": "C:/Users/milo/OneDrive/Documents/CodingProjects/MDog/MDogEngine/assets/side/tilemaps",
+    "last.imagePath": "C:/Users/milo/OneDrive/Documents/CodingProjects/MDog/MDogEngine/assets/side/city",
+    "map.lastUsedExportFilter": "CSV files (*.csv)",
+    "map.lastUsedFormat": "tmx",
+    "map.tileHeight": 16,
+    "map.tileWidth": 16,
+    "openFiles": [
+        "test.tmx",
+        "Buildings.tsx",
+        "Tiles.tsx",
+        "Deco.tsx"
+    ],
+    "project": "untitled.tiled-project",
+    "recentFiles": [
+        "Deco.tsx",
+        "Tiles.tsx",
+        "Buildings.tsx",
+        "test.tmx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 16,
+        "width": 16
+    }
+}
