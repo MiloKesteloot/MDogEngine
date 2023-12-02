@@ -3,11 +3,38 @@ import GameMode from "/games/sofiatale/GameMode.js";
 
 const screen = {width: MDog.Draw.getScreenWidthInArtPixels(), height: MDog.Draw.getScreenHeightInArtPixels()};
 
+const keys = {
+    yes: ["Enter", "x", " "],
+    no: ["Escape", "z"],
+    up: ["ArrowUp", "w"],
+    down: ["ArrowDown", "s"],
+    left: ["ArrowLeft", "a"],
+    right: ["ArrowRight", "d"]
+}
+
+function keyDown(keySet, hold) {
+    hold = hold ?? true;
+
+    for (let i = 0; i < keySet.length; i++) {
+        if (hold) {
+            if (MDog.Input.Keyboard.isDown(keySet[i])) {
+                return true;
+            }
+        } else {
+            if (MDog.Input.Keyboard.isClicked(keySet[i])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 class GameModeAttack extends GameMode {
     constructor(playerStats) {
         super(playerStats);
 
         this.battleBox = new BattleBox(this, Math.floor(screen.width/2), 256, 5, 5);
+
         this.battleBox.animate(100, null, null, 452, 104);
         this.mode = new PickingMode(this);
 
@@ -76,6 +103,13 @@ class Mode {
                 settings.height,
                 "#ff9900"
             );
+            MDog.Draw.rectangle(
+                tempX+1,
+                y+1,
+                settings.width-2,
+                settings.height-2,
+                "#ff9900"
+            );
 
             const image = settings.options[i].image;
             if (image !== "") {
@@ -89,18 +123,42 @@ class Mode {
 }
 
 class TextMode extends Mode {
-    constructor(gameModeAttack, text, nextMode) {
+    constructor(gameModeAttack, text, nextMode, prevMode) {
         super(gameModeAttack);
         this.text = text;
         this.nextMode = nextMode;
+        this.prevMode = prevMode ?? null;
     }
 
     _draw() {
         MDog.Draw.clear();
         this.gameModeAttack.battleBox.draw();
         this.drawStats();
+
+        let text = this.text;
+
+        if (text.startsWith("?")) {
+            text = " " + text.substring(1);
+
+            const width = MDog.Draw.measureText(text, {size: 15, font: "undertale-hud"});
+
+            MDog.Draw.image(
+                "sofiatale/heart.png",
+                this.gameModeAttack.battleBox.getLeftX() + 15,
+                this.gameModeAttack.battleBox.getTopY() + 20 - 1);
+
+
+            MDog.Draw.rectangleFill(
+                this.gameModeAttack.battleBox.getLeftX() + 15 + width,
+                this.gameModeAttack.battleBox.getTopY() + 20,
+                60,
+                15,
+                "#00ff00"
+            );
+        }
+
         MDog.Draw.text(
-            this.text,
+            text,
             this.gameModeAttack.battleBox.getLeftX() + 15,
             this.gameModeAttack.battleBox.getTopY() + 20,
             "#ffffff",
@@ -108,8 +166,11 @@ class TextMode extends Mode {
     }
 
     _update() {
-        if (MDog.Input.Keyboard.isClicked("Enter")) {
+        if (keyDown(keys.yes, false)) {
             this.gameModeAttack.mode = this.nextMode;
+        }
+        if (keyDown(keys.no) && this.prevMode != null) {
+            this.gameModeAttack.mode = this.prevMode;
         }
     }
 }
@@ -122,21 +183,20 @@ class AttackingMode extends Mode {
         this.done = false;
         this.timer = 0;
         this.shakeRate = 15;
-        this.shakes = 3;
+        this.shakes = 3; // TODO what is this?
         this.flashRate = 15;
 
         this.imageWidth = 82;
         this.imageHeight = 45;
-        this.imageWidthStretch = 4;
+        this.imageWidthStretch = 5;
         this.imageHeightStretch = 2;
-        this.spacing = 10;
 
-        this.gameModeAttack.battleBox.animate(
-            60,
-            null,
-            null,
-            this.imageWidth*this.imageWidthStretch+this.spacing*2,
-            this.imageHeight*this.imageHeightStretch+this.spacing*2);
+        // this.gameModeAttack.battleBox.animate(
+        //     60,
+        //     null,
+        //     null,
+        //     this.imageWidth*this.imageWidthStretch+this.spacing*2,
+        //     this.imageHeight*this.imageHeightStretch+this.spacing*2);
     }
 
     _update() {
@@ -148,14 +208,19 @@ class AttackingMode extends Mode {
                 this.timer += 1;
             }
 
-            if (MDog.Input.Keyboard.isClicked("Enter")) {
+            if (keyDown(keys.yes, false)) {
                 this.done = true;
             }
         }
 
         if (this.checkOver()) {
-            this.gameModeAttack.mode = new TextMode(this.gameModeAttack, "*   Meow  bitch.", new FightingMode(this.gameModeAttack));
+            this.gameModeAttack.mode = new FightingMode(this.gameModeAttack);
             MDog.Draw.translate(0, 0);
+
+            this.gameModeAttack.battleBox.setDialogue("mow", 200);
+
+            // this.gameModeAttack.mode = new TextMode(this.gameModeAttack, "*   Mow  bitch.", );
+
         }
     }
 
@@ -171,11 +236,10 @@ class AttackingMode extends Mode {
         battleBox.draw();
 
         if (battleBox.doneMoving()) {
-            let thing = 0o10;
             MDog.Draw.image(
                 "sofiatale/battlegrid.png",
-                battleBox.getLeftX() + this.spacing,
-                battleBox.getTopY() + this.spacing,
+                battleBox.getX() - Math.floor(this.imageWidth*this.imageWidthStretch/2),
+                battleBox.getY() - Math.floor(this.imageHeight*this.imageHeightStretch/2),
                 {scaleX: this.imageWidthStretch, scaleY: this.imageHeightStretch}
                 );
 
@@ -239,7 +303,7 @@ class FightingMode extends Mode {
             this.spawnedYarn = true;
             battleBox.animate(100, null, null, 200, 100);
             // battleBox.addAttack(new CupAttack(this.gameModeAttack));
-            battleBox.addAttack(new YarnAttack(this.gameModeAttack));
+            this.gameModeAttack.battleBox.cat.mood = 2;
         }
     }
 
@@ -265,20 +329,23 @@ class PickingMode extends Mode {
     _update() {
         this.gameModeAttack.battleBox.update();
 
-        if (MDog.Input.Keyboard.isClicked("a")) {
+        if (keyDown(keys.left, false)) {
             this.choice = (this.choice - 1 + 4) % 4;
         }
-        if (MDog.Input.Keyboard.isClicked("d")) {
+        if (keyDown(keys.right, false)) {
             this.choice = (this.choice + 1) % 4;
         }
-        if (MDog.Input.Keyboard.isClicked("Enter")) {
+        if (keyDown(keys.yes, false)) {
             if (this.choice === 0) {
-                this.gameModeAttack.mode = new AttackingMode(this.gameModeAttack);
+                const att = new AttackingMode(this.gameModeAttack);
+                const back = this;
+                this.gameModeAttack.mode = new TextMode(this.gameModeAttack, "?      *   Sbot     ", att, back);
             }
         }
     }
 
     _draw() {
+        // MDog.Draw.clear({color: "#be0505"});
         MDog.Draw.clear();
 
         this.gameModeAttack.battleBox.draw();
@@ -365,6 +432,103 @@ class LerpItem {
     }
 }
 
+class Cat {
+    constructor(battleBox) {
+        this.battleBox = battleBox;
+
+        this.catScale = 3;
+
+        this.animations = {
+            head: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/faces.png", 4, 0, 45),
+            tail: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/tail.png", 4, 3, 30),
+            back: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/back.png", 2, 1, 19),
+            cup: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/cup.png", 4, 3, 47)
+        }
+
+        this.mood = 0; // 0 = normal, 1 = cup
+        this.spawnedCup = false;
+    }
+
+    draw() {
+
+        const battleBox = this.battleBox;
+
+        const x = battleBox.getX();
+        const y = battleBox.getY() - Math.floor(battleBox.getHeight() / 2) - this.catScale * 30 + 2;
+
+        if (battleBox.dialogueTimer > 0) {
+
+            const x1 = -130;
+            const y1 = -20;
+            const x2 = -20;
+            const y2 = 60;
+
+            const r = 10;
+
+            // MDog.Draw.rectangleFill(x+x1, y+y1, x2-x1, y2-y1, "#ffff00");
+
+            MDog.Draw.circle(x+x1 + r, y+y1 + r, r, "#ffffff");
+            MDog.Draw.circle(x+x1 + r, y+y2 - r, r, "#ffffff");
+            MDog.Draw.circle(x+x2 - r, y+y1 + r, r, "#ffffff");
+            MDog.Draw.circle(x+x2 - r, y+y2 - r, r, "#ffffff");
+
+            MDog.Draw.rectangleFill(x+x1 + r, y+y1, x2-x1 - 2*r, y2-y1, "#ffffff");
+            MDog.Draw.rectangleFill(x+x1, y+y1 + r, x2-x1, y2-y1 - 2*r, "#ffffff");
+
+            const blipHeight = 11;
+            const blipWidth = 10;
+            const blipY = 50;
+
+            //Math.floor((y1+y2)/2)+i-Math.floor(blipHeight/2)
+
+            for (let i = 0; i < blipHeight; i++) {
+                MDog.Draw.line(
+                    x+x2-1,
+                    y+y1+blipY+i-Math.floor(blipHeight/2),
+                    x+x2+blipWidth,
+                    y+y1+blipY,
+                    "#ffffff");
+            }
+
+            MDog.Draw.text(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y+Math.floor((y1+y2)/2)-3, "#000000", {size: 16*3, font: "rainyhearts", textAlign: "center", textBaseline: "middle"});
+        }
+
+        if (this.mood === 0 || this.mood === 2) {
+            MDog.Draw.image("sofiatale/cat/body.png", x, y, {scale: this.catScale});
+
+            MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale})
+            MDog.Draw.animation(this.animations.back, x + 66, y + 27, {scale: this.catScale});
+            MDog.Draw.animation(this.animations.head, x, y, {scale: this.catScale});
+
+            if (this.mood === 2) {
+                if (this.battleBox.dialogueTimer === 0) {
+                    this.mood = 1;
+                }
+            }
+        }
+
+        if (this.mood === 1) {
+            MDog.Draw.animation(this.animations.cup, x - 3, y - 33, {scale: this.catScale})
+            MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale})
+            if (this.animations.cup.getRawFrame() >= this.animations.cup.frames) {
+                this.mood = 0;
+                this.animations.cup.reset();
+                this.spawnedCup = false;
+            }
+            if (this.animations.cup.getRawFrame() === this.animations.cup.frames - 1 &&
+                !this.spawnedCup) {
+                this.spawnedCup = true;
+                battleBox.addAttack(new CupAttack(this.battleBox.gameModeAttack));
+            }
+        }
+
+        if (MDog.Input.Keyboard.isDown(" ")) {
+            // MDog.Draw.image("sofiatale/cat.png", battleBox.getX(), battleBox.getY() - Math.floor(battleBox.getHeight() / 2) - this.catScale * 30 + 2, {scale: this.catScale});
+            // this.mood = 1;
+        }
+    }
+}
+
 class BattleBox {
     constructor(gameModeAttack, x, y, width, height) {
         this.gameModeAttack = gameModeAttack;
@@ -377,7 +541,15 @@ class BattleBox {
 
         this.attacks = [];
 
-        this.catScale = 3;
+        this.dialogueTimer = 0;
+        this.dialogueText = "";
+
+        this.cat = new Cat(this);
+    }
+
+    setDialogue(text, timer) {
+        this.dialogueText = text;
+        this.dialogueTimer = timer;
     }
 
     doneMoving() {
@@ -441,6 +613,9 @@ class BattleBox {
     }
 
     update() {
+        if (this.dialogueTimer > 0) {
+            this.dialogueTimer -= 1;
+        }
         this.updateSize();
         if (this.gameModeAttack.mode.drawBattleHeart()) {
             this.updateHeart();
@@ -475,16 +650,16 @@ class BattleBox {
 
         let moveSpeed = 1;
 
-        if (MDog.Input.Keyboard.isDown("w")) {
+        if (keyDown(keys.up)) {
             move.y -= moveSpeed;
         }
-        if (MDog.Input.Keyboard.isDown("s")) {
+        if (keyDown(keys.down)) {
             move.y += moveSpeed;
         }
-        if (MDog.Input.Keyboard.isDown("a")) {
+        if (keyDown(keys.left)) {
             move.x -= moveSpeed;
         }
-        if (MDog.Input.Keyboard.isDown("d")) {
+        if (keyDown(keys.right)) {
             move.x += moveSpeed;
         }
 
@@ -535,7 +710,9 @@ class BattleBox {
         // 2 -> 62
 
         this.drawBox();
-        MDog.Draw.image("sofiatale/cat.png", this.getX(), this.getY() - Math.floor(this.getHeight()/2) - this.catScale * 30 + 2, {scale: this.catScale});
+
+        this.cat.draw();
+
         if (this.gameModeAttack.mode.drawBattleHeart()) {
             if (this.doneMoving()) {
                 this.drawAttacks();
@@ -583,7 +760,7 @@ class CupAttack extends ModeAttack {
 
         const vel = new MDog.Math.Vector(-0.1, -1.2);
 
-        this.cup = new Cup(this.gameModeAttack,0, -20, vel.getX(), vel.getY());
+        this.cup = new Cup(this.gameModeAttack,112, -20, vel.getX(), vel.getY());
         // this.cups.push(new Cup(0, 40, vel.getX(), vel.getY()));
         // this.cups.push(new Cup(0, 100, vel.getX(), vel.getY()));
 
@@ -611,7 +788,7 @@ class CupAttack extends ModeAttack {
 class Cup {
     constructor(gameModeAttack, x, y, vx, vy) {
         this.gameModeAttack = gameModeAttack;
-        this.diam = 14;
+        this.diam = 18;
         this.r = this.diam/2;
         this.pos = new MDog.Math.Vector(x, y);
         const battleBox = this.gameModeAttack.battleBox;
@@ -652,11 +829,13 @@ class Cup {
         }
         if (this.pos.getY() > battleBox.getY()+Math.floor((battleBox.getHeight())/2)-this.getR()) {
             if (this.velocity.getY() >= 0) {
-                this.pos.setY(battleBox.getY() + Math.floor((battleBox.getHeight()) / 2) - this.getR());
+                if (this.bounces <= 10) {
+                    this.pos.setY(battleBox.getY() + Math.floor((battleBox.getHeight()) / 2) - this.getR());
 
-                this.calculateVelocity();
+                    this.calculateVelocity();
 
-                this.bounces += 1;
+                    this.bounces += 1;
+                }
             }
         }
 
@@ -728,18 +907,21 @@ class Cup {
     }
 
     checkDeath() {
-        return this.bounces > 10;
+        return false;
     }
 
     draw() {
-        MDog.Draw.rectangle(
-            Math.floor(this.pos.x - this.r),
-            Math.floor(this.pos.y - this.r),
-            this.getR()*2,
-            this.getR()*2,
-            "#ff0000"
-        )
-        MDog.Draw.rectangleFill(Math.floor(this.pos.x), Math.floor(this.pos.y), 1, 1, "#ff00ff");
+
+        MDog.Draw.image("sofiatale/cat/actual_cup_lol.png", Math.floor(this.pos.x - this.r) - 6, Math.floor(this.pos.y - this.r) - 3, {scale: 3}); // TODO fix the -3 on the x, this is bad
+        // MDog.Draw.rectangleFill(Math.floor(this.pos.x), Math.floor(this.pos.y), 1, 1, "#ff00ff");
+        //
+        // MDog.Draw.rectangle(
+        //     Math.floor(this.pos.x - this.r),
+        //     Math.floor(this.pos.y - this.r),
+        //     this.getR()*2,
+        //     this.getR()*2,
+        //     "#ff0000"
+        // )
     }
 }
 
@@ -928,3 +1110,12 @@ function pointCollide(x1, y1, x2, y2, r) {
 }
 
 export default GameModeAttack;
+
+// TODO go back to picking when the attack ends
+// TODO add cat health
+// TODO add player health
+// TODO add items?
+// TODO button art and labels
+// TODO dialauge
+// TODO mousetrap
+// TODO ear animation

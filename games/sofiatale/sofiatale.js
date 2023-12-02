@@ -4,8 +4,6 @@ import GameModeExplore from "./GameModeExplore.js";
 
 console.log("Started!");
 
-const animation =
-
 class Game {
     constructor() {
         this.playerStats = new PlayerStats();
@@ -13,7 +11,7 @@ class Game {
     }
 
     _main() {
-        // this.gameMode._main();
+        this.gameMode._main();
     }
 }
 

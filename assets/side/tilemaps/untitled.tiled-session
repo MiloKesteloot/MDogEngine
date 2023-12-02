@@ -22,14 +22,14 @@
         },
         "test.tmx": {
             "scale": 2,
-            "selectedLayer": 1,
+            "selectedLayer": 0,
             "viewCenter": {
-                "x": 107.25,
-                "y": 130.25
+                "x": 590,
+                "y": 218.25
             }
         }
     },
-    "last.exportedFilePath": "C:/Users/milo/OneDrive/Documents/CodingProjects/MDog/MDogEngine/assets/side/tilemaps",
+    "last.exportedFilePath": "C:/Users/milo/OneDrive/Documents/CodingProjects/MDog/MDogEngine/assets/side/tilemaps/good",
     "last.imagePath": "C:/Users/milo/OneDrive/Documents/CodingProjects/MDog/MDogEngine/assets/side/city",
     "map.lastUsedExportFilter": "CSV files (*.csv)",
     "map.lastUsedFormat": "tmx",

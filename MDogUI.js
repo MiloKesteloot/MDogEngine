@@ -77,25 +77,30 @@ class GridInteractable extends Interactable {
 }
 
 class TilemapInteractable extends Interactable {
-    constructor(x, y, width, height, tileSize, spriteSheet, spriteSheetWidth) {
+    constructor(x, y, tilemap, tileSize, spriteSheet, spriteSheetWidth) {
         super(x, y);
-        this.width = width;
-        this.height = height;
+
         this.tileSize = tileSize;
         this.spriteSheet = spriteSheet;
         this.spriteSheetWidth = spriteSheetWidth;
+
+        let rows = tilemap.replaceAll(" ", "").split("\n");
+
+        this.height = rows.length;
+        this.width = rows[0].split(",").length;
+
+        console.log(this.width, this.height);
+
         this.grid = [];
 
         for (let i = 0; i < this.width; i++) {
             this.grid.push([]);
+
             for (let j = 0; j < this.height; j++) {
                 this.grid[i].push(-1);
             }
         }
-    }
 
-    importTilemap(tilemap) {
-        let rows = tilemap.replaceAll(" ", "").split("\n");
         for (let i = 0; i < rows.length; i++) {
             const newRow = rows[i];
             const cols = (newRow).split(",");

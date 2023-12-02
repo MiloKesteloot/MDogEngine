@@ -1,13 +1,127 @@
 import Module from "/MDogModule.js";
 import Maths from "/MDogMaths.js";
-import UI from "/MDogUI.js";
-// import MDog from "./MDogMain";
+// import UI from "/MDogUI.js";
 
 const Vector = (new Maths()).Vector;
+
+class Animation {
+    constructor(fileName, frames, animationSpeed) {
+        this.fileName = fileName;
+        this.frames = frames;
+        this.animationSpeed = animationSpeed;
+        this.time = 0;
+    }
+
+    getFrame() {
+        return this.getRawFrame() % this.frames;
+    }
+
+    getRawFrame() {
+        return Math.floor(this.time / (167 / this.animationSpeed));
+    }
+
+    reset() {
+        this.time = 0;
+    }
+
+    _loadFrames(Draw) {}
+
+    _draw(Draw, x, y, settings) {
+        console.log("The default animation doesn't have a draw function!");
+    }
+}
+
+class MultipleFileAnimation extends Animation {
+    _draw(Draw, x, y, settings) {
+        settings = settings ?? {};
+        const update = settings.update ?? true;
+        const flipX = settings.flipX ?? false;
+        const flipY = settings.flipY ?? false;
+
+        const scale = settings.scale ?? 1;
+        Draw.image(this.getImage(), x, y, {flipX: flipX, flipY: flipY, scale: scale});
+        if (update) {
+            this.time += 1;
+        }
+    }
+
+    getImage(frame) {
+        frame = frame ?? this.getFrame();
+        return this.fileName.replace("?", (frame + 1));
+    }
+
+    _loadFrames(Draw) {
+        for (let i = 0; i < this.frames; i++) {
+            Draw.image(this.getImage(i), -1000, -1000);
+        }
+    }
+}
+
+class SpriteSheetAnimation extends Animation {
+
+    constructor(fileName, frames, animationSpeed, spriteWidth) {
+        super(fileName, frames, animationSpeed);
+
+        this.spriteWidth = spriteWidth;
+    }
+
+    _draw(Draw, x, y, settings) {
+        settings = settings ?? {};
+        const update = settings.update ?? true;
+        const flipX = settings.flipX ?? false;
+        const flipY = settings.flipY ?? false;
+        const scale = settings.scale ?? 1;
+        Draw.image(this.fileName, x, y,
+            {
+                flipX: flipX, flipY: flipY,
+                width: this.spriteWidth,
+                offsetX: this.spriteWidth * (this.getFrame()),
+                scale: scale
+            }
+        );
+        if (update) {
+            this.time += 1;
+        }
+    }
+
+    _loadFrames(Draw) {
+        Draw.image(this.fileName, -1000, -1000);
+    }
+}
+
+class Canvas {
+    constructor(draw) {
+        this.element = document.createElement("canvas");
+        this.element.width = draw.screenWidthInArtPixels;
+        this.element.height = draw.screenHeightInArtPixels;
+        this._calculateSize(draw);
+
+        this.element.style.imageRendering = "pixelated";
+
+        this.ctx = this.element.getContext("2d");
+        this.ctx.imageSmoothingEnabled = false;
+
+        this.element.webkitF = "never";
+
+        this.offset = new Vector();
+    }
+
+    _calculateSize(draw) {
+        const pixelWidth = draw._getPixelWidth();
+        const pixelHeight = draw._getPixelHeight();
+        const pixelSize = Math.min(pixelWidth, pixelHeight);
+
+        this.element.style.width = pixelSize * this.element.width + "px";
+        this.element.style.height = pixelSize * this.element.height + "px";
+    }
+}
 
 class Draw extends Module {
     constructor(screenWidthInArtPixels, screenHeightInArtPixels) {
         super();
+
+        this.MultipleFileAnimation = MultipleFileAnimation;
+        this.SpriteSheetAnimation = SpriteSheetAnimation;
 
         this.layer = 0;
 
@@ -26,6 +140,7 @@ class Draw extends Module {
         this.imageCache = new Map();
         this.fonts = [];
         this.loadFont("undertale-hud", "/assets/sofiatale/hud.ttf");
+        this.loadFont("rainyhearts", "/assets/sofiatale/rainyhearts.ttf");
     }
 
     translate(x, y, settings) {
@@ -182,17 +297,17 @@ class Draw extends Module {
         canvas.ctx.fillRect(x+width-1, y+1, 1, height-2);
     }
 
-    // circle(x, y, radius, color, settings) {
-    //     settings = settings ?? {};
-    //     const layer = settings.layer ?? this.layer;
-    //
-    //     const canvas = this._getCanvas(layer);
-    //     canvas.ctx.fillStyle = color;
-    //
-    //     canvas.ctx.beginPath();
-    //     canvas.ctx.arc(x, y, radius, 0, 2 * Math.PI);
-    //     canvas.ctx.fill();
-    // }
+    circle(x, y, radius, color, settings) {
+        settings = settings ?? {};
+        const layer = settings.layer ?? this.layer;
+
+        const canvas = this._getCanvas(layer);
+        canvas.ctx.fillStyle = color;
+
+        canvas.ctx.beginPath();
+        canvas.ctx.arc(x, y, radius, 0, 2 * Math.PI);
+        canvas.ctx.fill();
+    }
     //
     // hexagon(x, y, radius, color, settings) {
     //     settings = settings ?? {};
@@ -247,7 +362,16 @@ class Draw extends Module {
         }
     }
 
-    // Perams: layer, testAlign (left, center, right), textBaseLine (middle), size, font
+    measureText(text, settings) {
+        settings = settings ?? {};
+        const size = (settings.size ?? "5") + "px";
+        const font = settings.font ?? "Arial";
+        const ctx = this.mainCanvas.ctx;
+        ctx.font = size + " " + font;
+        return ctx.measureText(text).width;
+    }
+
+    // Perams: layer, textAlign (left, center, right), textBaseline (top, middle), size, font
     text(text, x, y, color, settings) {
 
         settings = settings ?? {};
@@ -263,15 +387,18 @@ class Draw extends Module {
         ctx.font = size + " " + font;
         // ctx.letterSpacing = 100;
         ctx.fillStyle = color;
-        ctx.textAlign = settings.textAlign ?? 'left';
-        ctx.textBaseline = settings.textBaseline ?? 'middle';
+        const textAlign = settings.textAlign ?? 'left'
+        ctx.textAlign = textAlign;
+        ctx.textBaseline = settings.textBaseline ?? 'top';
 
-        let fullWidth = 0;
-        for (let i = 0; i < text.length; i++) {
-            const width = Math.ceil(ctx.measureText(text[i]).width);
-            ctx.fillText(text[i], x + fullWidth, y);
-            fullWidth += width;
-        }
+        // let fullWidth = 0;
+        // for (let i = 0; i < text.length; i++) {
+        //     const width = Math.ceil(0) + (ctx.measureText(text[i]).width);
+        //     ctx.fillText(text[i], x + fullWidth, y);
+        //     fullWidth += width;
+        // }
+        ctx.fillText(text, x, y);
+
 
         // for (let i = 0; i < 10; i++) {
         //     canvas.ctx.fillText(text, x, y + 10);
@@ -355,6 +482,10 @@ class Draw extends Module {
         animation._draw(this, x, y, settings);
     }
 
+    preloadAnimation(animation) {
+        animation._loadFrames(this);
+    }
+
     interactable(interactable) {
         interactable._draw(this);
     }
@@ -367,81 +498,5 @@ class Draw extends Module {
     // Function Point
     // Whatever
 }
-
-class Animation {
-    constructor(fileName, frames, animationSpeed) {
-        this.fileName = fileName;
-        this.frames = frames;
-        this.animationSpeed = animationSpeed;
-        this.time = 0;
-    }
-
-    getFrame() {
-        const localTime = Math.floor(this.time / (167 / this.animationSpeed));
-        const localFrame = localTime % this.frames;
-        return localFrame;
-    }
-
-    // loadFrames() {
-    //     for (let i = 0; i < this.frames; i++) {
-    //         const image = this.fileName.replace("?", (i + 1));
-    //         MDog.Draw.image(image, -100, -100);
-    //     }
-    // }
-
-    _draw(Draw, x, y, settings) {
-        console.log("The default animation doesn't have a draw function!");
-    }
-}
-
-class MultipleFileAnimation extends Animation {
-    _draw(Draw, x, y, settings) {
-        settings = settings ?? {};
-        const update = settings.update ?? true;
-        const flipX = settings.flipX ?? false;
-        const flipY = settings.flipY ?? false;
-        const localFrame = this.getFrame();
-        const image = this.fileName.replace("?", (localFrame + 1));
-        Draw.image(image, x, y, {flipX: flipX, flipY: flipY});
-        if (update) {
-            this.time += 1;
-        }
-    }
-}
-
-class SpriteSheetAnimation extends Animation {
-    _draw() {
-        console.log("Fix drawing for spritesheet!");
-    }
-}
-
-class Canvas {
-    constructor(draw) {
-        this.element = document.createElement("canvas");
-        this.element.width = draw.screenWidthInArtPixels;
-        this.element.height = draw.screenHeightInArtPixels;
-        this._calculateSize(draw);
-
-        this.element.style.imageRendering = "pixelated";
-
-        this.ctx = this.element.getContext("2d");
-        this.ctx.imageSmoothingEnabled = false;
-
-        this.element.webkitF = "never";
-
-        this.offset = new Vector();
-    }
-
-    _calculateSize(draw) {
-        const pixelWidth = draw._getPixelWidth();
-        const pixelHeight = draw._getPixelHeight();
-        const pixelSize = Math.min(pixelWidth, pixelHeight);
-
-        this.element.style.width = pixelSize * this.element.width + "px";
-        this.element.style.height = pixelSize * this.element.height + "px";
-    }
-}
-
-
 
 export default Draw;

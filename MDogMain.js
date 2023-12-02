@@ -4,6 +4,7 @@ import Maths from "/MDogEngine/MDogMaths.js";
 import Input from "/MDogEngine/MDogInput.js";
 import UI from "/MDogEngine/MDogUI.js";
 import FX from "/MDogEngine/MDogFX.js";
+import AssetManager from "/MDogEngine/MDogAssetManager.js";
 
 class MDog {
     constructor() {
@@ -14,6 +15,7 @@ class MDog {
         this.Math = new Maths();
         this.UI = new UI(this.Draw);
         this.FX = new FX();
+        this.AssetManager = new AssetManager();
 
         this.activeFunction = null;
 

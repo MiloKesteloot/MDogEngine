@@ -128,6 +128,18 @@ class Maths extends Module {
         super();
 
         this.Vector = Vector;
+
+        this.nowTime = Date.now();
+        this.lastTime = this.nowTime;
+    }
+
+    _preUpdate() {
+        this.lastTime = this.nowTime;
+        this.nowTime = Date.now();
+    }
+
+    deltaTime() {
+        return this.nowTime - this.lastTime;
     }
 
     lerp(v1, v2, t) {
