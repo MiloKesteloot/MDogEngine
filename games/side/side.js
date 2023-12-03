@@ -35,7 +35,6 @@ class Coin {
             0, 0, 13, 13
         )
         this.animation = new MDog.Draw.MultipleFileAnimation("side/coin/coin_?.png", 8, 12);
-        MDog.Draw.preloadAnimation(this.animation);
     }
 
     getX() {// TODO This is only here because I'm using the state thing instead of animations
@@ -1041,7 +1040,6 @@ class State {
     constructor(player, frames, fileName, animationSpeed) {
         this.player = player;
         this.animation = new MDog.Draw.MultipleFileAnimation(fileName, frames, animationSpeed);
-        MDog.Draw.preloadAnimation(this.animation);
     }
 
     is(stateClass) {
@@ -1053,10 +1051,7 @@ class State {
     }
 
     loadFrames() {
-        // for (let i = 0; i < this.frames; i++) {
-        //     const image = this.fileName.replace("?", (i + 1));
-        //     MDog.Draw.image(image, -100, -100);
-        // }
+        MDog.Draw.preloadAnimation(this.animation);
     }
 
     canWallSlide() {
@@ -1172,13 +1167,14 @@ class WallSlideState extends State {
     }
 }
 
-// new IdleState(null).loadFrames();
-// new RunningState(null).loadFrames();
-// new JumpState(null).loadFrames();
-// new FallState(null).loadFrames();
-// new JumpToFallState(null).loadFrames();
-// new WallSlideState(null).loadFrames();
-// new DashAttackState(null).loadFrames();
+new IdleState(null).loadFrames();
+new RunningState(null).loadFrames();
+new JumpState(null).loadFrames();
+new FallState(null).loadFrames();
+new JumpToFallState(null).loadFrames();
+new WallSlideState(null).loadFrames();
+new DashAttackState(null).loadFrames();
+MDog.Draw.preloadAnimation(new MDog.Draw.MultipleFileAnimation("side/coin/coin_?.png", 8, 12));
 
 class Grapple {
     constructor(game, x, y) {
@@ -1329,6 +1325,8 @@ MDog.AssetManager.loadFile("side/tilemaps/good/tiles_BuildingTop.csv", "Building
 MDog.AssetManager.loadFile("side/tilemaps/good/tiles_Tiles.csv", "Tiles");
 MDog.AssetManager.loadFile("side/tilemaps/good/tiles_Deco.csv", "Deco");
 MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors.csv", "Colors");
+
+
 
 MDog.setActiveFunction(main);
 
