@@ -1,4 +1,4 @@
-import MDog from "/MDogMain.js"
+import MDog from "/MDogEngine/MDogMain.js"
 import GameModeAttack from "./GameModeAttack.js";
 import GameModeExplore from "./GameModeExplore.js";
 
