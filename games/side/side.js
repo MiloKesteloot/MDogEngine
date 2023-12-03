@@ -105,6 +105,13 @@ class Hitbox {
         ][index];
     }
 
+    getMiddleOffsetX() {
+        return Math.floor(this.x1 + Math.floor(this.getWidth()/2));
+    }
+    getMiddleOffsetY() {
+        return Math.floor(this.y1 + Math.floor(this.getHeight()/2));
+    }
+
     getMiddleX() {
         return Math.floor(this.vector.getX()) + this.x1 + Math.floor(this.getWidth()/2);
     }
@@ -156,8 +163,13 @@ class Camera {
         this.game = game;
         this.follow = follow;
         this.position = follow.clone();
-        this.xRange = 100;
-        this.yRange = 100;
+        this.xRangeLeft = -70;
+        this.xRangeRight = 70;
+
+        this.yRangeHeight = 100;
+        this.yOffset = -Math.floor(this.yRangeHeight/2);
+        this.yRangeTop = this.yOffset;
+        this.yRangeBottom = this.yOffset + this.yRangeHeight;
     }
 
     getX() {
@@ -169,22 +181,50 @@ class Camera {
     }
 
     update() {
-        if (this.position.getX() < Math.floor(this.follow.getX()) - this.xRange) {
-            this.position.setX(Math.floor(this.follow.getX()) - this.xRange);
+
+        // if (this.game.player.velocity.getY() < 0) {
+        //     if (this.yOffset > -this.yRangeHeight) {
+        //         if (this.position.getY() < Math.floor(this.follow.getY()) + this.yRangeTop) {
+        //             this.yOffset -= 1;
+        //         }
+        //     }
+        // }
+        // if (this.game.player.velocity.getY() > 0) {
+        //     if (this.yOffset < 0) {
+        //         if (this.position.getY() > Math.floor(this.follow.getY()) + this.yRangeBottom) {
+        //             this.yOffset += 1;
+        //         }
+        //     }
+        // }
+
+        this.yRangeTop = this.yOffset;
+        this.yRangeBottom = this.yOffset + this.yRangeHeight;
+
+        if (this.position.getX() < Math.floor(this.follow.getX()) + this.xRangeLeft) {
+            this.position.setX(Math.floor(this.follow.getX()) + this.xRangeLeft);
         }
-        if (this.position.getX() > Math.floor(this.follow.getX()) + this.xRange) {
-            this.position.setX(Math.floor(this.follow.getX()) + this.xRange);
+        if (this.position.getX() > Math.floor(this.follow.getX()) + this.xRangeRight) {
+            this.position.setX(Math.floor(this.follow.getX()) + this.xRangeRight);
         }
 
-        if (this.position.getY() < Math.floor(this.follow.getY()) - this.yRange) {
-            this.position.setY(Math.floor(this.follow.getY()) - this.yRange);
+        if (this.position.getY() < Math.floor(this.follow.getY()) + this.yRangeTop) {
+            this.position.setY(Math.floor(this.follow.getY()) + this.yRangeTop);
         }
-        if (this.position.getY() > Math.floor(this.follow.getY()) + this.yRange) {
-            this.position.setY(Math.floor(this.follow.getY()) + this.yRange);
+        if (this.position.getY() > Math.floor(this.follow.getY()) + this.yRangeBottom) {
+            this.position.setY(Math.floor(this.follow.getY()) + this.yRangeBottom);
         }
 
         let goalX = -this.getX() + Math.floor(MDog.Draw.getScreenWidthInArtPixels()/2) - 27;
+
         let goalY = -this.getY() + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2) - 27;
+        // let goalY = -Math.floor(this.follow.getY()) + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2) - 27;
+
+        // console.log("--");
+        // console.log(goalY);
+        // console.log(goalY2);
+
+        // console.log(this.position)
+
 
         const hbtm = this.game.tilemaps.hitbox;
 
@@ -367,6 +407,25 @@ class Player {
 
         this.particleSystem.update();
 
+        const outerRange = 20;
+        for (let i = 0; i < this.particleSystem.particles.length; i++) {
+            const particle = this.particleSystem.particles[i];
+            if (particle.tags.includes("wind")) {
+                if (particle.getX() < 0-outerRange) {
+                    particle.position.setX(MDog.Draw.getScreenWidthInArtPixels() + outerRange);
+                }
+                if (particle.getX() > MDog.Draw.getScreenWidthInArtPixels()+outerRange) {
+                    particle.position.setX(0-outerRange);
+                }
+                if (particle.getY() < 0-outerRange) {
+                    particle.position.setY(MDog.Draw.getScreenHeightInArtPixels() + outerRange);
+                }
+                if (particle.getY() > MDog.Draw.getScreenHeightInArtPixels()+outerRange) {
+                    particle.position.setY(0-outerRange);
+                }
+            }
+        }
+
         if (this.onGround()) {
 
             this.groundCoyoteTime = this.groundCoyoteLimit;
@@ -499,7 +558,6 @@ class Player {
             const direction = new Vector();
             this.setState(DashAttackState);
 
-
             if (this.keyDown(this.keys.up)) {
                 direction.add(0, -1);
             }
@@ -550,6 +608,57 @@ class Player {
 
             this.velocity.setX(velocityX);
             this.velocity.setY(velocityY);
+
+            let pv = direction.clone();
+            pv.normalize();
+            pv.multiply(this.velocity.length());
+            // pv.multiply(3);
+
+            const move = 0.5;
+
+            // *3-1
+
+            for (let i = 0; i < 50; i++) {
+                let x = Math.floor((Math.random())*MDog.Draw.getScreenWidthInArtPixels());
+                let y = Math.floor((Math.random())*MDog.Draw.getScreenHeightInArtPixels());
+                this.particleSystem.addParticle(
+                    new MDog.FX.LineParticle(
+                        x,
+                        y,
+                        Math.floor(rnd(10, 70)),
+                        "#ffffff" + Math.floor(rnd(3, 9)) + "0",
+                        pv.getX() + rnd(-move, move),
+                        pv.getY() + rnd(-move, move),
+                        {
+                            gx: 0,
+                            gy: 0,
+                            layer: 10,
+                            length: Math.floor(rnd(10, 20)),
+                            tags: ["wind"]
+                        }
+                    ));
+            }
+
+            for (let i = 0; i < 13; i++) {
+                let x = Math.floor((Math.random())*MDog.Draw.getScreenWidthInArtPixels());
+                let y = Math.floor((Math.random())*MDog.Draw.getScreenHeightInArtPixels());
+                this.particleSystem.addParticle(
+                    new MDog.FX.ChunkParticle(
+                        x,
+                        y,
+                        Math.floor(rnd(10, 70)),
+                        "#287013",
+                        pv.getX(),
+                        pv.getY(),
+                        {
+                            gx: 0,
+                            gy: 0,
+                            size: Math.floor(rnd(2, 5)),
+                            layer: 10,
+                            tags: ["wind"]
+                        }
+                    ));
+            }
         }
 
         let goalVelX = 0;
@@ -681,6 +790,38 @@ class Player {
     }
 
     $doParticles() {
+        console.log(this.velocity.length());
+        if (!this.onGround()) {
+            const velCheck = this.velocity.clone();
+            velCheck.y /= 1.7;
+            velCheck.x *= 3;
+            if (Math.random()*velCheck.length() > 1.3) {
+                const move = this.velocity.clone();
+                move.multiply(-0.5);
+                const add = this.velocity.clone();
+                add.normalize();
+                add.multiply(5);
+                for (let i = 0; i < 1; i++) {
+                    let x = Math.floor(rnd(this.hitbox.getX(1), this.hitbox.getX(2)) + add.getX());
+                    let y = Math.floor(rnd(this.hitbox.getY(1), this.hitbox.getY(2)) + add.getY());
+                    this.particleSystem.addParticle(
+                        new MDog.FX.LineParticle(
+                            x,
+                            y,
+                            Math.floor(rnd(5, 15) * velCheck.length()),
+                            "#ffffff" + Math.floor(rnd(3, 9)) + "0", // "#287013", //
+                            move.getX(),
+                            move.getY(),
+                            {
+                                gx: 0,
+                                gy: 0,
+                                length: 10,
+                                // size: Math.floor(rnd(1, 3)),
+                            }
+                        ));
+                }
+            }
+        }
         if (this.onGround() && this.state.is(RunningState)) {
 
             const grass = 2;
@@ -1066,36 +1207,37 @@ class Game {
         ];
 
         this.globalParticleSystem = new MDog.FX.ParticleSystem();
-
-        console.log(MDog.AssetManager.get("Building1"));
-        console.log(MDog.AssetManager.get("Building2"));
-        console.log(MDog.AssetManager.get("Tiles"));
-        console.log(MDog.AssetManager.get("Deco"));
+        this.screenSpaceParticleSystem = new MDog.FX.ParticleSystem();
 
         this.tilemaps = {
             // hitbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building"), 16, "side/city/Colors.png", 6),
-            hitbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Tiles"), 16, "side/city/Tiles.png", 6),
+            // hitbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Tiles"), 16, "side/city/Tiles.png", 6),
+            hitbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Colors"), 16, "side/city/Colors.png", 4),
             back: [
-                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building1"), 16, "side/city/Buildings.png", 25),
-                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building2"), 16, "side/city/Buildings.png", 25),
-                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Tiles"), 16, "side/city/Tiles.png", 6),
+                // new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building1"), 16, "side/city/Buildings.png", 25),
+                // new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building2"), 16, "side/city/Buildings.png", 25),
+                // new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Tiles"), 16, "side/city/Tiles.png", 6),
             ],
             front: [
-                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Deco"), 16, "side/city/Props-01.png", 8)
+                // new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Deco"), 16, "side/city/Props-01.png", 8)
             ]
         }
-
-        console.log(this.tilemaps)
 
         const hbtm = this.tilemaps.hitbox;
 
         for (let x = 0; x < hbtm.width; x++) {
             for (let y = 0; y < hbtm.height; y++) {
                 const index = hbtm.get(x, y);
-                if (index === 3) {
+                if (index === 1) {
                     hbtm.set(x, y, -1);
                     const pos = hbtm.tileToScreen(x, y);
                     this.coins.push(new Coin(this, pos.x, pos.y));
+                }
+                if (index === 3) {
+                    hbtm.set(x, y, -1);
+                    const pos = hbtm.tileToScreen(x, y);
+                    this.player.position.setX(pos.x - this.player.hitbox.getMiddleOffsetX());
+                    this.player.position.setY(pos.y - this.player.hitbox.getMiddleOffsetY());
                 }
             }
         }
@@ -1190,6 +1332,7 @@ MDog.AssetManager.loadFile("side/tilemaps/good/tiles_Building.csv", "Building1")
 MDog.AssetManager.loadFile("side/tilemaps/good/tiles_BuildingTop.csv", "Building2");
 MDog.AssetManager.loadFile("side/tilemaps/good/tiles_Tiles.csv", "Tiles");
 MDog.AssetManager.loadFile("side/tilemaps/good/tiles_Deco.csv", "Deco");
+MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors.csv", "Colors");
 
 MDog.setActiveFunction(main);
 

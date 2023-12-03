@@ -29,13 +29,14 @@ function keyDown(keySet, hold) {
     return false;
 }
 
+let attackID = Math.floor(Math.random()*2);
+
 class GameModeAttack extends GameMode {
     constructor(playerStats) {
         super(playerStats);
 
         this.battleBox = new BattleBox(this, Math.floor(screen.width/2), 256, 5, 5);
 
-        this.battleBox.animate(100, null, null, 452, 104);
         this.mode = new PickingMode(this);
 
         MDog.Draw.setBackgroundColor("#141414");
@@ -116,7 +117,7 @@ class Mode {
                 // MDog.Draw.image(image, tempX + 1, y + 1);
             }
             if (i === this.gameModeAttack.mode.getChoiceHeart()) {
-                MDog.Draw.image("sofiatale/heart.png", tempX+3, y+7);
+                MDog.Draw.image("sofiatale/heart.png", tempX+7, y+8);
             }
         }
     }
@@ -216,9 +217,6 @@ class AttackingMode extends Mode {
         if (this.checkOver()) {
             this.gameModeAttack.mode = new FightingMode(this.gameModeAttack);
             MDog.Draw.translate(0, 0);
-
-            this.gameModeAttack.battleBox.setDialogue("mow", 200);
-
             // this.gameModeAttack.mode = new TextMode(this.gameModeAttack, "*   Mow  bitch.", );
 
         }
@@ -287,7 +285,22 @@ class AttackingMode extends Mode {
 class FightingMode extends Mode {
     constructor(gameModeAttack) {
         super(gameModeAttack);
-        this.spawnedYarn = false;
+
+        this.spawnedAttack = false;
+
+        // const rnd = Math.floor(Math.random()*2);
+
+        attackID += 1;
+
+        if (attackID % 2 === 0) {
+            this.attack = "cup";
+            this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
+            this.gameModeAttack.battleBox.setDialogue("mow", 200);
+            this.gameModeAttack.battleBox.cat.mood = 2;
+        } else if (attackID % 2 === 1) {
+            this.attack = "yarn";
+            this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
+        }
     }
 
     drawBattleHeart() {
@@ -295,16 +308,15 @@ class FightingMode extends Mode {
     }
 
     _update() {
-        const battleBox = this.gameModeAttack.battleBox;
 
-        battleBox.update();
-
-        if (!this.spawnedYarn) {
-            this.spawnedYarn = true;
-            battleBox.animate(100, null, null, 200, 100);
-            // battleBox.addAttack(new CupAttack(this.gameModeAttack));
-            this.gameModeAttack.battleBox.cat.mood = 2;
+        if (this.gameModeAttack.battleBox.doneMoving()) {
+            if (!this.spawnedAttack && this.attack === "yarn" && this.gameModeAttack.battleBox.doneMoving()) {
+                this.gameModeAttack.battleBox.addAttack(new YarnAttack(this.gameModeAttack));
+                this.spawnedAttack = true;
+            }
         }
+
+        this.gameModeAttack.battleBox.update();
     }
 
     _draw() {
@@ -320,6 +332,8 @@ class PickingMode extends Mode {
     constructor(gameModeAttack) {
         super(gameModeAttack);
         this.choice = 0;
+
+        this.gameModeAttack.battleBox.animate(100, null, null, 452, 104);
     }
 
     getChoiceHeart() {
@@ -335,7 +349,7 @@ class PickingMode extends Mode {
         if (keyDown(keys.right, false)) {
             this.choice = (this.choice + 1) % 4;
         }
-        if (keyDown(keys.yes, false)) {
+        if (keyDown(keys.yes, false) && this.gameModeAttack.battleBox.doneMoving()) {
             if (this.choice === 0) {
                 const att = new AttackingMode(this.gameModeAttack);
                 const back = this;
@@ -442,7 +456,8 @@ class Cat {
             head: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/faces.png", 4, 0, 45),
             tail: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/tail.png", 4, 3, 30),
             back: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/back.png", 2, 1, 19),
-            cup: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/cup.png", 4, 3, 47)
+            cup: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/cup.png", 4, 3, 47),
+            yarn: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/yarn_cat.png", 3, 3, 91, {order: [0, 1, 0, 1, 2, 1, 2, 1]}),
         }
 
         this.mood = 0; // 0 = normal, 1 = cup
@@ -493,6 +508,12 @@ class Cat {
             MDog.Draw.text(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y+Math.floor((y1+y2)/2)-3, "#000000", {size: 16*3, font: "rainyhearts", textAlign: "center", textBaseline: "middle"});
         }
 
+        if (this.mood === 3) {
+            if (this.battleBox.attacks.length === 0) {
+                this.mood = 0;
+            }
+        }
+
         if (this.mood === 0 || this.mood === 2) {
             MDog.Draw.image("sofiatale/cat/body.png", x, y, {scale: this.catScale});
 
@@ -519,7 +540,12 @@ class Cat {
                 !this.spawnedCup) {
                 this.spawnedCup = true;
                 battleBox.addAttack(new CupAttack(this.battleBox.gameModeAttack));
+                this.battleBox.gameModeAttack.mode.spawnedAttack = true;
             }
+        }
+
+        if (this.mood === 3) {
+            MDog.Draw.animation(this.animations.yarn, x - 3*15-1, y - 27, {scale: this.catScale});
         }
 
         if (MDog.Input.Keyboard.isDown(" ")) {
@@ -641,6 +667,15 @@ class BattleBox {
 
         for (let i = attacksToRemove.length - 1; i >= 0; i--) {
             this.attacks.splice(attacksToRemove[i], 1);
+        }
+
+        const gma = this.gameModeAttack;
+
+        // console.log(this.attacks.length + " " + this.cat.mood + " " + this.dialogueTimer + " " + gma.mode.spawnedAttack)
+
+        if (this.attacks.length === 0 && this.cat.mood === 0 && this.dialogueTimer === 0 && gma.mode.spawnedAttack) {
+            gma.mode = new PickingMode(gma);
+            gma.battleBox.cat.mood = 0;
         }
     }
 
@@ -907,7 +942,7 @@ class Cup {
     }
 
     checkDeath() {
-        return false;
+        return this.pos.getY() > screen.height;
     }
 
     draw() {
@@ -931,8 +966,6 @@ class YarnAttack extends ModeAttack {
 
         const battleBox = this.gameModeAttack.battleBox;
 
-        console.log("Spanwed");
-
         const vel = new MDog.Math.Vector(1.5, 1);
         vel.normalize();
 
@@ -951,6 +984,8 @@ class YarnAttack extends ModeAttack {
         } else {
             this.yarnBall = new YarnBall(this.gameModeAttack, Math.floor((battleBox.getWidthGoal()-14)/2), battleBox.getHeightGoal()-14, vel.getX()*rndX, -vel.getY());
         }
+
+        this.gameModeAttack.battleBox.cat.mood = 3;
     }
 
     checkDeath() {
@@ -979,6 +1014,9 @@ class YarnBall {
         this.velocity = new MDog.Math.Vector(vx, vy);
 
         this.lines = [new MDog.Math.Vector(this.pos.getX(), this.pos.getY())];
+
+        this.speed = 0;
+        this.acc = 0.01;
     }
 
     getR() {
@@ -988,7 +1026,14 @@ class YarnBall {
     update() {
         const battleBox = this.gameModeAttack.battleBox;
 
-        this.pos.add(this.velocity);
+        if (this.speed < 1) {
+            this.speed += this.acc;
+        }
+        if (this.speed > 1) {
+            this.speed = 1;
+        }
+
+        this.pos.add(this.velocity.clone().multiply(this.speed));
 
         const velSave = this.velocity.clone();
 
@@ -1011,8 +1056,11 @@ class YarnBall {
 
         if (this.velocity.getX() !== velSave.getX() || this.velocity.getY() !== velSave.getY()) {
             this.newLine();
-            this.velocity.x += (Math.random()-0.5)/2;
-            this.velocity.y += (Math.random()-0.5)/2;
+
+            const change = 15;
+
+            this.velocity.x += (Math.random()-0.5)/change;
+            this.velocity.y += (Math.random()-0.5)/change;
             this.velocity.normalize();
         }
 
@@ -1054,14 +1102,19 @@ class YarnBall {
         const l = this.lines[this.lines.length-1];
         MDog.Draw.line(l.getX(), l.getY(), this.pos.getX(), this.pos.getY(), "#ffffff");
 
-        MDog.Draw.rectangle(
+        MDog.Draw.image(
+            "sofiatale/cat/yarn_ball.png",
             Math.floor(this.pos.x - this.r),
-            Math.floor(this.pos.y - this.r),
-            this.getR()*2,
-            this.getR()*2,
-            "#ff0000"
-        )
-        MDog.Draw.rectangleFill(this.pos.x, this.pos.y, 1, 1, "#ff00ff");
+            Math.floor(this.pos.y - this.r));
+
+        // MDog.Draw.rectangle(
+        //     Math.floor(this.pos.x - this.r),
+        //     Math.floor(this.pos.y - this.r),
+        //     this.getR()*2,
+        //     this.getR()*2,
+        //     "#ff0000"
+        // )
+        // MDog.Draw.rectangleFill(this.pos.x, this.pos.y, 1, 1, "#ff00ff");
     }
 }
 

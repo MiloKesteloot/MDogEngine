@@ -89,8 +89,6 @@ class TilemapInteractable extends Interactable {
         this.height = rows.length;
         this.width = rows[0].split(",").length;
 
-        console.log(this.width, this.height);
-
         this.grid = [];
 
         for (let i = 0; i < this.width; i++) {

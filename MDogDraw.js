@@ -5,10 +5,13 @@ import Maths from "/MDogMaths.js";
 const Vector = (new Maths()).Vector;
 
 class Animation {
-    constructor(fileName, frames, animationSpeed) {
+    constructor(fileName, frames, animationSpeed, settings) {
+        settings = settings ?? {};
         this.fileName = fileName;
         this.frames = frames;
         this.animationSpeed = animationSpeed;
+        this.order = settings.order ?? [];
+        // TODO do the order stuff in both animation classes
         this.time = 0;
     }
 
@@ -59,8 +62,8 @@ class MultipleFileAnimation extends Animation {
 
 class SpriteSheetAnimation extends Animation {
 
-    constructor(fileName, frames, animationSpeed, spriteWidth) {
-        super(fileName, frames, animationSpeed);
+    constructor(fileName, frames, animationSpeed, spriteWidth, settings) {
+        super(fileName, frames, animationSpeed, settings);
 
         this.spriteWidth = spriteWidth;
     }
@@ -336,6 +339,7 @@ class Draw extends Module {
     line(x1, y1, x2, y2, color, settings) {
 
         settings = settings ?? {};
+        const layer = settings.layer ?? this.layer;
 
         x1 = Math.floor(x1);
         y1 = Math.floor(y1);
@@ -349,7 +353,7 @@ class Draw extends Module {
         let err = dx - dy;
 
         while(true) {
-            this.point(x1, y1, color);
+            this.point(x1, y1, color, {layer: layer});
 
             if ((x1 === x2) && (y1 === y2)) break;
             let e2 = 2 * err;

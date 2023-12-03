@@ -1,13 +1,29 @@
 function urlSetup() {
     const urlParams = new URLSearchParams(window.location.search);
     let playingValue = urlParams.get('game');
+    urlParams.set('game2', "thing");
 
-    if (playingValue == null) {
+    const games = ["sofiatale", "side"];
+
+    if (playingValue == null || !games.includes(playingValue)) {
         document.body.innerHTML += "<h1>No game cart inserted.<br>Please put '?game=gamename' after the url.</h1>"
+
+        games.forEach(game => {
+            const button = document.createElement('button');
+            button.innerText = game;
+            button.addEventListener('click', () => {
+                let href = window.location.href;
+                if (href.includes("?")) {
+                    window.location.href = window.location.href + "&game=" + game;
+                } else {
+                    window.location.href = window.location.href + "?game=" + game;
+                }
+            });
+            document.body.appendChild(button);
+        });
+
         return;
     }
-
-
 
     // if (!playingValue.endsWith(".js")) {
     //     playingValue += ".js";

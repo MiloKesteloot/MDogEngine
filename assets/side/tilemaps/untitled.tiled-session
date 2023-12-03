@@ -8,29 +8,42 @@
         "."
     ],
     "fileStates": {
+        "": {
+            "scaleInDock": 1
+        },
         "Buildings.tsx": {
             "scaleInDock": 2,
             "scaleInEditor": 2
         },
         "Deco.tsx": {
             "scaleInDock": 2,
-            "scaleInEditor": 1
+            "scaleInEditor": 2
         },
         "Tiles.tsx": {
             "scaleInDock": 4,
-            "scaleInEditor": 1
+            "scaleInEditor": 2
         },
         "test.tmx": {
-            "scale": 2,
+            "scale": 1.5,
+            "selectedLayer": 2,
+            "viewCenter": {
+                "x": 462.6666666666667,
+                "y": 228.99999999999997
+            }
+        },
+        "test2.tmx": {
+            "scale": 2.3987499999999997,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": 590,
-                "y": 218.25
+                "x": 240.1250651380928,
+                "y": 240.33350703491408
             }
         }
     },
     "last.exportedFilePath": "C:/Users/milo/OneDrive/Documents/CodingProjects/MDog/MDogEngine/assets/side/tilemaps/good",
+    "last.externalTilesetPath": "C:/Users/milo/OneDrive/Documents/CodingProjects/MDog/MDogEngine/assets/side/tilemaps",
     "last.imagePath": "C:/Users/milo/OneDrive/Documents/CodingProjects/MDog/MDogEngine/assets/side/city",
+    "map.height": 30,
     "map.lastUsedExportFilter": "CSV files (*.csv)",
     "map.lastUsedFormat": "tmx",
     "map.tileHeight": 16,
@@ -48,6 +61,7 @@
         "Buildings.tsx",
         "test.tmx"
     ],
+    "tileset.lastUsedFilter": "Tiled tileset files (*.tsx *.xml)",
     "tileset.lastUsedFormat": "tsx",
     "tileset.tileSize": {
         "height": 16,
