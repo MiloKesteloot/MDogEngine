@@ -56,4 +56,6 @@ class Simulation {
     // Functions for modifying sim
 }
 
+console.log("MDogMain.js script run")
+
 export default new MDog();

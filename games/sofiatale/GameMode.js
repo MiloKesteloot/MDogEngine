@@ -1,5 +1,6 @@
 class GameMode {
-    constructor(playerStats) {
+    constructor(MDog, playerStats) {
+        this.MDog = MDog;
         this.playerStats = playerStats;
     }
 

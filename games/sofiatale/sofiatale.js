@@ -7,7 +7,7 @@ console.log("Started!");
 class Game {
     constructor() {
         this.playerStats = new PlayerStats();
-        this.gameMode = new GameModeAttack(this.playerStats);
+        this.gameMode = new GameModeAttack(MDog, this.playerStats);
     }
 
     _main() {

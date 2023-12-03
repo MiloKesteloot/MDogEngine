@@ -1,7 +1,8 @@
-import MDog from "/MDogMain.js";
 import GameMode from "/games/sofiatale/GameMode.js";
 
-const screen = {width: MDog.Draw.getScreenWidthInArtPixels(), height: MDog.Draw.getScreenHeightInArtPixels()};
+let MDog;
+
+let screen;
 
 const keys = {
     yes: ["Enter", "x", " "],
@@ -32,8 +33,11 @@ function keyDown(keySet, hold) {
 let attackID = Math.floor(Math.random()*2);
 
 class GameModeAttack extends GameMode {
-    constructor(playerStats) {
-        super(playerStats);
+    constructor(TempMDog, playerStats) {
+        super(TempMDog, playerStats);
+
+        MDog = TempMDog;
+        screen = {width: MDog.Draw.getScreenWidthInArtPixels(), height: MDog.Draw.getScreenHeightInArtPixels()}
 
         this.battleBox = new BattleBox(this, Math.floor(screen.width/2), 256, 5, 5);
 

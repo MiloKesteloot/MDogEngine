@@ -1,4 +1,4 @@
-import MDog from "/MDogMain.js";
+import MDog from "/MDogEngine/MDogMain.js"
 
 MDog.Draw.setBackgroundColor("#0f0f17");
 

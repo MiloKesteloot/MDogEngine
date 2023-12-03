@@ -1,16 +1,14 @@
-import MDog from "/MDogMain.js";
 import GameMode from "/games/sofiatale/GameMode.js";
 
-const screen = {width: MDog.Draw.getScreenWidthInArtPixels(), height: MDog.Draw.getScreenHeightInArtPixels()};
-
-(new MDog.Math.Vector()).add(1, 3);
-
-const vec = (new MDog.Math.Vector())
-vec.add((new MDog.Math.Vector()))
+let MDog;
+let screen;
 
 class GameModeExplore extends GameMode {
-    constructor(playerStats) {
-        super(playerStats);
+    constructor(TempMDog, playerStats) {
+        super(TempMDog, playerStats);
+
+        MDog = TempMDog;
+        screen = {width: MDog.Draw.getScreenWidthInArtPixels(), height: MDog.Draw.getScreenHeightInArtPixels()};
 
         MDog.Draw.setBackgroundColor("#141414");
 
