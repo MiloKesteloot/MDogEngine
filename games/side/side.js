@@ -219,11 +219,6 @@ class Camera {
         let goalY = -this.getY() + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2) - 27;
         // let goalY = -Math.floor(this.follow.getY()) + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2) - 27;
 
-        // console.log("--");
-        // console.log(goalY);
-        // console.log(goalY2);
-
-        // console.log(this.position)
 
 
         const hbtm = this.game.tilemaps.hitbox;
@@ -792,38 +787,37 @@ class Player {
     // test
 
     $doParticles() {
-        console.log(this.velocity.length());
-        if (!this.onGround()) {
-            const velCheck = this.velocity.clone();
-            velCheck.y /= 1.7;
-            velCheck.x *= 3;
-            if (Math.random()*velCheck.length() > 1.3) {
-                const move = this.velocity.clone();
-                move.multiply(-0.5);
-                const add = this.velocity.clone();
-                add.normalize();
-                add.multiply(5);
-                for (let i = 0; i < 1; i++) {
-                    let x = Math.floor(rnd(this.hitbox.getX(1), this.hitbox.getX(2)) + add.getX());
-                    let y = Math.floor(rnd(this.hitbox.getY(1), this.hitbox.getY(2)) + add.getY());
-                    this.particleSystem.addParticle(
-                        new MDog.FX.LineParticle(
-                            x,
-                            y,
-                            Math.floor(rnd(5, 15) * velCheck.length()),
-                            "#ffffff" + Math.floor(rnd(3, 9)) + "0", // "#287013", //
-                            move.getX(),
-                            move.getY(),
-                            {
-                                gx: 0,
-                                gy: 0,
-                                length: 10,
-                                // size: Math.floor(rnd(1, 3)),
-                            }
-                        ));
-                }
-            }
-        }
+        // if (!this.onGround()) {
+        //     const velCheck = this.velocity.clone();
+        //     velCheck.y /= 1.7;
+        //     velCheck.x *= 3;
+        //     if (Math.random()*velCheck.length() > 1.3) {
+        //         const move = this.velocity.clone();
+        //         move.multiply(-0.5);
+        //         const add = this.velocity.clone();
+        //         add.normalize();
+        //         add.multiply(5);
+        //         for (let i = 0; i < 1; i++) {
+        //             let x = Math.floor(rnd(this.hitbox.getX(1), this.hitbox.getX(2)) + add.getX());
+        //             let y = Math.floor(rnd(this.hitbox.getY(1), this.hitbox.getY(2)) + add.getY());
+        //             this.particleSystem.addParticle(
+        //                 new MDog.FX.LineParticle(
+        //                     x,
+        //                     y,
+        //                     Math.floor(rnd(5, 15) * velCheck.length()),
+        //                     "#ffffff" + Math.floor(rnd(3, 9)) + "0", // "#287013", //
+        //                     move.getX(),
+        //                     move.getY(),
+        //                     {
+        //                         gx: 0,
+        //                         gy: 0,
+        //                         length: 10,
+        //                         // size: Math.floor(rnd(1, 3)),
+        //                     }
+        //                 ));
+        //         }
+        //     }
+        // }
         if (this.onGround() && this.state.is(RunningState)) {
 
             const grass = 2;
