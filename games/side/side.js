@@ -34,7 +34,7 @@ class Coin {
             this.position,
             0, 0, 13, 13
         )
-        this.animation = new MDog.Draw.MultipleFileAnimation("side/coin/Coin_?.png", 8, 12);
+        this.animation = new MDog.Draw.MultipleFileAnimation("side/coin/coin_?.png", 8, 12);
         MDog.Draw.preloadAnimation(this.animation);
     }
 
