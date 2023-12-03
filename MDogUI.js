@@ -1,5 +1,5 @@
-import Module from "/MDogModule.js";
-import Maths from "/MDogMaths.js";
+import Module from "./MDogModule.js";
+import Maths from "./MDogMaths.js";
 
 const Vector = (new Maths()).Vector;
 

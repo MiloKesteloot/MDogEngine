@@ -1,4 +1,4 @@
-import Module from "/MDogModule.js";
+import Module from "./MDogModule.js";
 
 class Input extends Module {
     constructor(Draw) {
