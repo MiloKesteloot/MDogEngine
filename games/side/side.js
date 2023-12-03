@@ -789,6 +789,8 @@ class Player {
         this.updateMovement();
     }
 
+    // test
+
     $doParticles() {
         console.log(this.velocity.length());
         if (!this.onGround()) {
