@@ -1,4 +1,4 @@
-import GameMode from "/games/sofiatale/GameMode.js";
+import GameMode from "./GameMode.js";
 
 let MDog;
 let screen;
