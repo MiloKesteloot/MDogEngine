@@ -262,44 +262,46 @@ class Player {
             dash: {time: 0, limit: 15},
         }
 
+        const timeFactor = 160 / MDog.ticksPerSecond;
+
         this.flipMargin = 0.1;
         this.facingLeft = false;
 
-        this.groundCoyoteLimit = 12;
+        this.groundCoyoteLimit = 12 / timeFactor;
         this.groundCoyoteTime = 0;
-        this.wallCoyoteLimit = 15;
+        this.wallCoyoteLimit = 15 / timeFactor;
         this.wallCoyoteTime = 0;
         this.lastTouchedLeftWall = false;
 
         this.runMargin = 0.8;
-        this.groundAcceleration = 0.07;
-        this.airAcceleration = 0.03;
-        this.groundDeceleration = 0.07;
-        this.airDeceleration = 0.04;
-        this.maxRunSpeed = 1.7;
+        this.groundAcceleration = 0.07 * timeFactor;
+        this.airAcceleration = 0.03 * timeFactor;
+        this.groundDeceleration = 0.07 * timeFactor;
+        this.airDeceleration = 0.04 * timeFactor;
+        this.maxRunSpeed = 1.7 * timeFactor;
 
-        this.jumpHoldLimit = 30;
+        this.jumpHoldLimit = 30 / timeFactor;
         this.jumpHoldTime = 0;
-        this.jumpForce = 2;
-        this.gravity = 0.08;
-        this.maxAirFallSpeed = 2.5;
-        this.maxWallSlideFallSpeed = 0.4;
-        this.wallDeceleration = 0.1;
-        this.wallJumpXStrength = 2.5;
-        this.wallJumpYStrength = 2.5;
+        this.jumpForce = 2 * timeFactor;
+        this.gravity = 0.08 * timeFactor * timeFactor;
+        this.maxAirFallSpeed = 2.5 * timeFactor;
+        this.maxWallSlideFallSpeed = 0.4 * timeFactor;
+        this.wallDeceleration = 0.1 * timeFactor;
+        this.wallJumpXStrength = 2.5 * timeFactor;
+        this.wallJumpYStrength = 2.5 * timeFactor;
 
         this.hasAirDash = false;
 
-        this.attackHorizontalX = 2.5;
-        this.attackHorizontalY = 2;
-        this.attackDiagonalX = 1.5;
-        this.attackDiagonalY = 3;
-        this.attackUpX = 0;
-        this.attackUpY = 4;
-        this.attackDownX = 0;
-        this.attackDownY = 5;
+        this.attackHorizontalX = 2.5 * timeFactor;
+        this.attackHorizontalY = 2 * timeFactor;
+        this.attackDiagonalX = 1.5 * timeFactor;
+        this.attackDiagonalY = 3 * timeFactor;
+        this.attackUpX = 0 * timeFactor;
+        this.attackUpY = 4 * timeFactor;
+        this.attackDownX = 0 * timeFactor;
+        this.attackDownY = 5 * timeFactor;
 
-        this.dashPauseFrames = 1;
+        this.dashPauseFrames = 1 * timeFactor;
 
         this.grapple = null;
         this.grappleRange = 0;
@@ -337,9 +339,9 @@ class Player {
 
     update() {
 
-        if (MDog.Math.deltaTime() > 20) {
-            console.log("Lag spike - " + MDog.Math.deltaTime());
-        }
+        // if (MDog.Math.deltaTime() > 0.02) {
+        //     console.log("Lag spike - " + MDog.Math.deltaTime());
+        // }
 
         if (this.keyDown(this.keys.toggleJump, false)) {
             if (!settings.upToJump) {

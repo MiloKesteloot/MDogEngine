@@ -139,7 +139,7 @@ class Maths extends Module {
     }
 
     deltaTime() {
-        return this.nowTime - this.lastTime;
+        return (this.nowTime - this.lastTime)/1000;
     }
 
     lerp(v1, v2, t) {

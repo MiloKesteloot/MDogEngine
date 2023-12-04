@@ -25,7 +25,7 @@
         },
         "test.tmx": {
             "scale": 1.5,
-            "selectedLayer": 2,
+            "selectedLayer": 1,
             "viewCenter": {
                 "x": 462.6666666666667,
                 "y": 228.99999999999997
@@ -33,9 +33,9 @@
         },
         "test2.tmx": {
             "scale": 2,
-            "selectedLayer": 3,
+            "selectedLayer": 2,
             "viewCenter": {
-                "x": 197,
+                "x": 278,
                 "y": 213.75
             }
         }

@@ -19,6 +19,9 @@ class MDog {
 
         this.activeFunction = null;
 
+        this.ticksPerSecond = 160;
+        this.unsimulatedTicks = 0;
+
         this._everyFrame();
     }
 
@@ -28,9 +31,14 @@ class MDog {
         this.Input._preUpdate();
         this.Math._preUpdate();
 
-        if (this.activeFunction != null) {
-            this.activeFunction();
+        this.unsimulatedTicks += this.Math.deltaTime() * this.ticksPerSecond;
+        while (this.unsimulatedTicks >= 1) {
+            this.unsimulatedTicks -= 1;
+            if (this.activeFunction != null) {
+                this.activeFunction();
+            }
         }
+
 
         this.Draw._postUpdate();
         this.Input._postUpdate();
@@ -42,18 +50,6 @@ class MDog {
     setActiveFunction(activeFunction) {
         this.activeFunction = activeFunction;
     }
-}
-
-class Physics {
-    // Function MakeSimulation
-}
-
-class Simulation {
-    constructor(width, height, whatever) {
-
-    }
-
-    // Functions for modifying sim
 }
 
 console.log("MDogMain.js script run")
