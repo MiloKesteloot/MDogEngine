@@ -213,11 +213,10 @@ class Camera {
             this.position.setY(Math.floor(this.follow.getY()) + this.yRangeBottom);
         }
 
-        let goalX = -this.getX() + Math.floor(MDog.Draw.getScreenWidthInArtPixels()/2) - 27;
+        let goalX = -this.getX() + Math.floor(MDog.Draw.getScreenWidthInArtPixels()/2);
 
-        let goalY = -this.getY() + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2) - 27;
+        let goalY = -this.getY() + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2);
         // let goalY = -Math.floor(this.follow.getY()) + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2) - 27;
-
 
 
         const hbtm = this.game.tilemaps.hitbox;
@@ -225,7 +224,7 @@ class Camera {
         goalX = Math.min(goalX, 0);
         goalX = Math.max(goalX, -(hbtm.width-32)*hbtm.tileSize);
         goalY = Math.min(goalY, 0);
-        goalY = Math.max(goalY, -(hbtm.height-24)*hbtm.tileSize);
+        goalY = Math.max(goalY, -(hbtm.height-25)*hbtm.tileSize);
 
         MDog.Draw.translateX(goalX);
         MDog.Draw.translateY(goalY);
@@ -299,6 +298,8 @@ class Player {
         this.attackUpY = 4;
         this.attackDownX = 0;
         this.attackDownY = 5;
+
+        this.dashPauseFrames = 1;
 
         this.grapple = null;
         this.grappleRange = 0;
@@ -425,7 +426,9 @@ class Player {
             this.groundCoyoteTime = this.groundCoyoteLimit;
             this.wallCoyoteTime = 0;
 
-            this.hasAirDash = true;
+            if (!this.state.is(DashAttackState) || this.state.animation.getFrame() > 7) {
+                this.hasAirDash = true;
+            }
         } else if (this.groundCoyoteTime > 0) {
             this.groundCoyoteTime -= 1;
         }
@@ -549,109 +552,129 @@ class Player {
 
             this.keyBuffers.dash.time = 0;
             this.hasAirDash = false;
-            const direction = new Vector();
             this.setState(DashAttackState);
+        }
 
-            if (this.keyDown(this.keys.up)) {
-                direction.add(0, -1);
-            }
-            if (this.keyDown(this.keys.down)) {
-                direction.add(0, 1);
-            }
-            if (this.keyDown(this.keys.right)) {
-                direction.add(1, 0);
-            }
-            if (this.keyDown(this.keys.left)) {
-                direction.add(-1, 0);
-            }
-            if (direction.x === 0 && direction.y === 0) {
-                direction.setX(this.facingLeft ? -1 : 1);
-            }
-            if (direction.x !== 0) {
-                this.facingLeft = direction.x === -1;
-            }
+        if (this.state.is(DashAttackState)) {
 
-            let velocityX = 0;
-            let velocityY = 0;
-            if (direction.x !== 0 && direction.y === 0) {
-                velocityX = direction.x * this.attackHorizontalX;
-                velocityY = -this.attackHorizontalY;
-            } else if (direction.x !== 0 && direction.y === -1) {
-                velocityX = direction.x * this.attackDiagonalX;
-                velocityY = -this.attackDiagonalY;
-            } else if (direction.x === 0 && direction.y === -1) {
-                velocityX = this.attackUpX;
-                velocityY = -this.attackUpY;
-            } else if (direction.y === 1) {
-                velocityX = this.attackDownX;
-                velocityY = this.attackDownY;
+            if (this.state.animation.getFrame() < this.dashPauseFrames && !this.state.dashed) {
+                const direction = new Vector();
+
+                if (this.keyDown(this.keys.up)) {
+                    direction.add(0, -1);
+                }
+                if (this.keyDown(this.keys.down)) {
+                    direction.add(0, 1);
+                }
+                if (this.keyDown(this.keys.right)) {
+                    direction.add(1, 0);
+                }
+                if (this.keyDown(this.keys.left)) {
+                    direction.add(-1, 0);
+                }
+
+                if (direction.x !== 0 || direction.y !== 0) {
+                    this.state.direction.x = direction.x;
+                    this.state.direction.y = direction.y;
+                }
             }
 
-            if (velocityX > 0) {
-                velocityX = Math.max(velocityX, this.velocity.getX());
-            }
-            if (velocityX < 0) {
-                velocityX = Math.min(velocityX, this.velocity.getX());
-            }
-            if (velocityY > 0) {
-                velocityY = Math.max(velocityY, this.velocity.getY());
-            }
-            if (velocityY < 0) {
-                velocityY = Math.min(velocityY, this.velocity.getY());
-            }
+            if (this.state.animation.getFrame() >= this.dashPauseFrames && !this.state.dashed) {
+                this.state.dashed = true;
 
-            this.velocity.setX(velocityX);
-            this.velocity.setY(velocityY);
+                const direction = this.state.direction.clone();
 
-            let pv = direction.clone();
-            pv.normalize();
-            pv.multiply(this.velocity.length());
-            // pv.multiply(3);
+                if (direction.x === 0 && direction.y === 0) {
+                    direction.setX(this.facingLeft ? -1 : 1);
+                }
+                if (direction.x !== 0) {
+                    this.facingLeft = direction.x === -1;
+                }
 
-            const move = 0.5;
+                let velocityX = 0;
+                let velocityY = 0;
+                if (direction.x !== 0 && direction.y === 0) {
+                    velocityX = direction.x * this.attackHorizontalX;
+                    velocityY = -this.attackHorizontalY;
+                } else if (direction.x !== 0 && direction.y === -1) {
+                    velocityX = direction.x * this.attackDiagonalX;
+                    velocityY = -this.attackDiagonalY;
+                } else if (direction.x === 0 && direction.y === -1) {
+                    velocityX = this.attackUpX;
+                    velocityY = -this.attackUpY;
+                } else if (direction.y === 1) {
+                    velocityX = this.attackDownX;
+                    velocityY = this.attackDownY;
+                }
 
-            // *3-1
+                if (velocityX > 0) {
+                    velocityX = Math.max(velocityX, this.velocity.getX());
+                }
+                if (velocityX < 0) {
+                    velocityX = Math.min(velocityX, this.velocity.getX());
+                }
+                if (velocityY > 0) {
+                    velocityY = Math.max(velocityY, this.velocity.getY());
+                }
+                if (velocityY < 0) {
+                    velocityY = Math.min(velocityY, this.velocity.getY());
+                }
 
-            for (let i = 0; i < 50; i++) {
-                let x = Math.floor((Math.random())*MDog.Draw.getScreenWidthInArtPixels());
-                let y = Math.floor((Math.random())*MDog.Draw.getScreenHeightInArtPixels());
-                this.particleSystem.addParticle(
-                    new MDog.FX.LineParticle(
-                        x,
-                        y,
-                        Math.floor(rnd(10, 70)),
-                        "#ffffff" + Math.floor(rnd(3, 9)) + "0",
-                        pv.getX() + rnd(-move, move),
-                        pv.getY() + rnd(-move, move),
-                        {
-                            gx: 0,
-                            gy: 0,
-                            layer: 10,
-                            length: Math.floor(rnd(10, 20)),
-                            tags: ["wind"]
-                        }
-                    ));
-            }
+                this.velocity.setX(velocityX);
+                this.velocity.setY(velocityY);
 
-            for (let i = 0; i < 13; i++) {
-                let x = Math.floor((Math.random())*MDog.Draw.getScreenWidthInArtPixels());
-                let y = Math.floor((Math.random())*MDog.Draw.getScreenHeightInArtPixels());
-                this.particleSystem.addParticle(
-                    new MDog.FX.ChunkParticle(
-                        x,
-                        y,
-                        Math.floor(rnd(10, 70)),
-                        "#287013",
-                        pv.getX(),
-                        pv.getY(),
-                        {
-                            gx: 0,
-                            gy: 0,
-                            size: Math.floor(rnd(2, 5)),
-                            layer: 10,
-                            tags: ["wind"]
-                        }
-                    ));
+                let pv = direction.clone();
+                pv.normalize();
+                pv.multiply(this.velocity.length() * 4);
+                // pv.multiply(3);
+
+                const move = 0.5;
+
+                // *3-1
+
+                for (let i = 0; i < 50; i++) {
+                    let x = Math.floor((Math.random())*MDog.Draw.getScreenWidthInArtPixels());
+                    let y = Math.floor((Math.random())*MDog.Draw.getScreenHeightInArtPixels());
+                    this.particleSystem.addParticle(
+                        new MDog.FX.LineParticle(
+                            x,
+                            y,
+                            Math.floor(rnd(5, 20)),
+                            "#ffffff" + Math.floor(rnd(3, 9)) + "0",
+                            pv.getX() + rnd(-move, move),
+                            pv.getY() + rnd(-move, move),
+                            {
+                                gx: 0,
+                                gy: 0,
+                                layer: 10,
+                                length: Math.floor(rnd(10, 20)),
+                                tags: ["wind"]
+                            }
+                        ));
+                }
+
+                pv.multiply(0.25);
+
+                for (let i = 0; i < 13; i++) {
+                    let x = Math.floor((Math.random()) * MDog.Draw.getScreenWidthInArtPixels());
+                    let y = Math.floor((Math.random()) * MDog.Draw.getScreenHeightInArtPixels());
+                    this.particleSystem.addParticle(
+                        new MDog.FX.ChunkParticle(
+                            x,
+                            y,
+                            Math.floor(rnd(30, 100)),
+                            "#287013",
+                            pv.getX(),
+                            pv.getY(),
+                            {
+                                gx: 0,
+                                gy: 0,
+                                size: Math.floor(rnd(2, 5)),
+                                layer: 10,
+                                tags: ["wind"]
+                            }
+                        ));
+                }
             }
         }
 
@@ -780,7 +803,9 @@ class Player {
             }
         }
 
-        this.updateMovement();
+        if (!(this.state.is(DashAttackState) && !this.state.dashed)) {
+            this.updateMovement();
+        }
     }
 
     // test
@@ -1032,7 +1057,35 @@ class Player {
     draw() {
         this.state.draw();
         MDog.Draw.particleSystem(this.particleSystem);
-        // this.hitbox.draw();
+
+
+        for (let i = 0; i < this.game.coins.length; i++) {
+            const coin = this.game.coins[i];
+
+            const centerPlayer = new Vector(this.hitbox.getMiddleX(), this.hitbox.getMiddleY());
+            const centerCoin = new Vector(coin.getX()+8, coin.getY()+8);
+            const coinVector = centerCoin.clone();
+
+            coinVector.subtract(centerPlayer);
+            coinVector.normalize();
+            coinVector.multiply(20);
+
+            const centerPlayerOut = centerPlayer.clone();
+
+            centerPlayer.add(coinVector);
+            centerPlayer.add(coinVector);
+
+            centerPlayerOut.add(coinVector);
+            centerPlayerOut.add(coinVector);
+            centerPlayerOut.add(coinVector);
+
+            MDog.Draw.line(
+                centerPlayer.getX(),
+                centerPlayer.getY(),
+                centerPlayer.getX() + coinVector.getX(),
+                centerPlayer.getY() + coinVector.getY(),
+                "#ffffff");
+        }
     }
 }
 
@@ -1138,6 +1191,8 @@ class JumpToFallState extends TransitionState {
 class DashAttackState extends TransitionState {
     constructor(player) {
         super(player, 10, "side/girl/Dash_Attack/Warrior_Dash-Attack_?.png", 20, RunningState);
+        this.dashed = false;
+        this.direction = new Vector(0, 0);
     }
 
     canWallSlide() {
@@ -1191,7 +1246,6 @@ class Grapple {
 
 class Game {
     constructor() {
-        this.player = new Player(this, 980, 370);
         this.coins = [];
         this.grapples = [
             // new Grapple(this, 550, 70),
@@ -1202,37 +1256,42 @@ class Game {
         this.screenSpaceParticleSystem = new MDog.FX.ParticleSystem();
 
         this.tilemaps = {
-            // hitbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building"), 16, "side/city/Colors.png", 6),
-            // hitbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Tiles"), 16, "side/city/Tiles.png", 6),
             hitbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Colors"), 16, "side/city/Colors.png", 4),
             back: [
-                // new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building1"), 16, "side/city/Buildings.png", 25),
-                // new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building2"), 16, "side/city/Buildings.png", 25),
-                // new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Tiles"), 16, "side/city/Tiles.png", 6),
+                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Colors"), 16, "side/city/Colors.png", 4),
+                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building1"), 16, "side/city/Buildings.png", 25),
+                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building2"), 16, "side/city/Buildings.png", 25),
+                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Tiles"), 16, "side/city/Tiles.png", 6),
             ],
             front: [
-                // new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Deco"), 16, "side/city/Props-01.png", 8)
+                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Deco"), 16, "side/city/Props-01.png", 8)
             ]
         }
 
         const hbtm = this.tilemaps.hitbox;
+
+        const playerPos = new Vector(0, 0);
 
         for (let x = 0; x < hbtm.width; x++) {
             for (let y = 0; y < hbtm.height; y++) {
                 const index = hbtm.get(x, y);
                 if (index === 1) {
                     hbtm.set(x, y, -1);
+                    this.tilemaps.back[0].set(x, y, -1);
                     const pos = hbtm.tileToScreen(x, y);
                     this.coins.push(new Coin(this, pos.x, pos.y));
                 }
                 if (index === 3) {
                     hbtm.set(x, y, -1);
+                    this.tilemaps.back[0].set(x, y, -1);
                     const pos = hbtm.tileToScreen(x, y);
-                    this.player.position.setX(pos.x - this.player.hitbox.getMiddleOffsetX());
-                    this.player.position.setY(pos.y - this.player.hitbox.getMiddleOffsetY());
+                    playerPos.setX(pos.x-18);
+                    playerPos.setY(pos.y-11);
                 }
             }
         }
+
+        this.player = new Player(this, playerPos.getX(), playerPos.getY());
 
         this.averageDT = 0;
         this.frames = 0;
@@ -1320,23 +1379,18 @@ function main() {
 
 let game = null;
 
-MDog.AssetManager.loadFile("side/tilemaps/good/tiles_Building.csv", "Building1");
-MDog.AssetManager.loadFile("side/tilemaps/good/tiles_BuildingTop.csv", "Building2");
-MDog.AssetManager.loadFile("side/tilemaps/good/tiles_Tiles.csv", "Tiles");
-MDog.AssetManager.loadFile("side/tilemaps/good/tiles_Deco.csv", "Deco");
-MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors.csv", "Colors");
-
-
+MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_BuildingBottom.csv", "Building1");
+MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_BuildingTop.csv", "Building2");
+MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_Tiles.csv", "Tiles");
+MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_Deco.csv", "Deco");
+MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_Colors.csv", "Colors");
 
 MDog.setActiveFunction(main);
 
 // TODO SECTION ---
 
-// TODO add setting where up is jump
-// TODO make whole game class that is restartable
 // TODO add menu
-// TODO switch dash directions when you switch direction right after dashing? Kinda like a dash direction switch buffer
 // TODO add diagonal down for wave dashing celeste stytyle
-// TODO add frame pre-loading
 // TODO electric fence?
 // TODO fix grapple
+// TODO if you jump then dash up you don't dash very far/at all
