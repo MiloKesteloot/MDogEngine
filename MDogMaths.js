@@ -51,10 +51,23 @@ class Vector {
 
     setX(x) {
         this.x = x;
+        return this;
     }
 
     setY(y) {
         this.y = y;
+        return this;
+    }
+
+    set(x_or_vector, y) {
+        if (x_or_vector instanceof Vector) {
+            this.x = x_or_vector.x;
+            this.y = x_or_vector.y;
+        } else {
+            this.x = x_or_vector;
+            this.y = y;
+        }
+        return this;
     }
 
     // Returns a new copy of this vector.
@@ -89,6 +102,14 @@ class Vector {
     // Get the length of this vector.
     length() {
         return Math.sqrt(this.x*this.x + this.y*this.y);
+    }
+
+    setLength(length) {
+        return this.length() === 0 ? this : this.multiply(length / this.length())
+    }
+
+    constrain(maxLength) {
+        return this.length() > maxLength ? this.setLength(maxLength) : this;
     }
 
     // Normalize this vector.
@@ -133,9 +154,13 @@ class Maths extends Module {
         this.lastTime = this.nowTime;
     }
 
-    _preUpdate() {
+    _preOutUpdate() {
         this.lastTime = this.nowTime;
         this.nowTime = Date.now();
+    }
+
+    _postInUpdate() {
+        this.lastTime = this.nowTime;
     }
 
     deltaTime() {

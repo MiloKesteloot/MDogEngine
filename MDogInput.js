@@ -7,7 +7,7 @@ class Input extends Module {
         this.Mouse = new Mouse(Draw);
     }
 
-    _postUpdate() {
+    _postInUpdate() {
         this.Keyboard.update();
         this.Mouse.update();
     }

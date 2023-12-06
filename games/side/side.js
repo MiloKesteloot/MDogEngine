@@ -2,6 +2,10 @@ import MDog from "/MDogEngine/MDogMain.js"
 
 MDog.Draw.setBackgroundColor("#0f0f17");
 
+const timeFactor = 160 / MDog.ticksPerSecond;
+
+const dt = 1 / MDog.ticksPerSecond;
+
 const Vector = MDog.Math.Vector;
 
 function rnd(min, max) {
@@ -231,11 +235,18 @@ class Camera {
     }
 }
 
+function pixelsPerSecondToPixelsPerTick(value) {
+    return value / MDog.ticksPerSecond;
+}
+
+function pixelsPerSecondToPixelsPerTickSquared(valuePerUnit) {
+    return valuePerUnit / MDog.ticksPerSecond / MDog.ticksPerSecond;
+}
+
 class Player {
     constructor(game, x, y) {
         this.game = game;
         this.position = new Vector(x, y);
-        this.lowestY = 1000;
         this.velocity = new Vector();
         this.camera = new Camera(this.game, this.position);
         this.particleSystem = new MDog.FX.ParticleSystem();
@@ -262,9 +273,7 @@ class Player {
             dash: {time: 0, limit: 15},
         }
 
-        const timeFactor = 160 / MDog.ticksPerSecond;
-
-        this.flipMargin = 0.1;
+        this.flipMargin = pixelsPerSecondToPixelsPerTick(1.6);
         this.facingLeft = false;
 
         this.groundCoyoteLimit = 12 / timeFactor;
@@ -273,35 +282,35 @@ class Player {
         this.wallCoyoteTime = 0;
         this.lastTouchedLeftWall = false;
 
-        this.runMargin = 0.8;
-        this.groundAcceleration = 0.07 * timeFactor;
-        this.airAcceleration = 0.03 * timeFactor;
-        this.groundDeceleration = 0.07 * timeFactor;
-        this.airDeceleration = 0.04 * timeFactor;
-        this.maxRunSpeed = 1.7 * timeFactor;
+        this.runMargin = pixelsPerSecondToPixelsPerTick(0.8);
+        this.groundAcceleration = pixelsPerSecondToPixelsPerTickSquared(0.07);
+        this.airAcceleration = pixelsPerSecondToPixelsPerTickSquared(0.03);
+        this.groundDeceleration = pixelsPerSecondToPixelsPerTickSquared(0.04);
+        this.airDeceleration = pixelsPerSecondToPixelsPerTickSquared(0.04);
+        this.maxRunSpeed = pixelsPerSecondToPixelsPerTickSquared(1.7);
 
         this.jumpHoldLimit = 30 / timeFactor;
         this.jumpHoldTime = 0;
-        this.jumpForce = 2 * timeFactor;
-        this.gravity = 0.08 * timeFactor * timeFactor;
-        this.maxAirFallSpeed = 2.5 * timeFactor;
-        this.maxWallSlideFallSpeed = 0.4 * timeFactor;
-        this.wallDeceleration = 0.1 * timeFactor;
-        this.wallJumpXStrength = 2.5 * timeFactor;
-        this.wallJumpYStrength = 2.5 * timeFactor;
+        this.jumpForce = pixelsPerSecondToPixelsPerTick(2);
+        this.gravity = pixelsPerSecondToPixelsPerTickSquared(0.08);
+        this.maxAirFallSpeed = pixelsPerSecondToPixelsPerTick(2.5);
+        this.maxWallSlideFallSpeed = pixelsPerSecondToPixelsPerTick(0.4);
+        this.wallDeceleration = pixelsPerSecondToPixelsPerTickSquared(0.1);
+        this.wallJumpXStrength = pixelsPerSecondToPixelsPerTick(2.5);
+        this.wallJumpYStrength = pixelsPerSecondToPixelsPerTick(2.5);
 
         this.hasAirDash = false;
 
-        this.attackHorizontalX = 2.5 * timeFactor;
-        this.attackHorizontalY = 2 * timeFactor;
-        this.attackDiagonalX = 1.5 * timeFactor;
-        this.attackDiagonalY = 3 * timeFactor;
+        this.attackHorizontalX = 40 * timeFactor;
+        this.attackHorizontalY = 32 * timeFactor;
+        this.attackDiagonalX = 24 * timeFactor;
+        this.attackDiagonalY = 48 * timeFactor;
         this.attackUpX = 0 * timeFactor;
-        this.attackUpY = 4 * timeFactor;
+        this.attackUpY = 64 * timeFactor;
         this.attackDownX = 0 * timeFactor;
-        this.attackDownY = 5 * timeFactor;
+        this.attackDownY = 80 * timeFactor;
 
-        this.dashPauseFrames = 1 * timeFactor;
+        this.dashPauseFrames = 1;
 
         this.grapple = null;
         this.grappleRange = 0;
@@ -357,11 +366,6 @@ class Player {
                 settings.upToJump = false;
                 console.log("Up to jump disabled!");
             }
-        }
-
-        if (this.position.getY() < this.lowestY) {
-            this.lowestY = this.position.getY();
-            // console.log(this.lowestY);
         }
 
         if (MDog.Input.Keyboard.isClicked("r")) {
@@ -593,41 +597,37 @@ class Player {
                     this.facingLeft = direction.x === -1;
                 }
 
-                let velocityX = 0;
-                let velocityY = 0;
+                let newVel = new Vector();
                 if (direction.x !== 0 && direction.y === 0) {
-                    velocityX = direction.x * this.attackHorizontalX;
-                    velocityY = -this.attackHorizontalY;
+                    newVel.set(direction.x * this.attackHorizontalX, -this.attackHorizontalY);
                 } else if (direction.x !== 0 && direction.y === -1) {
-                    velocityX = direction.x * this.attackDiagonalX;
-                    velocityY = -this.attackDiagonalY;
+                    newVel.set(direction.x * this.attackDiagonalX, -this.attackDiagonalY);
                 } else if (direction.x === 0 && direction.y === -1) {
-                    velocityX = this.attackUpX;
-                    velocityY = -this.attackUpY;
+                    newVel.set(this.attackUpX, -this.attackUpY);
                 } else if (direction.y === 1) {
-                    velocityX = this.attackDownX;
-                    velocityY = this.attackDownY;
+                    newVel.set(this.attackDownX, this.attackDownY);
                 }
 
-                if (velocityX > 0) {
-                    velocityX = Math.max(velocityX, this.velocity.getX());
+
+                // Stops dashing from slowing velocity
+                if (newVel.getX() > 0) {
+                    newVel.setX(Math.max(newVel.getX(), this.velocity.getX()));
                 }
-                if (velocityX < 0) {
-                    velocityX = Math.min(velocityX, this.velocity.getX());
+                if (newVel.getX() < 0) {
+                    newVel.setX(Math.min(newVel.getX(), this.velocity.getX()));
                 }
-                if (velocityY > 0) {
-                    velocityY = Math.max(velocityY, this.velocity.getY());
+                if (newVel.getY() > 0) {
+                    newVel.setY(Math.max(newVel.getY(), this.velocity.getY()));
                 }
-                if (velocityY < 0) {
-                    velocityY = Math.min(velocityY, this.velocity.getY());
+                if (newVel.getY() < 0) {
+                    newVel.setY(Math.min(newVel.getY(), this.velocity.getY()));
                 }
 
-                this.velocity.setX(velocityX);
-                this.velocity.setY(velocityY);
+                this.velocity.set(newVel.multiply(dt)); // penis
 
                 let pv = direction.clone();
                 pv.normalize();
-                pv.multiply(this.velocity.length() * 4);
+                pv.multiply(this.velocity.length() * 4 / timeFactor);
                 // pv.multiply(3);
 
                 const move = 0.5;
@@ -641,7 +641,7 @@ class Player {
                         new MDog.FX.LineParticle(
                             x,
                             y,
-                            Math.floor(rnd(5, 20)),
+                            Math.floor(rnd(5, 20)) / timeFactor,
                             "#ffffff" + Math.floor(rnd(3, 9)) + "0",
                             pv.getX() + rnd(-move, move),
                             pv.getY() + rnd(-move, move),
@@ -664,7 +664,7 @@ class Player {
                         new MDog.FX.ChunkParticle(
                             x,
                             y,
-                            Math.floor(rnd(30, 100)),
+                            Math.floor(rnd(30, 100)) / timeFactor,
                             "#287013",
                             pv.getX(),
                             pv.getY(),
@@ -691,9 +691,13 @@ class Player {
 
         if (!(this.onLeft() && goalVelX < 0) &&
             !(this.onRight() && goalVelX > 0)) {
+
+            // console.log(this.maxRunSpeed, this.velocity.getX());
+            //
+            // console.log(goalVelX)
+
             if (this.velocity.getX() + goalVelX <= this.maxRunSpeed &&
                 this.velocity.getX() + goalVelX >= -this.maxRunSpeed) {
-
                 // This part makes sure that you can turn around on a dime when touching a wall and you don't get stuck with weird velocity timing
                 if (this.onLeft() && goalVelX > 0 && this.velocity.getX() < 0) {
                     this.velocity.setX(0);
@@ -1162,37 +1166,37 @@ class TransitionState extends State {
 
 class RunningState extends State {
     constructor(player) {
-        super(player, 8, "side/girl/Run/Warrior_Run_?.png", 12);
+        super(player, 8, "side/girl/Run/Warrior_Run_?.png", 12 * timeFactor);
     }
 }
 
 class IdleState extends State {
     constructor(player) {
-        super(player, 6, "side/girl/Idle/Warrior_Idle_?.png", 12);
+        super(player, 6, "side/girl/Idle/Warrior_Idle_?.png", 12 * timeFactor);
     }
 }
 
 class JumpState extends State {
     constructor(player) {
-        super(player, 3, "side/girl/Jump/Warrior_Jump_?.png", 12);
+        super(player, 3, "side/girl/Jump/Warrior_Jump_?.png", 12 * timeFactor);
     }
 }
 
 class FallState extends State {
     constructor(player) {
-        super(player, 3, "side/girl/Fall/Warrior_Fall_?.png", 12);
+        super(player, 3, "side/girl/Fall/Warrior_Fall_?.png", 12 * timeFactor);
     }
 }
 
 class JumpToFallState extends TransitionState {
     constructor(player) {
-        super(player, 2, "side/girl/UptoFall/Warrior_UptoFall_?.png", 12, FallState);
+        super(player, 2, "side/girl/UptoFall/Warrior_UptoFall_?.png", 12 * timeFactor, FallState);
     }
 }
 
 class DashAttackState extends TransitionState {
     constructor(player) {
-        super(player, 10, "side/girl/Dash_Attack/Warrior_Dash-Attack_?.png", 20, RunningState);
+        super(player, 10, "side/girl/Dash_Attack/Warrior_Dash-Attack_?.png", 20 * timeFactor, RunningState);
         this.dashed = false;
         this.direction = new Vector(0, 0);
     }
@@ -1212,7 +1216,7 @@ class DashAttackState extends TransitionState {
 
 class WallSlideState extends State {
     constructor(player) {
-        super(player, 3, "side/girl/WallSlide/Warrior_WallSlide_?.png", 12);
+        super(player, 3, "side/girl/WallSlide/Warrior_WallSlide_?.png", 12 * timeFactor);
     }
 
     getFlipX() {
@@ -1351,7 +1355,7 @@ class Game {
     }
 }
 
-function main() {
+function gameTick() {
 
     if (game === null) {
         if (MDog.AssetManager.doneLoading()) {
@@ -1387,7 +1391,7 @@ MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_Tiles.csv", "Tiles")
 MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_Deco.csv", "Deco");
 MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_Colors.csv", "Colors");
 
-MDog.setActiveFunction(main);
+MDog.setActiveFunction(gameTick);
 
 // TODO SECTION ---
 
@@ -1396,3 +1400,26 @@ MDog.setActiveFunction(main);
 // TODO electric fence?
 // TODO fix grapple
 // TODO if you jump then dash up you don't dash very far/at all
+
+
+// Player
+
+//  Set acceleration to zero
+
+//  Key input physics
+//   Changing x velocity on key input
+//   Wind
+//   Gravity
+//   On conveyer belt
+//   Friction
+
+//  Acceleration is added to velocity
+
+//  Game shit - Sets velocity
+//   Setting y velocity on jump
+
+//  Velocity is added to position
+
+//  Game shit - Sets velocity
+//   Wall collisions
+//   Jump pads

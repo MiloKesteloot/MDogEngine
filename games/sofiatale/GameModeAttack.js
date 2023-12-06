@@ -1,6 +1,8 @@
 import GameMode from "./GameMode.js";
 
 let MDog;
+let timeFactor;
+
 
 let screen;
 
@@ -37,6 +39,8 @@ class GameModeAttack extends GameMode {
         super(TempMDog, playerStats);
 
         MDog = TempMDog;
+        timeFactor = 160 / MDog.ticksPerSecond;
+
         screen = {width: MDog.Draw.getScreenWidthInArtPixels(), height: MDog.Draw.getScreenHeightInArtPixels()}
 
         this.battleBox = new BattleBox(this, Math.floor(screen.width/2), 256, 5, 5);
@@ -458,7 +462,7 @@ class Cat {
 
         this.animations = {
             head: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/faces.png", 4, 0, 45),
-            tail: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/tail.png", 4, 3, 30),
+            tail: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/tail.png", 4, Math.floor(timeFactor*3), 30),
             back: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/back.png", 2, 1, 19),
             cup: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/cup.png", 4, 3, 47),
             yarn: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/yarn_cat.png", 3, 3, 91, {order: [0, 1, 0, 1, 2, 1, 2, 1]}),

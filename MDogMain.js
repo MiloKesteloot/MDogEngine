@@ -10,6 +10,7 @@ class MDog {
     constructor() {
         console.log("Created MDog instance.");
 
+        // this.Units = new Units();
         this.Draw = new Draw(128*4, 384); // 384
         this.Input = new Input(this.Draw);
         this.Math = new Maths();
@@ -27,22 +28,24 @@ class MDog {
 
     _everyFrame() {
 
-        this.Draw._preUpdate();
-        this.Input._preUpdate();
-        this.Math._preUpdate();
+        this.Math._preOutUpdate();
 
         this.unsimulatedTicks += this.Math.deltaTime() * this.ticksPerSecond;
+
+        if (this.unsimulatedTicks > 100) { this.unsimulatedTicks = 0; }
+
+
         while (this.unsimulatedTicks >= 1) {
             this.unsimulatedTicks -= 1;
+
             if (this.activeFunction != null) {
                 this.activeFunction();
             }
+
+            this.Input._postInUpdate();
         }
 
-
-        this.Draw._postUpdate();
-        this.Input._postUpdate();
-        this.Math._postUpdate();
+        this.Draw._postOutUpdate();
 
         requestAnimationFrame(() => this._everyFrame());
     }

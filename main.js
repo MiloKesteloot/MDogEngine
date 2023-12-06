@@ -3,7 +3,7 @@ function urlSetup() {
     let playingValue = urlParams.get('game');
     urlParams.set('game2', "thing");
 
-    const games = ["sofiatale", "side"];
+    const games = ["sofiatale", "side", "nick"];
 
     if (playingValue == null || !games.includes(playingValue)) {
         document.body.innerHTML += "<h1>No game cart inserted.<br>Please put '?game=gamename' after the url.</h1>"

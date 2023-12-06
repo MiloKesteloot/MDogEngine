@@ -216,7 +216,7 @@ class Draw extends Module {
         return canvas;
     }
 
-    _postUpdate() {
+    _postOutUpdate() {
         this._drawLayers();
     }
 

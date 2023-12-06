@@ -2,9 +2,13 @@ class MDogModule {
 
     constructor() {}
 
-    _preUpdate() {}
+    _preOutUpdate() {}
 
-    _postUpdate() {}
+    _preInUpdate() {}
+
+    _postInUpdate() {}
+
+    _postOutUpdate() {}
 }
 
 export default MDogModule;
