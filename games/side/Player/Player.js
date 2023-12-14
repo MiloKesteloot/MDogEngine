@@ -1,235 +1,16 @@
-import MDog from "/MDogEngine/MDogModules/MDogMain.js"
+import Maths from "/MDogModules/MDogMaths.js";
 
-MDog.Draw.setBackgroundColor("#0f0f17");
+import SquareHitbox from "/MDogModules/MDogBasics/Hitbox/SquareHitbox.js";
 
-const Vector = MDog.Math.Vector;
+import FallState from "./States/FallState.js";
+import JumpState from "./States/JumpState.js";
+import RunningState from "./States/RunningState.js";
+import IdleState from "./States/IdleState.js";
+import WallSlideState from "./States/WallSlideState.js";
 
-function rnd(min, max) {
-    if (min === undefined) {
-        min = 0;
-        max = 1;
-    }
-    if (max === undefined) {
-        max = min;
-        min = 0;
-    }
-    return Math.random() * (max - min) + min;
-}
+const Vector = (new Maths()).Vector;
 
-class Settings {
-    constructor() {
-        this.debug = false;
-        this.upToJump = false;
-    }
-}
-
-const settings = new Settings();
-
-class Coin {
-
-    constructor(game, x, y) {
-        this.game = game;
-        this.position = new Vector(x, y);
-        this.hitbox = new Hitbox(
-            this.position,
-            0, 0, 13, 13
-        )
-        this.animation = new MDog.Draw.MultipleFileAnimation("side/coin/coin_?.png", 8, 12);
-    }
-
-    getX() {// TODO This is only here because I'm using the state thing instead of animations
-        return this.position.getX();
-    }
-    getY() {
-        return this.position.getY();
-    }
-
-    draw() {
-        MDog.Draw.animation(this.animation,this.getX(), this.getY());
-    }
-
-    pickup() {
-        for (let i = 0; i < 80; i++) {
-            this.game.globalParticleSystem.addParticle(
-                new MDog.FX.ChunkParticle(
-                    this.hitbox.getLeftX() + Math.floor(rnd(0, this.game.player.hitbox.getWidth())),
-                    this.hitbox.getTopY() + Math.floor(rnd(0, this.game.player.hitbox.getHeight())),
-                    Math.floor(rnd(10, 40)),
-                    "#fabc20",
-                    rnd(-1, 1),
-                    rnd(-2, 0),
-                    {
-                        gy: 0.05,
-                        size: Math.floor(rnd(1, 3))
-                    }
-                ));
-        }
-    }
-
-    // TODO make animation object
-}
-
-class Hitbox {
-    constructor(vector, x1, y1, x2, y2) {
-        this.vector = vector;
-        this.x1 = x1;
-        this.y1 = y1;
-        this.x2 = x2;
-        this.y2 = y2;
-    }
-
-    draw() {
-        MDog.Draw.rectangle(
-            Math.floor(this.vector.getX()) + this.x1,
-            Math.floor(this.vector.getY()) + this.y1,
-            this.x2-this.x1,
-            this.y2-this.y1,
-            "#ff0000");
-    }
-
-    getX(index) {
-        return Math.floor(this.vector.getX()) + this.x1 + [
-            -1,
-            0,
-            this.x2-this.x1,
-            this.x2-this.x1 + 1
-        ][index];
-    }
-    getY(index) {
-        return Math.floor(this.vector.getY()) + this.y1 + [
-            -1,
-            0,
-            this.y2-this.y1-1,
-            this.y2-this.y1
-        ][index];
-    }
-
-    getMiddleOffsetX() {
-        return Math.floor(this.x1 + Math.floor(this.getWidth()/2));
-    }
-    getMiddleOffsetY() {
-        return Math.floor(this.y1 + Math.floor(this.getHeight()/2));
-    }
-
-    getMiddleX() {
-        return Math.floor(this.vector.getX()) + this.x1 + Math.floor(this.getWidth()/2);
-    }
-
-    getMiddleY() {
-        return Math.floor(this.vector.getY()) + this.y1 + Math.floor(this.getHeight()/2);
-    }
-
-    getWidth() {
-        return this.x2 - this.x1;
-    }
-    getHeight() {
-        return this.y2 - this.y1;
-    }
-
-    getLeftX() {
-        return Math.floor(this.vector.getX()) + this.x1;
-    }
-    getRightX() {
-        return Math.floor(this.vector.getX()) + this.x2 - 1;
-    }
-    getTopY() {
-        return Math.floor(this.vector.getY()) + this.y1;
-    }
-    getBottomY() {
-        return Math.floor(this.vector.getY()) + this.y2 - 1;
-    }
-
-    colliding(otherHitbox) {
-        const test1 = this.getRightX() < otherHitbox.getLeftX();
-        const test2 = this.getLeftX() > otherHitbox.getRightX();
-        const test3 = this.getTopY() > otherHitbox.getBottomY();
-        const test4 = this.getBottomY() < otherHitbox.getTopY();
-
-        if (test1 || // this hitbox is to the left of the other
-            test2 || // this hitbox is to the right of the other
-            test3 || // this hitbox is above the other
-            test4)   // this hitbox is below the other
-        {
-            return false;
-        } else {
-            return true;
-        }
-    }
-}
-
-class Camera {
-    constructor(game, follow) {
-        this.game = game;
-        this.follow = follow;
-        this.position = follow.clone();
-        this.xRangeLeft = -70;
-        this.xRangeRight = 70;
-
-        this.yRangeHeight = 100;
-        this.yOffset = -Math.floor(this.yRangeHeight/2);
-        this.yRangeTop = this.yOffset;
-        this.yRangeBottom = this.yOffset + this.yRangeHeight;
-    }
-
-    getX() {
-        return this.position.getX();
-    }
-
-    getY() {
-        return this.position.getY();
-    }
-
-    update() {
-
-        // if (this.game.player.velocity.getY() < 0) {
-        //     if (this.yOffset > -this.yRangeHeight) {
-        //         if (this.position.getY() < Math.floor(this.follow.getY()) + this.yRangeTop) {
-        //             this.yOffset -= 1;
-        //         }
-        //     }
-        // }
-        // if (this.game.player.velocity.getY() > 0) {
-        //     if (this.yOffset < 0) {
-        //         if (this.position.getY() > Math.floor(this.follow.getY()) + this.yRangeBottom) {
-        //             this.yOffset += 1;
-        //         }
-        //     }
-        // }
-
-        this.yRangeTop = this.yOffset;
-        this.yRangeBottom = this.yOffset + this.yRangeHeight;
-
-        if (this.position.getX() < Math.floor(this.follow.getX()) + this.xRangeLeft) {
-            this.position.setX(Math.floor(this.follow.getX()) + this.xRangeLeft);
-        }
-        if (this.position.getX() > Math.floor(this.follow.getX()) + this.xRangeRight) {
-            this.position.setX(Math.floor(this.follow.getX()) + this.xRangeRight);
-        }
-
-        if (this.position.getY() < Math.floor(this.follow.getY()) + this.yRangeTop) {
-            this.position.setY(Math.floor(this.follow.getY()) + this.yRangeTop);
-        }
-        if (this.position.getY() > Math.floor(this.follow.getY()) + this.yRangeBottom) {
-            this.position.setY(Math.floor(this.follow.getY()) + this.yRangeBottom);
-        }
-
-        let goalX = -this.getX() + Math.floor(MDog.Draw.getScreenWidthInArtPixels()/2);
-
-        let goalY = -this.getY() + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2);
-        // let goalY = -Math.floor(this.follow.getY()) + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2) - 27;
-
-
-        const hbtm = this.game.tilemaps.hitbox;
-
-        goalX = Math.min(goalX, 0);
-        goalX = Math.max(goalX, -(hbtm.width-32)*hbtm.tileSize);
-        goalY = Math.min(goalY, 0);
-        goalY = Math.max(goalY, -(hbtm.height-25)*hbtm.tileSize);
-
-        MDog.Draw.translateX(goalX);
-        MDog.Draw.translateY(goalY);
-    }
-}
+let MDog;
 
 function pixelsPerSecondToPixelsPerTick(value) {
     return value / MDog.ticksPerSecond;
@@ -239,74 +20,71 @@ function pixelsPerSecondToPixelsPerTickSquared(valuePerUnit) {
     return valuePerUnit / MDog.ticksPerSecond / MDog.ticksPerSecond;
 }
 
+function secondsToTicks(seconds) {
+    return Math.floor(seconds * MDog.ticksPerSecond);
+}
+
 class Player {
-    constructor(game, x, y) {
-        this.game = game;
+    constructor(MDogInput, x, y) {
+        // const timeFactor = 160 / MDog.ticksPerSecond;
+
+        MDog = MDogInput;
+
         this.position = new Vector(x, y);
         this.velocity = new Vector();
-        this.camera = new Camera(this.game, this.position);
-        this.particleSystem = new MDog.FX.ParticleSystem();
-        this.startTime = 0;
 
         this.keys = {
             left: ["a", "ArrowLeft"],
             right: ["d", "ArrowRight"],
             up: ["w", "ArrowUp"],
             down: ["s", "ArrowDown"],
-            jump: [" ", "c"], // , "w", "ArrowUp"
-            dash: ["Shift", "x", "Enter"],
-            toggleJump: ["\\"]
+            jump: [" ", "c"],
+            dash: ["Shift", "x", "Enter"]
         };
 
-        if (settings.upToJump) {
-            for (let i = 0; i < this.keys.up.length; i++) {
-                this.keys.jump.push(this.keys.up[i]);
-            }
-        }
-
         this.keyBuffers = {
-            jump: {time: 0, limit: 10},
-            dash: {time: 0, limit: 15},
+            jump: {time: 0, limit: secondsToTicks(10)},
+            dash: {time: 0, limit: secondsToTicks(15)},
         }
 
-        this.flipMargin = 0.1;
+        this.flipMargin = pixelsPerSecondToPixelsPerTick(1.6);
         this.facingLeft = false;
 
-        this.groundCoyoteLimit = 12;
+        this.groundCoyoteLimit = secondsToTicks(0.5);
         this.groundCoyoteTime = 0;
-        this.wallCoyoteLimit = 15;
+        this.wallCoyoteLimit = secondsToTicks(0.5);
         this.wallCoyoteTime = 0;
         this.lastTouchedLeftWall = false;
 
-        this.runMargin = 0.8;
-        this.groundAcceleration = 0.07;
-        this.airAcceleration = 0.03;
-        this.groundDeceleration = 0.06;
-        this.airDeceleration = 0.04;
-        this.maxRunSpeed = 1.7;
+        this.runMargin = pixelsPerSecondToPixelsPerTick(0.8);
+        this.groundAcceleration = pixelsPerSecondToPixelsPerTickSquared(0.07);
+        this.airAcceleration = pixelsPerSecondToPixelsPerTickSquared(0.03);
+        this.groundDeceleration = pixelsPerSecondToPixelsPerTickSquared(0.04);
+        this.airDeceleration = pixelsPerSecondToPixelsPerTickSquared(0.04);
+        this.maxRunSpeed = pixelsPerSecondToPixelsPerTickSquared(1.7);
 
-        this.jumpHoldLimit = 30;
+        this.jumpHoldLimit = secondsToTicks(0.5);
         this.jumpHoldTime = 0;
-        this.jumpForce = 2;
-        this.gravity = 0.08;
-        this.maxAirFallSpeed = 2.5;
-        this.maxWallSlideFallSpeed = 0.4;
-        this.wallDeceleration = 0.1;
-        this.wallJumpXStrength = 2.5;
-        this.wallJumpYStrength = 2.5;
+        this.jumpForce = pixelsPerSecondToPixelsPerTick(2);
+        this.gravity = pixelsPerSecondToPixelsPerTickSquared(0.08);
+        this.maxAirFallSpeed = pixelsPerSecondToPixelsPerTick(2.5);
+        this.maxWallSlideFallSpeed = pixelsPerSecondToPixelsPerTick(0.4);
+        this.wallDeceleration = pixelsPerSecondToPixelsPerTickSquared(0.1);
+        this.wallJumpXStrength = pixelsPerSecondToPixelsPerTick(2.5);
+        this.wallJumpYStrength = pixelsPerSecondToPixelsPerTick(2.5);
 
         this.hasAirDash = false;
 
-        this.attackHorizontalX = 3;
-        this.attackHorizontalY = 1.5;
-        this.attackDiagonalX = 2;
-        this.attackDiagonalY = 3.3;
+        this.attackHorizontalX = pixelsPerSecondToPixelsPerTick(40);
+        this.attackHorizontalY = pixelsPerSecondToPixelsPerTick(32);
+        this.attackDiagonalX = pixelsPerSecondToPixelsPerTick(24);
+        this.attackDiagonalY = pixelsPerSecondToPixelsPerTick(48);
         this.attackUpX = 0;
-        this.attackUpY = 4;
+        this.attackUpY = pixelsPerSecondToPixelsPerTick(64);
         this.attackDownX = 0;
-        this.attackDownY = 5;
+        this.attackDownY = pixelsPerSecondToPixelsPerTick(80);
 
-        this.dashPauseFrames = 1;
+        this.dashPauseFrames = secondsToTicks(1);
 
         this.grapple = null;
         this.grappleRange = 0;
@@ -314,7 +92,7 @@ class Player {
         this.state = new IdleState(this);
         this.lastState = this.state;
 
-        this.hitbox = new Hitbox(this.position, 23, 12, 33, 43);
+        this.hitbox = new SquareHitbox(this.position, 23, 12, 33, 43);
 
     }
 
@@ -364,11 +142,6 @@ class Player {
             }
         }
 
-        if (MDog.Input.Keyboard.isClicked("r")) {
-            console.log("Restarted!")
-            game = new Game();
-            return;
-        }
 
         if (this.onLeft()) {
             this.lastTouchedLeftWall = true;
@@ -619,11 +392,11 @@ class Player {
                     newVel.setY(Math.min(newVel.getY(), this.velocity.getY()));
                 }
 
-                this.velocity.set(newVel);
+                this.velocity.set(newVel.multiply(dt)); // penis
 
                 let pv = direction.clone();
                 pv.normalize();
-                pv.multiply(this.velocity.length() * 4);
+                pv.multiply(this.velocity.length() * 4 / timeFactor);
                 // pv.multiply(3);
 
                 const move = 0.5;
@@ -637,7 +410,7 @@ class Player {
                         new MDog.FX.LineParticle(
                             x,
                             y,
-                            Math.floor(rnd(5, 20)),
+                            Math.floor(rnd(5, 20)) / timeFactor,
                             "#ffffff" + Math.floor(rnd(3, 9)) + "0",
                             pv.getX() + rnd(-move, move),
                             pv.getY() + rnd(-move, move),
@@ -660,7 +433,7 @@ class Player {
                         new MDog.FX.ChunkParticle(
                             x,
                             y,
-                            Math.floor(rnd(30, 100)),
+                            Math.floor(rnd(30, 100)) / timeFactor,
                             "#287013",
                             pv.getX(),
                             pv.getY(),
@@ -1061,361 +834,34 @@ class Player {
         MDog.Draw.particleSystem(this.particleSystem);
 
 
-        for (let i = 0; i < this.game.coins.length; i++) {
-            const coin = this.game.coins[i];
-
-            const centerPlayer = new Vector(this.hitbox.getMiddleX(), this.hitbox.getMiddleY());
-            const centerCoin = new Vector(coin.getX()+8, coin.getY()+8);
-            const coinVector = centerCoin.clone();
-
-            coinVector.subtract(centerPlayer);
-            coinVector.normalize();
-            coinVector.multiply(20);
-
-            const centerPlayerOut = centerPlayer.clone();
-
-            centerPlayer.add(coinVector);
-            centerPlayer.add(coinVector);
-
-            centerPlayerOut.add(coinVector);
-            centerPlayerOut.add(coinVector);
-            centerPlayerOut.add(coinVector);
-
-            MDog.Draw.line(
-                centerPlayer.getX(),
-                centerPlayer.getY(),
-                centerPlayer.getX() + coinVector.getX(),
-                centerPlayer.getY() + coinVector.getY(),
-                "#ffffff");
-        }
+        // for (let i = 0; i < this.game.coins.length; i++) {
+        //     const coin = this.game.coins[i];
+        //
+        //     const centerPlayer = new Vector(this.hitbox.getMiddleX(), this.hitbox.getMiddleY());
+        //     const centerCoin = new Vector(coin.getX()+8, coin.getY()+8);
+        //     const coinVector = centerCoin.clone();
+        //
+        //     coinVector.subtract(centerPlayer);
+        //     coinVector.normalize();
+        //     coinVector.multiply(20);
+        //
+        //     const centerPlayerOut = centerPlayer.clone();
+        //
+        //     centerPlayer.add(coinVector);
+        //     centerPlayer.add(coinVector);
+        //
+        //     centerPlayerOut.add(coinVector);
+        //     centerPlayerOut.add(coinVector);
+        //     centerPlayerOut.add(coinVector);
+        //
+        //     MDog.Draw.line(
+        //         centerPlayer.getX(),
+        //         centerPlayer.getY(),
+        //         centerPlayer.getX() + coinVector.getX(),
+        //         centerPlayer.getY() + coinVector.getY(),
+        //         "#ffffff");
+        // }
     }
 }
 
-class State {
-    constructor(player, frames, fileName, animationSpeed) {
-        this.player = player;
-        this.animation = new MDog.Draw.MultipleFileAnimation(fileName, frames, animationSpeed);
-    }
-
-    is(stateClass) {
-        return this instanceof stateClass;
-    }
-
-    getFrame() {
-        return this.animation.getFrame();
-    }
-
-    loadFrames() {
-        MDog.Draw.preloadAnimation(this.animation);
-    }
-
-    canWallSlide() {
-        return true;
-    }
-
-    canDashAttack() {
-        return true;
-    }
-
-    canOverrideSelf() {
-        return false;
-    }
-
-    postDrawUpdate() {}
-
-    draw() {
-        let xOffset = 0;
-        if (this.player.facingLeft) {
-            xOffset = -8;
-        }
-        MDog.Draw.animation(this.animation, this.player.getX() + xOffset + this.getXOffset(), this.player.getY(), {flipX: this.getFlipX()});
-        this.postDrawUpdate();
-    }
-
-    getFlipX() {
-        return this.player.facingLeft;
-    }
-
-    getXOffset() {
-        return 0;
-    }
-
-    checkOverride(state) {
-        return true;
-    }
-}
-
-class TransitionState extends State {
-    constructor(player, frames, fileName, animationSpeed, nextState) {
-        super(player, frames, fileName, animationSpeed);
-        this.nextState = nextState;
-    }
-
-    postDrawUpdate() {
-        // TODO add "get local time" to animation system
-
-        if (this.animation.getRawFrame() >= this.animation.frames) {
-            this.player.hardSetState(this.nextState);
-        }
-    }
-}
-
-class RunningState extends State {
-    constructor(player) {
-        super(player, 8, "side/girl/Run/Warrior_Run_?.png", 12);
-    }
-}
-
-class IdleState extends State {
-    constructor(player) {
-        super(player, 6, "side/girl/Idle/Warrior_Idle_?.png", 12);
-    }
-}
-
-class JumpState extends State {
-    constructor(player) {
-        super(player, 3, "side/girl/Jump/Warrior_Jump_?.png", 12);
-    }
-}
-
-class FallState extends State {
-    constructor(player) {
-        super(player, 3, "side/girl/Fall/Warrior_Fall_?.png", 12);
-    }
-}
-
-class JumpToFallState extends TransitionState {
-    constructor(player) {
-        super(player, 2, "side/girl/UptoFall/Warrior_UptoFall_?.png", 12, FallState);
-    }
-}
-
-class DashAttackState extends TransitionState {
-    constructor(player) {
-        super(player, 10, "side/girl/Dash_Attack/Warrior_Dash-Attack_?.png", 20, RunningState);
-        this.dashed = false;
-        this.direction = new Vector(0, 0);
-    }
-
-    canWallSlide() {
-        return this.getFrame() > 5;
-    }
-
-    canDashAttack() {
-        return this.getFrame() > 5;
-    }
-
-    canOverrideSelf() {
-        return true;
-    }
-}
-
-class WallSlideState extends State {
-    constructor(player) {
-        super(player, 3, "side/girl/WallSlide/Warrior_WallSlide_?.png", 12);
-    }
-
-    getFlipX() {
-        return !this.player.facingLeft;
-    }
-
-    getXOffset() {
-        return this.player.facingLeft ? 10 : -14;
-    }
-}
-
-new IdleState(null).loadFrames();
-new RunningState(null).loadFrames();
-new JumpState(null).loadFrames();
-new FallState(null).loadFrames();
-new JumpToFallState(null).loadFrames();
-new WallSlideState(null).loadFrames();
-new DashAttackState(null).loadFrames();
-MDog.Draw.preloadAnimation(new MDog.Draw.MultipleFileAnimation("side/coin/coin_?.png", 8, 12));
-
-class Grapple {
-    constructor(game, x, y) {
-        this.game = game;
-        this.position = new Vector(x, y);
-        this.range = 150;
-    }
-
-    draw() {
-        MDog.Draw.circle(this.position.getX(), this.position.getY(), this.range, "#ffffff11");
-        MDog.Draw.image("sofiatale/heart.png", this.position.getX()-8, this.position.getY()-8);
-    }
-}
-
-class Game {
-    constructor() {
-        this.coins = [];
-        this.grapples = [
-            // new Grapple(this, 550, 70),
-
-        ];
-
-        this.globalParticleSystem = new MDog.FX.ParticleSystem();
-        this.screenSpaceParticleSystem = new MDog.FX.ParticleSystem();
-
-        this.tilemaps = {
-            hitbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Colors"), 16, "side/city/Colors.png", 4),
-            back: [
-                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Colors"), 16, "side/city/Colors.png", 4),
-                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building1"), 16, "side/city/Buildings.png", 25),
-                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building2"), 16, "side/city/Buildings.png", 25),
-                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Tiles"), 16, "side/city/Tiles.png", 6),
-            ],
-            front: [
-                new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Deco"), 16, "side/city/Props-01.png", 8)
-            ]
-        }
-
-        const hbtm = this.tilemaps.hitbox;
-
-        const playerPos = new Vector(0, 0);
-
-        for (let x = 0; x < hbtm.width; x++) {
-            for (let y = 0; y < hbtm.height; y++) {
-                const index = hbtm.get(x, y);
-                if (index === 1) {
-                    hbtm.set(x, y, -1);
-                    this.tilemaps.back[0].set(x, y, -1);
-                    const pos = hbtm.tileToScreen(x, y);
-                    this.coins.push(new Coin(this, pos.x, pos.y));
-                }
-                if (index === 3) {
-                    hbtm.set(x, y, -1);
-                    this.tilemaps.back[0].set(x, y, -1);
-                    const pos = hbtm.tileToScreen(x, y);
-                    playerPos.setX(pos.x-18);
-                    playerPos.setY(pos.y-11);
-                }
-            }
-        }
-
-        this.player = new Player(this, playerPos.getX(), playerPos.getY());
-
-        this.averageDT = 0;
-        this.frames = 0;
-    }
-
-    _main() {
-        this.player.update();
-        this.globalParticleSystem.update();
-        this.updateCoins();
-
-        MDog.Draw.clear({color:"#161228"});
-
-        for (let i = 0; i < this.tilemaps.back.length; i++) {
-            MDog.Draw.interactable(this.tilemaps.back[i]);
-        }
-
-        if (this.tilemaps.back.length === 0 && this.tilemaps.front.length === 0) {
-            MDog.Draw.interactable(this.tilemaps.hitbox);
-        }
-
-        for (let i = 0; i < this.coins.length; i++) {
-            this.coins[i].draw();
-        }
-
-        for (let i = 0; i < this.grapples.length; i++) {
-            this.grapples[i].draw();
-        }
-
-        this.player.draw();
-
-        for (let i = 0; i < this.tilemaps.front.length; i++) {
-            MDog.Draw.interactable(this.tilemaps.front[i]);
-        }
-
-        MDog.Draw.particleSystem(this.globalParticleSystem);
-
-        if (this.player.startTime !== 0) {
-            this.frames += 1;
-            this.averageDT += MDog.Math.deltaTime();
-            // console.log(this.averageDT/this.frames);
-        }
-    }
-
-    updateCoins() {
-        for (let i = 0; i < this.coins.length; i++) {
-            if (this.coins[i].hitbox.colliding(this.player.hitbox)) {
-                this.coins[i].pickup();
-                this.coins.splice(i, 1);
-                i--;
-                if (this.coins.length === 0) {
-                    console.log((Date.now() - this.player.startTime)/1000);
-                }
-            }
-        }
-    }
-}
-
-function gameTick() {
-
-    if (game === null) {
-        if (MDog.AssetManager.doneLoading()) {
-            game = new Game();
-            console.log("starting");
-        } else {
-            console.log("waiting");
-            return;
-        }
-    }
-
-    if (MDog.AssetManager.doneLoading()) {
-        game._main();
-    } else {
-        console.log("not done");
-    }
-
-    // if (player.startTime !== 0) {
-    //     const passedTime = Date.now() - player.startTime;
-    //     const seconds = (passedTime / 1000);
-    //     frames += 1;
-    //     console.log(seconds + " " + frames + " " + frames/seconds);
-    // }
-}
-// let frames = 0;
-
-
-let game = null;
-
-MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_BuildingBottom.csv", "Building1");
-MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_BuildingTop.csv", "Building2");
-MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_Tiles.csv", "Tiles");
-MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_Deco.csv", "Deco");
-MDog.AssetManager.loadFile("side/tilemaps/good/test2_Colors_Colors.csv", "Colors");
-
-MDog.setActiveFunction(gameTick);
-
-// TODO SECTION ---
-
-// TODO add menu
-// TODO add diagonal down for wave dashing celeste stytyle
-// TODO electric fence?
-// TODO fix grapple
-// TODO if you jump then dash up you don't dash very far/at all
-
-
-// Player
-
-//  Set acceleration to zero
-
-//  Key input physics
-//   Changing x velocity on key input
-//   Wind
-//   Gravity
-//   On conveyer belt
-//   Friction
-
-//  Acceleration is added to velocity
-
-//  Game shit - Sets velocity
-//   Setting y velocity on jump
-
-//  Velocity is added to position
-
-//  Game shit - Sets velocity
-//   Wall collisions
-//   Jump pads
+export default Player;

@@ -3,7 +3,7 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "test.tmx",
+    "activeFile": "test2.tmx",
     "expandedProjectPaths": [
         "."
     ],
@@ -12,8 +12,11 @@
             "scaleInDock": 1
         },
         "Buildings.tsx": {
-            "scaleInDock": 2,
+            "scaleInDock": 1.5,
             "scaleInEditor": 2
+        },
+        "Colors.tsx": {
+            "scaleInDock": 1
         },
         "Deco.tsx": {
             "scaleInDock": 2,
@@ -50,16 +53,15 @@
     "map.tileWidth": 16,
     "openFiles": [
         "test.tmx",
-        "Buildings.tsx",
-        "Tiles.tsx",
-        "Deco.tsx"
+        "test2.tmx"
     ],
     "project": "untitled.tiled-project",
     "recentFiles": [
+        "test.tmx",
+        "test2.tmx",
         "Deco.tsx",
         "Tiles.tsx",
-        "Buildings.tsx",
-        "test.tmx"
+        "Buildings.tsx"
     ],
     "tileset.lastUsedFilter": "Tiled tileset files (*.tsx *.xml)",
     "tileset.lastUsedFormat": "tsx",

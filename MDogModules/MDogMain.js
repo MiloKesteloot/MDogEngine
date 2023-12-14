@@ -1,10 +1,11 @@
-import Module from "/MDogEngine/MDogModule.js"; // TODO Why do I need this here for this to work?
-import Draw from "/MDogEngine/MDogDraw.js";
-import Maths from "/MDogEngine/MDogMaths.js";
-import Input from "/MDogEngine/MDogInput.js";
-import UI from "/MDogEngine/MDogUI.js";
-import FX from "/MDogEngine/MDogFX.js";
-import AssetManager from "/MDogEngine/MDogAssetManager.js";
+import Module from "/MDogEngine/MDogModules/MDogModule.js"; // TODO Why do I need this here for this to work?
+import Draw from "/MDogEngine/MDogModules/MDogDraw.js";
+import Maths from "/MDogEngine/MDogModules/MDogMaths.js";
+import Input from "/MDogEngine/MDogModules/MDogInput.js";
+import UI from "/MDogEngine/MDogModules/MDogUI.js";
+import FX from "/MDogEngine/MDogModules/MDogFX.js";
+import AssetManager from "/MDogEngine/MDogModules/MDogAssetManager.js";
+import Basics from "/MDogEngine/MDogModules/MDogBasics.js";
 
 class MDog {
     constructor() {
@@ -17,6 +18,7 @@ class MDog {
         this.UI = new UI(this.Draw);
         this.FX = new FX();
         this.AssetManager = new AssetManager();
+        this.Basics = new Basics(this);
 
         this.activeFunction = null;
 
