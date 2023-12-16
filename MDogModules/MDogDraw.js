@@ -6,20 +6,38 @@ const Vector = (new Maths()).Vector;
 class Animation {
     constructor(fileName, frames, animationSpeed, settings) {
         settings = settings ?? {};
+
         this.fileName = fileName;
-        this.frames = frames;
+
+        if (Array.isArray(frames)) {
+            let largestFrame = 0;
+            for (let i = 0; i < frames.length; i++) {
+                if (frames[i] > largestFrame) {
+                    largestFrame = frames[i];
+                }
+            }
+            this.frames = largestFrame;
+            this.order = frames;
+        } else {
+            this.frames = frames;
+            this.order = [];
+            for (let i = 0; i < this.frames; i++) {
+                this.order.push(i);
+            }
+        }
+
         this.animationSpeed = animationSpeed;
-        this.order = settings.order ?? [];
+
         // TODO do the order stuff in both animation classes
         this.time = 0;
     }
 
     getFrame() {
-        return this.getRawFrame() % this.frames;
+        return this.order[this.getRawFrame() % this.order.length];
     }
 
     getRawFrame() {
-        return Math.floor(this.time / (167 / this.animationSpeed));
+        return Math.floor(this.time / (167 / this.animationSpeed)); // TODO wtf is 167?
     }
 
     reset() {
@@ -48,7 +66,7 @@ class MultipleFileAnimation extends Animation {
     }
 
     getImage(frame) {
-        frame = frame ?? this.getFrame();
+        frame = frame !== undefined ? this.order[frame] : this.getFrame();
         return this.fileName.replace("?", (frame + 1));
     }
 
@@ -143,6 +161,8 @@ class Draw extends Module {
         this.fonts = [];
         this.loadFont("undertale-hud", "/assets/sofiatale/hud.ttf");
         this.loadFont("rainyhearts", "/assets/sofiatale/rainyhearts.ttf");
+        this.loadFont("mars", "/assets/sofiatale/mars.ttf");
+        this.loadFont("determination", "/assets/sofiatale/determination.ttf");
     }
 
     translate(x, y, settings) {
@@ -185,6 +205,8 @@ class Draw extends Module {
       "));
         document.head.appendChild(newStyle);
         this.fonts.push(fontName);
+
+        this.text("test", -100, -100, "#000000", {font: fontName});
     }
 
     _getPixelWidth() {

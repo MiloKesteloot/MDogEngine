@@ -7,8 +7,8 @@ let timeFactor;
 let screen;
 
 const keys = {
-    yes: ["Enter", "x", " "],
-    no: ["Escape", "z"],
+    yes: ["Enter", "z", " "],
+    no: ["Escape", "x"],
     up: ["ArrowUp", "w"],
     down: ["ArrowDown", "s"],
     left: ["ArrowLeft", "a"],
@@ -74,7 +74,7 @@ class Mode {
     }
 
     drawStats() {
-        // MDog.Draw.text("lots and lots of text w yayy more text", x, y, "#ff0000", {font: "undertale-hud"});
+        // MDog.Draw.text("lots and lots of text w yayy more text", x, y, "#ff0000", {font: "determination"});
 
         this.drawOptions();
     }
@@ -131,6 +131,154 @@ class Mode {
     }
 }
 
+class ItemMode extends Mode {
+    constructor(gameModeAttack, back) {
+        super(gameModeAttack, back);
+        this.back = back;
+        this.selected = 0;
+
+        this.message = "";
+    }
+
+    _update() {
+
+        if (this.message !== "") {
+            if (keyDown(keys.yes, false)) {
+                this.gameModeAttack.mode = new FightingMode(this.gameModeAttack);
+            }
+            return;
+        }
+
+        if (keyDown(keys.yes, false)) {
+            const item = this.gameModeAttack.playerStats.items[this.selected];
+            this.message = item.useText;
+            this.gameModeAttack.playerStats.items.splice(this.selected, 1);
+            return;
+        }
+
+        if (keyDown(keys.no, false)) {
+            this.gameModeAttack.mode = this.back;
+            return;
+        }
+
+        const items = this.gameModeAttack.playerStats.items;
+
+        let x = 0;
+        if (keyDown(keys.left, false)) {
+            x -= 2;
+        }
+        if (keyDown(keys.right, false)) {
+            x += 2;
+        }
+
+        if (this.selected === 1 && x === -2) {
+            if (items.length % 2 === 0) {
+                this.selected = items.length - 1;
+            } else {
+                this.selected = items.length - 2;
+            }
+        } else {
+            this.selected += x;
+        }
+
+        if (this.selected > items.length - 1) {
+            this.selected = (this.selected + 10) % 2;
+        }
+
+        if (this.selected < 0) {
+            this.selected = (this.selected + 10) % 2;
+            this.selected += items.length - (items.length % 2) - 2;
+        }
+
+        let y = 0;
+        if (keyDown(keys.up, false)) {
+            y -= 1;
+        }
+        if (keyDown(keys.down, false)) {
+            y += 1;
+        }
+
+        if (y !== 0) {
+            if (this.selected % 2 === 0) {
+                if (this.selected !== items.length - 1) {
+                    this.selected += 1;
+                }
+            } else {
+                this.selected -= 1;
+            }
+        }
+    }
+
+    _draw() {
+        MDog.Draw.clear();
+        this.gameModeAttack.battleBox.draw();
+        this.drawStats();
+
+        if (this.message !== "") {
+
+            let x = this.gameModeAttack.battleBox.getLeftX() + 10;
+            let y = this.gameModeAttack.battleBox.getTopY() + 20;
+
+            this.drawTextWithBG(this.message, x, y);
+
+            return;
+        }
+
+        const items = this.gameModeAttack.playerStats.items;
+
+        const page = Math.floor(this.selected / 4);
+
+        for (let i = 0; i < 4; i++) {
+            const item = i + page * 4;
+            if (item >= items.length) {
+                break;
+            }
+
+            let x = this.gameModeAttack.battleBox.getLeftX() + 50;
+            let y = this.gameModeAttack.battleBox.getTopY() + 19 + (i % 2) * 25;
+
+            if (i >= 2) {
+                x = this.gameModeAttack.battleBox.getX() + 16;
+            }
+
+            const displayText = "* " + items[item].abbreviation;
+
+            this.drawTextWithBG(displayText, x, y);
+
+            if (this.selected === item) {
+                MDog.Draw.image(
+                    "sofiatale/heart.png",
+                    x - 32,
+                    y - 2);
+            }
+        }
+
+        let y = this.gameModeAttack.battleBox.getTopY() + 20 + 2 * 25;
+        let x = this.gameModeAttack.battleBox.getX() + 53;
+
+        this.drawTextWithBG(
+            "PAGE " + (page + 1) + "    ",
+            x,
+            y);
+    }
+
+    drawTextWithBG(text, x, y) {
+
+        const fontSize = 24;
+
+        const width = MDog.Draw.measureText(text, {size: fontSize, font: "determination"});
+
+        // MDog.Draw.rectangleFill(x - 2, y - 2, width + 4, 15 + 12, "#000000");
+
+        MDog.Draw.text(
+            text,
+            x,
+            y - 4,
+            "#ffffff",
+            {size: fontSize, font: "determination"});
+    }
+}
+
 class TextMode extends Mode {
     constructor(gameModeAttack, text, nextMode, prevMode) {
         super(gameModeAttack);
@@ -149,7 +297,7 @@ class TextMode extends Mode {
         if (text.startsWith("?")) {
             text = " " + text.substring(1);
 
-            const width = MDog.Draw.measureText(text, {size: 15, font: "undertale-hud"});
+            const width = MDog.Draw.measureText(text, {size: 15, font: "determination"});
 
             MDog.Draw.image(
                 "sofiatale/heart.png",
@@ -171,7 +319,7 @@ class TextMode extends Mode {
             this.gameModeAttack.battleBox.getLeftX() + 15,
             this.gameModeAttack.battleBox.getTopY() + 20,
             "#ffffff",
-            {size: 15, font: "undertale-hud"});
+            {size: 15, font: "determination"});
     }
 
     _update() {
@@ -304,7 +452,7 @@ class FightingMode extends Mode {
             this.attack = "cup";
             this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
             this.gameModeAttack.battleBox.setDialogue("mow", 200);
-            this.gameModeAttack.battleBox.cat.mood = 2;
+            this.gameModeAttack.battleBox.cat.mood = CatMood.Cup;
         } else if (attackID % 2 === 1) {
             this.attack = "yarn";
             this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
@@ -362,6 +510,9 @@ class PickingMode extends Mode {
                 const att = new AttackingMode(this.gameModeAttack);
                 const back = this;
                 this.gameModeAttack.mode = new TextMode(this.gameModeAttack, "?      *   Sbot     ", att, back);
+            } else if (this.choice === 2) {
+                const back = this;
+                this.gameModeAttack.mode = new ItemMode(this.gameModeAttack, back);
             }
         }
     }
@@ -454,6 +605,12 @@ class LerpItem {
     }
 }
 
+const CatMood = {
+    Normal: 0,
+    Cup: 1,
+    Yarn: 2,
+}
+
 class Cat {
     constructor(battleBox) {
         this.battleBox = battleBox;
@@ -465,10 +622,10 @@ class Cat {
             tail: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/tail.png", 4, Math.floor(timeFactor*3), 30),
             back: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/back.png", 2, 1, 19),
             cup: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/cup.png", 4, 3, 47),
-            yarn: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/yarn_cat.png", 3, 3, 91, {order: [0, 1, 0, 1, 2, 1, 2, 1]}),
+            yarn: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/yarn_cat.png", [0, 1, 0, 1, 0, 2, 0, 2], 3, 91),
         }
 
-        this.mood = 0; // 0 = normal, 1 = cup
+        this.mood = CatMood.Normal; // 0 = normal, 1 = cup
         this.spawnedCup = false;
     }
 
@@ -513,46 +670,39 @@ class Cat {
                     "#ffffff");
             }
 
-            MDog.Draw.text(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y+Math.floor((y1+y2)/2)-3, "#000000", {size: 16*3, font: "rainyhearts", textAlign: "center", textBaseline: "middle"});
+            MDog.Draw.text(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y+Math.floor((y1+y2)/2)-3, "#000000", {size: 16*3, font: "determination", textAlign: "center", textBaseline: "middle"});
         }
 
-        if (this.mood === 3) {
+        if (this.mood === CatMood.Yarn) {
             if (this.battleBox.attacks.length === 0) {
-                this.mood = 0;
+                this.mood = CatMood.Normal;
             }
         }
 
-        if (this.mood === 0 || this.mood === 2) {
-            MDog.Draw.image("sofiatale/cat/body.png", x, y, {scale: this.catScale});
+        if (this.mood === CatMood.Normal) {
+            this.drawNormalCat(x, y);
+        }
 
-            MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale})
-            MDog.Draw.animation(this.animations.back, x + 66, y + 27, {scale: this.catScale});
-            MDog.Draw.animation(this.animations.head, x, y, {scale: this.catScale});
-
-            if (this.mood === 2) {
-                if (this.battleBox.dialogueTimer === 0) {
-                    this.mood = 1;
+        if (this.mood === CatMood.Cup) {
+            if (this.battleBox.dialogueTimer !== 0) {
+                this.drawNormalCat(x, y);
+            } else {
+                this.drawCupCat(x, y);
+                if (this.animations.cup.getRawFrame() >= this.animations.cup.frames) {
+                    this.mood = CatMood.Normal;
+                    this.animations.cup.reset();
+                    this.spawnedCup = false;
+                }
+                if (this.animations.cup.getRawFrame() === this.animations.cup.frames - 1 &&
+                    !this.spawnedCup) {
+                    this.spawnedCup = true;
+                    battleBox.addAttack(new CupAttack(this.battleBox.gameModeAttack));
+                    this.battleBox.gameModeAttack.mode.spawnedAttack = true;
                 }
             }
         }
 
-        if (this.mood === 1) {
-            MDog.Draw.animation(this.animations.cup, x - 3, y - 33, {scale: this.catScale})
-            MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale})
-            if (this.animations.cup.getRawFrame() >= this.animations.cup.frames) {
-                this.mood = 0;
-                this.animations.cup.reset();
-                this.spawnedCup = false;
-            }
-            if (this.animations.cup.getRawFrame() === this.animations.cup.frames - 1 &&
-                !this.spawnedCup) {
-                this.spawnedCup = true;
-                battleBox.addAttack(new CupAttack(this.battleBox.gameModeAttack));
-                this.battleBox.gameModeAttack.mode.spawnedAttack = true;
-            }
-        }
-
-        if (this.mood === 3) {
+        if (this.mood === CatMood.Yarn) {
             MDog.Draw.animation(this.animations.yarn, x - 3*15-1, y - 27, {scale: this.catScale});
         }
 
@@ -561,6 +711,21 @@ class Cat {
             // this.mood = 1;
         }
     }
+
+    drawNormalCat(x, y) {
+        MDog.Draw.image("sofiatale/cat/body.png", x, y, {scale: this.catScale});
+
+        MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale})
+        MDog.Draw.animation(this.animations.back, x + 66, y + 27, {scale: this.catScale});
+        MDog.Draw.animation(this.animations.head, x, y, {scale: this.catScale});
+    }
+
+    drawCupCat(x, y) {
+        MDog.Draw.animation(this.animations.cup, x - 3, y - 33, {scale: this.catScale})
+        MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale})
+    }
+
+
 }
 
 class BattleBox {
@@ -679,11 +844,9 @@ class BattleBox {
 
         const gma = this.gameModeAttack;
 
-        // console.log(this.attacks.length + " " + this.cat.mood + " " + this.dialogueTimer + " " + gma.mode.spawnedAttack)
-
-        if (this.attacks.length === 0 && this.cat.mood === 0 && this.dialogueTimer === 0 && gma.mode.spawnedAttack) {
+        if (this.attacks.length === 0 && this.cat.mood === CatMood.Normal && this.dialogueTimer === 0 && gma.mode.spawnedAttack) {
             gma.mode = new PickingMode(gma);
-            gma.battleBox.cat.mood = 0;
+            // gma.battleBox.cat.mood = 0;
         }
     }
 
@@ -907,17 +1070,6 @@ class Cup {
         const bp = 0.95;
         const y0 = v0*Math.sqrt(bp-(yc/h));
 
-        // console.log("--")
-        //
-        // console.log("h:  " + h);
-        // console.log("g:  " + g);
-        // console.log("xc: " + xc)
-        // console.log("yc: " + yc);
-        // console.log("x1: " + x1);
-        // console.log("y1: " + y1);
-        // console.log("v0: " + v0);
-        // console.log("y0: " + y0);
-
         const beforeSqrt = (x1-xc)*y0;
         const leftOfMinusInSqrt = ((x1-xc)**2)*(y0**2);
         const rightOfMinusInSqrt = 2*(y1-yc)*g*((x1-xc)**2);
@@ -946,7 +1098,6 @@ class Cup {
         this.velocity.setX(x0);
         this.velocity.setY(-y0);
 
-        // console.log(this.velocity.getX() + "");
     }
 
     checkDeath() {
@@ -993,7 +1144,7 @@ class YarnAttack extends ModeAttack {
             this.yarnBall = new YarnBall(this.gameModeAttack, Math.floor((battleBox.getWidthGoal()-14)/2), battleBox.getHeightGoal()-14, vel.getX()*rndX, -vel.getY());
         }
 
-        this.gameModeAttack.battleBox.cat.mood = 3;
+        this.gameModeAttack.battleBox.cat.mood = CatMood.Yarn;
     }
 
     checkDeath() {

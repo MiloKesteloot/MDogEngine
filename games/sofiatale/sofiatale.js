@@ -25,7 +25,24 @@ class Game {
 
 class PlayerStats {
     constructor() {
-        this.health = 10;
+        this.health = 20;
+        this.items = [
+            new Item("Monster Candy", "MnstrCndy", "You ate the Monster Candy.\nYour HP was maxed out."),
+            new Item("Cat Nip", "Cat Nip", "You fed the cat cat nip."),
+            new Item("Cream Pie", "Cream Pie", "Ohhh yeahhh..."),
+            new Item("Monster Candy", "MnstrCndy", "You ate the Monster Candy.\nYour HP was maxed out."),
+            new Item("Cream Pie", "Cream Pie", "Ohhh yeahhh..."),
+            new Item("Cat Nip", "Cat Nip", "You fed the cat cat nip."),
+            new Item("Cream Pie", "Cream Pie", "Ohhh yeahhh..."),
+        ]
+    }
+}
+
+class Item {
+    constructor(name, abbreviation, useText) {
+        this.name = name;
+        this.abbreviation = abbreviation;
+        this.useText = useText;
     }
 }
 
