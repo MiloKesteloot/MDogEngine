@@ -7,7 +7,7 @@ console.log("Started!");
 class Game {
     constructor() {
 
-        const assets = "cat/actual_cup_lol, cat/back, cat/cup, cat/ears, cat/faces, cat/tail, cat/yarn_ball, cat/yarn_cat, battlegrid, cat, heart";
+        const assets = "cat/actual_cup_lol, cat/back, cat/cup, cat/ears, cat/faces, cat/tail, cat/yarn_ball, cat/yarn_cat, battlegrid, cat, heart, heart-dark";
 
         const split = assets.split(", ");
         for (let i = 0; i < split.length; i++) {
@@ -26,8 +26,9 @@ class Game {
 class PlayerStats {
     constructor() {
         this.name = "roomba";
-        this.health = 17;
+
         this.maxHealth = 20;
+        this.health = this.maxHealth;
         this.items = [
             new CatNip(),
             new FoodItem("Cream Pie", "Cream Pie", "Yummy yummers!", 10),

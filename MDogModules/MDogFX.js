@@ -136,6 +136,14 @@ class ParticleSystem {
             this.particles[i]._draw(Draw);
         }
     }
+
+    count() {
+        return this.particles.length;
+    }
+
+    isEmpty() {
+        return this.particles.length === 0;
+    }
 }
 
 export default FX;

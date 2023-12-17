@@ -51,8 +51,15 @@ class GameModeAttack extends GameMode {
     }
 
     _main() {
+        this.checkDeath();
         this.mode._update();
         this.mode._draw();
+    }
+
+    checkDeath() {
+        if (!(this.mode instanceof DeadMode) && this.playerStats.health <= 0) {
+            this.mode = new DeadMode(this);
+        }
     }
 }
 
@@ -150,6 +157,57 @@ class Mode {
                 MDog.Draw.image("sofiatale/heart.png", tempX+7, y+8);
             }
         }
+    }
+}
+
+class DeadMode extends Mode {
+    constructor(gameModeAttack) {
+        super(gameModeAttack);
+
+        this.timer = 0;
+
+        this.explodeTime = 150;
+
+        this.particleSystem = new MDog.FX.ParticleSystem();
+    }
+
+    _update() {
+        this.timer += 1;
+
+        if (this.timer === this.explodeTime) {
+
+            const heart = this.gameModeAttack.battleBox.heart;
+
+            const r = 6;
+
+            const x = heart.x + heart.width / 2;
+            const y = heart.y + heart.height / 2;
+
+            for (let i = 0; i < 6; i++) {
+                const particle = new MDog.FX.ChunkParticle(
+                    Math.floor(x + Math.random() * 2 * r - r),
+                    Math.floor(y + Math.random() * 2 * r - r),
+                    500,
+                    "#ff0000",
+                    Math.random()*2-1,
+                    -Math.random()*1.5,
+                    {gy: 0.01, size: 2}
+                );
+                this.particleSystem.addParticle(particle);
+            }
+        }
+
+        this.particleSystem.update();
+    }
+
+    _draw() {
+        MDog.Draw.clear();
+
+        if (this.particleSystem.isEmpty()) {
+            this.gameModeAttack.battleBox.heart.draw();
+        } else {
+            MDog.Draw.particleSystem(this.particleSystem);
+         }
     }
 }
 
@@ -579,7 +637,10 @@ function drawTextWithBG(text, x, y) {
 
 
 class Heart {
-    constructor(x, y) {
+    constructor(gameModeAttack, x, y) {
+
+        this.gameModeAttack = gameModeAttack;
+
         this.x = x;
         this.y = y;
 
@@ -591,7 +652,20 @@ class Heart {
     }
 
     draw() {
-        MDog.Draw.image("sofiatale/heart.png", this.getX(), this.getY());
+
+        let image = "sofiatale/heart.png";
+
+        if (this.gameModeAttack.mode instanceof FightingMode) {
+            if (this.gameModeAttack.mode.iFrames > 0) {
+                if (Math.floor(this.gameModeAttack.mode.iFrames/15)%2 === 0) {
+                    image = "sofiatale/heart.png";
+                } else {
+                    image = "sofiatale/heart-dark.png";
+                }
+            }
+        }
+
+        MDog.Draw.image(image, this.getX(), this.getY());
 
         // const col = new MDog.Math.Vector(256/2, 256/2);
         //
@@ -789,7 +863,7 @@ class BattleBox {
         this.width = new LerpItem(width);
         this.height = new LerpItem(height);
 
-        this.heart = new Heart(this.getX(), this.getX());
+        this.heart = new Heart(this.gameModeAttack, this.getX(), this.getX());
 
         this.attacks = [];
 
