@@ -294,7 +294,7 @@ class TextMode extends Mode {
             text = "" + text.substring(1);
 
             MDog.Draw.rectangleFill(
-                this.gameModeAttack.battleBox.getX() + 10 - 2,
+                this.gameModeAttack.battleBox.getX() + 10 - 2 - 30,
                 this.gameModeAttack.battleBox.getTopY() + 21 - 2,
                 80 + 4,
                 14 + 4,
@@ -302,7 +302,7 @@ class TextMode extends Mode {
             );
 
             MDog.Draw.rectangleFill(
-                this.gameModeAttack.battleBox.getX() + 10,
+                this.gameModeAttack.battleBox.getX() + 10 - 30,
                 this.gameModeAttack.battleBox.getTopY() + 21,
                 80,
                 14,
@@ -450,6 +450,9 @@ class FightingMode extends Mode {
             this.attack = "yarn";
             this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
         }
+
+        this.iFrames = 0;
+        this.maxIFrames = 120;
     }
 
     drawBattleHeart() {
@@ -457,6 +460,10 @@ class FightingMode extends Mode {
     }
 
     _update() {
+
+        if (this.iFrames > 0) {
+            this.iFrames -= 1;
+        }
 
         if (this.gameModeAttack.battleBox.doneMoving()) {
             if (!this.spawnedAttack && this.attack === "yarn" && this.gameModeAttack.battleBox.doneMoving()) {
@@ -858,6 +865,7 @@ class BattleBox {
     }
 
     update() {
+
         if (this.dialogueTimer > 0) {
             this.dialogueTimer -= 1;
         }
@@ -1054,8 +1062,6 @@ class Cup {
         this.g = 0.04;
 
         this.bounces = 0;
-
-        this.lastDamage = -1;
     }
 
     getR() {
@@ -1098,9 +1104,9 @@ class Cup {
         const heart = battleBox.heart;
         hit = hit || pointCollide(this.pos.getX(), this.pos.getY(), heart.getXCenter(), heart.getYCenter(), heart.width/2 + this.r);
 
-        if (hit && this.lastDamage < this.bounces - 1) {
+        if (hit && this.gameModeAttack.mode.iFrames === 0) {
             this.gameModeAttack.playerStats.health -= 4
-            this.lastDamage = this.bounces;
+            this.gameModeAttack.mode.iFrames = this.gameModeAttack.mode.maxIFrames;
         }
     }
 
@@ -1274,23 +1280,52 @@ class YarnBall {
 
         let hit = false;
 
+        if (this.gameModeAttack.mode.iFrames === 0) {
+
+            let damage = 0;
+
+            if (this.detectLineCollide()) {
+                damage = 1;
+            }
+
+            if (this.detectBallCollide()) {
+                damage = 4;
+            }
+
+            if (damage !== 0) {
+                this.gameModeAttack.playerStats.health -= damage;
+                this.gameModeAttack.mode.iFrames = this.gameModeAttack.mode.maxIFrames;
+            }
+        }
+    }
+
+    detectBallCollide() {
+
+        const battleBox = this.gameModeAttack.battleBox;
         const heart = battleBox.heart;
 
-        hit = hit || pointCollide(this.pos.getX(), this.pos.getY(), heart.getXCenter(), heart.getYCenter(), heart.width/2 + this.getR())
+        return pointCollide(this.pos.getX(), this.pos.getY(), heart.getXCenter(), heart.getYCenter(), heart.width / 2 + this.getR())
+    }
 
-        const l = this.lines[this.lines.length-1];
-        hit = hit || lineCollide(l.getX(), l.getY(), this.pos.getX(), this.pos.getY(), heart.getXCenter(), heart.getYCenter(), heart.width/2);
+    detectLineCollide() {
+        let hit = false;
 
-        for (let i = 0; i < this.lines.length-1; i++) {
-            if (hit) {break;}
+        const battleBox = this.gameModeAttack.battleBox;
+        const heart = battleBox.heart;
+
+        const l = this.lines[this.lines.length - 1];
+        hit = hit || lineCollide(l.getX(), l.getY(), this.pos.getX(), this.pos.getY(), heart.getXCenter(), heart.getYCenter(), heart.width / 2);
+
+        for (let i = 0; i < this.lines.length - 1; i++) {
+            if (hit) {
+                break;
+            }
             const l1 = this.lines[i];
-            const l2 = this.lines[i+1];
-            hit = hit || lineCollide(l1.getX(), l1.getY(), l2.getX(), l2.getY(), heart.getXCenter(), heart.getYCenter(), heart.width/2);
+            const l2 = this.lines[i + 1];
+            hit = hit || lineCollide(l1.getX(), l1.getY(), l2.getX(), l2.getY(), heart.getXCenter(), heart.getYCenter(), heart.width / 2);
         }
 
-        if (hit) {
-            MDog.Draw.setBackgroundColor("#ff0000");
-        }
+        return hit;
     }
 
     checkDeath() {
