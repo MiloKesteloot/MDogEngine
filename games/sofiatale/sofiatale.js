@@ -25,15 +25,12 @@ class Game {
 
 class PlayerStats {
     constructor() {
-        this.health = 20;
+        this.name = "roomba";
+        this.health = 17;
+        this.maxHealth = 20;
         this.items = [
-            new Item("Monster Candy", "MnstrCndy", "You ate the Monster Candy.\nYour HP was maxed out."),
-            new Item("Cat Nip", "Cat Nip", "You fed the cat cat nip."),
-            new Item("Cream Pie", "Cream Pie", "Ohhh yeahhh..."),
-            new Item("Monster Candy", "MnstrCndy", "You ate the Monster Candy.\nYour HP was maxed out."),
-            new Item("Cream Pie", "Cream Pie", "Ohhh yeahhh..."),
-            new Item("Cat Nip", "Cat Nip", "You fed the cat cat nip."),
-            new Item("Cream Pie", "Cream Pie", "Ohhh yeahhh..."),
+            new CatNip(),
+            new FoodItem("Cream Pie", "Cream Pie", "Yummy yummers!", 10),
         ]
     }
 }
@@ -43,6 +40,34 @@ class Item {
         this.name = name;
         this.abbreviation = abbreviation;
         this.useText = useText;
+    }
+
+    use(gameModeAttack) {
+
+    }
+}
+
+class CatNip extends Item {
+    constructor() {
+        super("Cat Nip", "Cat Nip", "You fed the cat cat nip.");
+    }
+
+    use(gameModeAttack) {
+        console.log("The cat likes you now");
+    }
+}
+
+class FoodItem extends Item{
+    constructor(name, abbreviation, useText, health) {
+        super(name, abbreviation, useText);
+        this.health = health;
+    }
+
+    use(gameModeAttack) {
+        gameModeAttack.playerStats.health += this.health;
+        if (gameModeAttack.playerStats.health > gameModeAttack.playerStats.maxHealth) {
+            gameModeAttack.playerStats.health = gameModeAttack.playerStats.maxHealth;
+        }
     }
 }
 

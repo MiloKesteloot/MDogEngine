@@ -1,5 +1,5 @@
-import Module from "/MDogModules/MDogModule.js";
-import Vector from "/MDogModules/MDogMaths/Vector.js";
+import Module from "./MDogModule.js";
+import Vector from "./MDogMaths/Vector.js";
 
 class SparseMatrix {
     constructor() {
