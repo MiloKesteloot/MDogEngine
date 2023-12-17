@@ -159,10 +159,10 @@ class Draw extends Module {
 
         this.imageCache = new Map();
         this.fonts = [];
-        this.loadFont("undertale-hud", "/assets/sofiatale/hud.ttf");
-        this.loadFont("rainyhearts", "/assets/sofiatale/rainyhearts.ttf");
-        this.loadFont("mars", "/assets/sofiatale/mars.ttf");
-        this.loadFont("determination", "/assets/sofiatale/determination.ttf");
+        this.loadFont("undertale-hud", "assets/sofiatale/hud.ttf");
+        this.loadFont("rainyhearts", "assets/sofiatale/rainyhearts.ttf");
+        this.loadFont("mars", "/MDogEngine/assets/sofiatale/mars.ttf");
+        this.loadFont("determination", "/MDogEngine/assets/sofiatale/determination.ttf");
     }
 
     translate(x, y, settings) {
