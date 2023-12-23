@@ -129,32 +129,50 @@ class Mode {
         const y = screen.height - settings.y - settings.height;
 
         for (let i = 0; i < settings.options.length; i++) {
+
+            let color = "#ff9900";
+
             let spacingX = 0;
             for (let j = 0; j < i; j++) {
                 spacingX += settings.spacingXs[j];
             }
             const tempX = x + i * (settings.width) + spacingX;
+
+            if (i === this.gameModeAttack.mode.getChoiceHeart()) {
+                MDog.Draw.image("sofiatale/heart.png", tempX+7, y+8);
+                color = "#ffff00";
+            }
+
             MDog.Draw.rectangle(
                 tempX,
                 y,
                 settings.width,
                 settings.height,
-                "#ff9900"
+                color
             );
             MDog.Draw.rectangle(
                 tempX+1,
                 y+1,
                 settings.width-2,
                 settings.height-2,
-                "#ff9900"
+                color
+            );
+
+            const textSize = 24;
+
+            const width = MDog.Draw.measureText(settings.options[i].name, {size: textSize, font: "determination"});
+
+            MDog.Draw.text(
+                settings.options[i].name,
+                tempX + settings.width - width - 3,
+                y + 4,
+                color,
+                {size: textSize, font: "determination"}
             );
 
             const image = settings.options[i].image;
             if (image !== "") {
                 // MDog.Draw.image(image, tempX + 1, y + 1);
-            }
-            if (i === this.gameModeAttack.mode.getChoiceHeart()) {
-                MDog.Draw.image("sofiatale/heart.png", tempX+7, y+8);
             }
         }
     }
@@ -207,7 +225,7 @@ class DeadMode extends Mode {
             this.gameModeAttack.battleBox.heart.draw();
         } else {
             MDog.Draw.particleSystem(this.particleSystem);
-         }
+        }
     }
 }
 
@@ -446,7 +464,7 @@ class AttackingMode extends Mode {
                 battleBox.getX() - Math.floor(this.imageWidth*this.imageWidthStretch/2),
                 battleBox.getY() - Math.floor(this.imageHeight*this.imageHeightStretch/2),
                 {scaleX: this.imageWidthStretch, scaleY: this.imageHeightStretch}
-                );
+            );
 
             let color1 = "#000000";
             let color2 = "#ffffff";
