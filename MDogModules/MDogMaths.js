@@ -1,5 +1,6 @@
 import Module from "./MDogModule.js";
 import Vector from "./MDogMaths/Vector.js";
+import Vector3 from "./MDogMaths/Vector3.js";
 
 class SparseMatrix {
     constructor() {
@@ -24,6 +25,7 @@ class Maths extends Module {
         super();
 
         this.Vector = Vector;
+        this.Vector3 = Vector3;
 
         this.nowTime = Date.now();
         this.lastTime = this.nowTime;
