@@ -1,3 +1,4 @@
+import Vector from "./Vector.js";
 import Vector3 from "./Vector3.js";
 
 class ThreeDee {
@@ -9,8 +10,10 @@ class ThreeDee {
     }
 
     TwoDeeToThreeDee(vector3) {
-        const vector3Clone = vector3.clone();
-        let x = vector3Clone.x / vector3Clone.z;
+        let x = (vector3.x ) / vector3.z;
+        let y = vector3.y / vector3.z;
+
+        return new Vector(Math.floor(x), Math.floor(y));
     }
 }
 
