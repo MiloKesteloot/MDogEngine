@@ -1,8 +1,6 @@
-import MDog from "/MDogEngine/MDogMain.js"
+import MDog from "/MDogEngine/MDogModules/MDogMain.js"
 
-const dt = 1 / MDog.ticksPerSecond;
-
-const camera = new MDog.Math.Vector3(100, 100);
+const threeDeeScene = new MDog.ThreeDee.ThreeDeeScene();
 
 function gameTick() {
 
@@ -14,7 +12,8 @@ function gameTick() {
     }
 
     MDog.Draw.clear();
-    MDog.Draw.rectangle(Math.floor(position.x), Math.floor(position.y), 10, 10, "#ff0000");
 }
+
+MDog.Draw.setBackgroundColor("#222");
 
 MDog.setActiveFunction(gameTick);

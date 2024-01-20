@@ -6,6 +6,7 @@ import UI from "/MDogEngine/MDogModules/MDogUI.js";
 import FX from "/MDogEngine/MDogModules/MDogFX.js";
 import AssetManager from "/MDogEngine/MDogModules/MDogAssetManager.js";
 import Basics from "/MDogEngine/MDogModules/MDogBasics.js";
+import ThreeDee from "/MDogEngine/MDogModules/MDogThreeDee.js";
 
 class MDog {
     constructor() {
@@ -19,6 +20,7 @@ class MDog {
         this.FX = new FX();
         this.AssetManager = new AssetManager();
         this.Basics = new Basics(this);
+        this.ThreeDee = new ThreeDee();
 
         this.activeFunction = null;
 

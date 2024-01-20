@@ -519,9 +519,10 @@ class Draw extends Module {
         particleSystem._draw(this);
     }
 
-    // Function Line
-    // Function Point
-    // Whatever
+    threeDeeScene(threeDeeScene) {
+        threeDeeScene._draw(this);
+    }
+    
 }
 
 export default Draw;
