@@ -258,8 +258,16 @@ class Draw extends Module {
     getScreenWidthInArtPixels() {
         return this.screenWidthInArtPixels;
     }
+
+    getHalfScreenWidthInArtPixels() {
+        return Math.floor(this.screenWidthInArtPixels/2);
+    }
     getScreenHeightInArtPixels() {
         return this.screenHeightInArtPixels;
+    }
+
+    getHalfScreenHeightInArtPixels() {
+        return Math.floor(this.screenHeightInArtPixels/2);
     }
 
     // Set color of screen around canvas
@@ -300,6 +308,57 @@ class Draw extends Module {
         // TODO test running clear with a layer specified
 
         // this.rectangleFill(-canvas.offset.getX(), -canvas.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels, color, {layer: layer});
+    }
+
+    findIntersections(points, y) {
+        let xValues = [];
+        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const x1 = points[i].x;
+            const y1 = points[i].y;
+            const x2 = points[j].x;
+            const y2 = points[j].y;
+
+            if (y1 > y !== y2 > y) {
+                const xVal = x2 + (y - y2) * (x1 - x2) / (y1 - y2);
+                xValues.push(Math.ceil(xVal));
+            }
+        }
+        return xValues.sort((a, b) => a - b);
+    }
+
+    polygonFill(points, color, settings) {
+
+        settings = settings ?? {};
+        const layer = settings.layer ?? this.layer;
+
+        const canvas = this._getCanvas(layer);
+        canvas.ctx.fillStyle = color;
+
+        // Find the min and max Y values
+        let minY = points[0].y;
+        let maxY = points[0].y;
+        for (let i = 1; i < points.length; i++) {
+            minY = Math.min(minY, points[i].y);
+            maxY = Math.max(maxY, points[i].y);
+        }
+
+        // Scanline from minY to maxY
+        for (let y = minY; y <= maxY; y++) {
+            const intersections = this.findIntersections(points, y);
+            for (let i = 0; i < intersections.length; i += 2) {
+                canvas.ctx.fillRect(intersections[i], y, intersections[i + 1] - intersections[i], 1)
+            }
+        }
+
+        this.polygon(points, color, settings);
+    }
+
+    polygon(points, color, settings) {
+        settings = settings ?? {};
+
+        for (let i = 0; i < points.length; i++) {
+            this.line(points[i].x, points[i].y, points[(i+1)%points.length].x, points[(i+1)%points.length].y, color, {layer: settings.layer});
+        }
     }
 
     rectangle(x, y, width, height, color, settings) {
@@ -522,7 +581,7 @@ class Draw extends Module {
     threeDeeScene(threeDeeScene) {
         threeDeeScene._draw(this);
     }
-    
+
 }
 
 export default Draw;
