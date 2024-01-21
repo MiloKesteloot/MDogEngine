@@ -50,7 +50,7 @@ threeDeeScene.addObject(new TD.ThreeDeeShape([
     ],
     "red", {stroke: "blue"}));
 threeDeeScene.addObject(new TD.ThreeDeeRectangle(10, -10, -10, 10, 0, "red", {stroke: "blue"}));
-threeDeeScene.addObject(new TD.ThreeDeeImage(0, -10, 10, "side/city/Buildings.png", 32, 16));
+threeDeeScene.addObject(new TD.ThreeDeeImage(0, -10, 10, "side/city/Buildings.png", 100, 100));
 
 
 // threeDeeScene.addObject(new TD.ThreeDeeRectangle(10, -10, -10, 10, 10));
