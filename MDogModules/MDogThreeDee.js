@@ -155,13 +155,13 @@ class ThreeDeeRectangle extends ThreeDeeObject {
         Draw.rectangleFill(
             topLeft.getX(),
             topLeft.getY(),
-            bottomRight.getX(),
+            bottomRight.getX() + 1,
             bottomRight.getY() + 1, // TODO the +1 is totally arbitrary to get it to line up with the shape
             this.color);
         Draw.rectangle(
             topLeft.getX(),
             topLeft.getY(),
-            bottomRight.getX(),
+            bottomRight.getX() + 1,
             bottomRight.getY() + 1, // TODO same here
             this.stroke);
     }
