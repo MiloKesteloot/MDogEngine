@@ -358,6 +358,9 @@ class Draw extends Module {
 
         for (let i = 0; i < points.length; i++) {
             this.line(points[i].x, points[i].y, points[(i+1)%points.length].x, points[(i+1)%points.length].y, color, {layer: settings.layer});
+            if (this.points.length === 2) {
+                break;
+            }
         }
     }
 

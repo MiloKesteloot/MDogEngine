@@ -20,8 +20,8 @@ for (let j = 0; j < 6; j++) {
         threeDeeScene.addObject(new TD.ThreeDeeShape([
                 new Vector3(-21 + i * plankLength + move, 0, 8 + j * plankWidth),
                 new Vector3(-21 + i * plankLength + move, 0, 8 + plankWidth + j * plankWidth),
-                new Vector3(-21 + (i + 1) * plankLength + move, 0, 8 + plankWidth + j * plankWidth),
-                new Vector3(-21 + (i + 1) * plankLength + move, 0, 8 + j * plankWidth),
+                // new Vector3(-21 + (i + 1) * plankLength + move, 0, 8 + plankWidth + j * plankWidth),
+                // new Vector3(-21 + (i + 1) * plankLength + move, 0, 8 + j * plankWidth),
             ],
             plankColor, {stroke: crackColor}));
     }
@@ -57,7 +57,7 @@ function gameTick() {
     }
 
     MDog.Draw.clear();
-    MDog.Draw.rectangleFill(0, 238, MDog.Draw.getScreenWidthInArtPixels(), 33, "#C5CCB8");
+    MDog.Draw.rectangleFill(0, 238, MDog.Draw.getScreenWidthInArtPixels(), 34, "#C5CCB8");
 
     MDog.Draw.threeDeeScene(threeDeeScene);
 }
