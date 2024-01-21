@@ -13,17 +13,25 @@ const plankWidth = 0.3;
 const plankColor = "transparent"; //#C5CCB8
 const crackColor = "#BE955C";
 
-for (let j = 0; j < 6; j++) {
+for (let j = 0; j < 7; j++) {
     const move = (plankLength / 2) * (j % 2);
 
-    for (let i = 0; i < 10; i++) {
-        threeDeeScene.addObject(new TD.ThreeDeeShape([
-                new Vector3(-21 + i * plankLength + move, 0, 8 + j * plankWidth),
-                new Vector3(-21 + i * plankLength + move, 0, 8 + plankWidth + j * plankWidth),
-                // new Vector3(-21 + (i + 1) * plankLength + move, 0, 8 + plankWidth + j * plankWidth),
-                // new Vector3(-21 + (i + 1) * plankLength + move, 0, 8 + j * plankWidth),
-            ],
-            plankColor, {stroke: crackColor}));
+    threeDeeScene.addObject(new TD.ThreeDeeShape([
+        new Vector3(-19, 0, 8 + j * plankWidth),
+        new Vector3(-19 + 9.5 * plankLength, 0, 8 + j * plankWidth),
+    ],
+        plankColor, {stroke: crackColor}));
+
+    if (j !== 6) {
+        for (let i = 0; i < 10; i++) {
+            threeDeeScene.addObject(new TD.ThreeDeeShape([
+                    new Vector3(-19 + i * plankLength + move, 0, 8 + j * plankWidth),
+                    new Vector3(-19 + i * plankLength + move, 0, 8 + plankWidth + j * plankWidth),
+                    // new Vector3(-21 + (i + 1) * plankLength + move, 0, 8 + plankWidth + j * plankWidth),
+                    // new Vector3(-21 + (i + 1) * plankLength + move, 0, 8 + j * plankWidth),
+                ],
+                plankColor, {stroke: crackColor}));
+        }
     }
 }
 
@@ -55,6 +63,12 @@ function gameTick() {
     if (MDog.Input.Keyboard.isDown("ArrowRight")) {
         camera.position.x += 0.1;
     }
+    // if (MDog.Input.Keyboard.isDown("ArrowDown")) {
+    //     camera.position.z -= 0.1;
+    // }
+    // if (MDog.Input.Keyboard.isDown("ArrowUp")) {
+    //     camera.position.z += 0.1;
+    // }
 
     MDog.Draw.clear();
     MDog.Draw.rectangleFill(0, 238, MDog.Draw.getScreenWidthInArtPixels(), 34, "#C5CCB8");
