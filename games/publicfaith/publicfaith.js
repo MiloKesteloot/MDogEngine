@@ -52,7 +52,6 @@ threeDeeScene.addObject(new TD.ThreeDeeShape([
 threeDeeScene.addObject(new TD.ThreeDeeRectangle(10, -10, -10, 10, 0, "red", {stroke: "blue"}));
 threeDeeScene.addObject(new TD.ThreeDeeImage(0, -10, 10, "side/city/Buildings.png", 100, 100));
 
-
 // threeDeeScene.addObject(new TD.ThreeDeeRectangle(10, -10, -10, 10, 10));
 const camera = threeDeeScene.getCamera();
 function gameTick() {
@@ -74,6 +73,8 @@ function gameTick() {
     MDog.Draw.rectangleFill(0, 238, MDog.Draw.getScreenWidthInArtPixels(), 34, "#C5CCB8");
 
     MDog.Draw.threeDeeScene(threeDeeScene);
+
+    MDog.Draw.image("side/girl/idle/Warrior_Idle_1.png", MDog.Draw.getHalfScreenWidthInArtPixels(), 210);
 }
 
 MDog.Draw.setBackgroundColor("#222");
