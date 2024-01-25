@@ -12,6 +12,7 @@ class ThreeDee extends Module {
         this.ThreeDeeRectangle = ThreeDeeRectangle;
         this.ThreeDeeShape = ThreeDeeShape;
         this.ThreeDeeImage = ThreeDeeImage;
+        this.ThreeDeeFloor = ThreeDeeFloor;
     }
 }
 
@@ -163,6 +164,40 @@ class ThreeDeeRectangle extends ThreeDeeObject {
             topLeft.getY(),
             bottomRight.getX() + 1,
             bottomRight.getY() + 1, // TODO same here
+            this.stroke);
+    }
+
+}
+
+class ThreeDeeFloor extends ThreeDeeObject {
+
+    // Settings: color, stroke
+    constructor(y, z1, z2, color, settings) {
+        settings = settings ?? {};
+        super();
+        this.top = new Vector3(0, y, z1);
+        this.bottom = new Vector3(0, y, z2);
+        this.color = color;
+        this.stroke = settings.stroke ?? "#00000000";
+    }
+
+    _draw(Draw) {
+        const top = this.scene.threeDeeToTwoDeeVector3(Draw, this.top);
+        const bottom = this.scene.threeDeeToTwoDeeVector3(Draw, this.bottom);
+        bottom.x -= top.x;
+        bottom.y -= top.y;
+
+        Draw.rectangleFill(
+            0,
+            top.getY(),
+            Draw.getScreenWidthInArtPixels(),
+            bottom.getY() + 1, // TODO the +1 is totally arbitrary to get it to line up with the shape
+            this.color);
+        Draw.rectangle(
+            -1,
+            bottom.getY(),
+            Draw.getScreenWidthInArtPixels() + 1,
+            bottom.getY() + 1, // TODO same here
             this.stroke);
     }
 
