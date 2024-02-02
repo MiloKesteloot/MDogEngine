@@ -44,12 +44,40 @@ class Interactable {
     _draw(Draw) {}
 }
 
-class GridInteractable extends Interactable {
-    constructor(x, y, width, height, xx, xy, yx, yy) {
+class RectangleGridInteractable extends Interactable {
+    constructor(x, y, width, height) {
         super(x, y);
 
         this.width = width;
         this.height = height;
+    }
+
+    screenToTile(x, y) {
+        let tx = Math.floor((x-this.x)/this.width);
+        let ty = Math.floor((y-this.y)/this.height);
+        return new Vector(tx, ty);
+    }
+
+    tileToScreen(x, y) {
+        let sx = this.x + x*this.width;
+        let sy = this.y + y*this.height;
+        return new Vector(sx, sy);
+    }
+
+    _draw(Draw) {
+        for (let i = 0; i < this.width; i++) {
+            for (let j = 0; j < this.height; j++) {
+                const p00 = this.getPoint(i, j);
+
+                Draw.point(p00.x, p00.y, "#ff0000");
+            }
+        }
+    }
+}
+
+class VectorGridInteractable extends RectangleGridInteractable {
+    constructor(x, y, width, height, xx, xy, yx, yy) {
+        super(x, y, width, height);
 
         this.xv = new Vector(xx, xy);
         this.yv = new Vector(yx, yy);
@@ -74,6 +102,8 @@ class GridInteractable extends Interactable {
         const yv = this.yv.clone().multiply(y);
         return vec.add(xv).add(yv);
     }
+
+    // TODO do screen to point function
 }
 
 class TilemapInteractable extends Interactable {
@@ -180,7 +210,8 @@ class UI extends Module {
         super();
         UI.Input = Input;
 
-        this.GridInteractable = GridInteractable;
+        this.RectangleGridInteractable = RectangleGridInteractable;
+        this.VectorGridInteractable = VectorGridInteractable;
         this.TilemapInteractable = TilemapInteractable;
     }
 }

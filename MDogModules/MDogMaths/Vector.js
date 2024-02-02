@@ -79,11 +79,30 @@ class Vector {
 
     // Get the length of this vector.
     length() {
+
         return Math.sqrt(this.x*this.x + this.y*this.y);
     }
 
     setLength(length) {
-        return this.length() === 0 ? this : this.multiply(length / this.length())
+        this.normalize();
+        this.multiply(length);
+        return this;
+            //this.multiply(length / this.length())
+    }
+
+    rotate(angleDegrees) {
+        // Convert angle from degrees to radians
+        const angleRadians = angleDegrees * (Math.PI / 180);
+
+        const x = this.x;
+        const y = this.y;
+
+        // Calculate the rotated vector components
+        this.x = x * Math.cos(angleRadians) + y * Math.sin(angleRadians);
+        this.y = x * -Math.sin(angleRadians) + y * Math.cos(angleRadians);
+
+        // Return the rotated vector
+        return this;
     }
 
     constrain(maxLength) {
@@ -104,6 +123,13 @@ class Vector {
     multiply(scalar) {
         this.x *= scalar;
         this.y *= scalar;
+        return this;
+    }
+
+    // Divide this vector by a scalar.
+    divide(scalar) {
+        this.x /= scalar;
+        this.y /= scalar;
         return this;
     }
 

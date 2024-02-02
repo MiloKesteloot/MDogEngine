@@ -12,7 +12,7 @@ class GameModeExplore extends GameMode {
 
         MDog.Draw.setBackgroundColor("#141414");
 
-        this.grid = new MDog.UI.GridInteractable(
+        this.grid = new MDog.UI.VectorGridInteractable(
             227, 70,
             8, 8,
             31, 16,
