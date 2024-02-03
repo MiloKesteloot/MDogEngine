@@ -35,11 +35,16 @@ function gameTick() {
 
     Draw.clear();
     // Draw.line(anch.x, anch.y, mouse.x, mouse.y, "#aa0000");
-    Draw.line(anch.x, anch.y, finalVec.x, finalVec.y, "#ff0000");
+    Draw.line(anch.x, anch.y, finalVec.x, finalVec.y, "#f7c19b");
 
     const closedMouse = anch.clone().add(anchToMouse.constrain(x*extendLimit*2));
 
-    Draw.line(finalVec.x, finalVec.y, closedMouse.x, closedMouse.y, "#00ffff");
+    Draw.line(closedMouse.x - 10, closedMouse.y, closedMouse.x + 100, closedMouse.y - 10, "#999999");
+    Draw.line(finalVec.x, finalVec.y, closedMouse.x, closedMouse.y, "#f7c19b");
+
+    Draw.circle(anch.x, anch.y, 10, "#f7c19b");
+    Draw.circle(finalVec.x, finalVec.y, 7.5, "#f7c19b");
+    Draw.circle(closedMouse.x, closedMouse.y, 5, "#f7c19b");
 
 }
 
