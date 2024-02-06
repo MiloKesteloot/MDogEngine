@@ -54,11 +54,11 @@ class CatNip extends Item {
     }
 
     use(gameModeAttack) {
-        console.log("The cat likes you now");
+        gameModeAttack.battleBox.cat.catnipped = true;
     }
 }
 
-class FoodItem extends Item{
+class FoodItem extends Item {
     constructor(name, abbreviation, useText, health) {
         super(name, abbreviation, useText);
         this.health = health;

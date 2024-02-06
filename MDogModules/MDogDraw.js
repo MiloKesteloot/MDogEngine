@@ -455,10 +455,10 @@ class Draw extends Module {
         const font = settings.font ?? "Arial";
         const ctx = this.mainCanvas.ctx;
         ctx.font = size + " " + font;
-        return ctx.measureText(text).width;
+        return ctx.measureText(text.split('\n')[0]).width; // TODO this search is a little sus
     }
 
-    // Perams: layer, textAlign (left, center, right), textBaseline (top, middle), size, font
+    // Perams: layer, textAlign (left, center, right), textBaseline (top, middle), size, font, lineHeight
     text(text, x, y, color, settings) {
 
         settings = settings ?? {};
@@ -466,8 +466,10 @@ class Draw extends Module {
         const layer = settings.layer ?? this.layer;
         const canvas = this._getCanvas(layer);
 
-        const size = (settings.size ?? "5") + "px";
         const font = settings.font ?? "Arial";
+
+        const size = (settings.size ?? "5") + "px";
+        const lineHeight = settings.lineHeight ?? 20;
 
         const ctx = canvas.ctx;
 
@@ -484,8 +486,15 @@ class Draw extends Module {
         //     ctx.fillText(text[i], x + fullWidth, y);
         //     fullWidth += width;
         // }
-        ctx.fillText(text, x, y);
 
+        // const split = text.split('\n');
+        //
+        // for (let i = 0; i < split.length; i++) {
+        //     const line = split[i];
+        //     ctx.fillText(line, x, y + lineHeight*i);
+        // }
+
+        ctx.fillText(text, x, y);
 
         // for (let i = 0; i < 10; i++) {
         //     canvas.ctx.fillText(text, x, y + 10);

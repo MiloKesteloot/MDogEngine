@@ -1,5 +1,5 @@
 class InverseKinematics {
-    static 
+    static
 }
 
 export default InverseKinematics;

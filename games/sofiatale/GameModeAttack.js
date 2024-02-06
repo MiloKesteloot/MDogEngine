@@ -287,6 +287,10 @@ class ItemMode extends Mode {
         if (this.selected < 0) {
             this.selected = (this.selected + 10) % 2;
             this.selected += items.length - (items.length % 2) - 2;
+            if (this.selected < 0) {
+                this.selected = (this.selected + 10) % 2;
+            }
+            console.log(this.selected);
         }
 
         let y = 0;
@@ -346,6 +350,253 @@ class ItemMode extends Mode {
 
 }
 
+class MercyMode extends Mode {
+    constructor(gameModeAttack, back) {
+        super(gameModeAttack, back);
+        this.back = back;
+        this.selected = 0;
+
+        this.message = "";
+    }
+
+    _update() {
+
+        if (this.message !== "") {
+            if (keyDown(keys.yes, false)) {
+                this.gameModeAttack.mode = new FightingMode(this.gameModeAttack);
+            }
+            return;
+        }
+
+        if (keyDown(keys.yes, false)) {
+            if (this.selected === 0) {
+                if (this.gameModeAttack.battleBox.cat.rizzed) {
+                    this.message = "* YOU WON!\n*You earned 0 XP and 0 gold.";
+                } else {
+                    this.message = "* Sbot won't let\n  you escape!";
+                }
+            } else {
+                this.message = "Fleeing is for nerds.\nI'm taking away 1 hp for that.";
+                this.gameModeAttack.playerStats.health -= 1;
+            }
+            return;
+        }
+
+        if (keyDown(keys.no, false)) {
+            this.gameModeAttack.mode = this.back;
+            return;
+        }
+
+        const items = this.gameModeAttack.playerStats.items;
+
+        let x = 0;
+        if (keyDown(keys.left, false)) {
+            x -= 2;
+        }
+        if (keyDown(keys.right, false)) {
+            x += 2;
+        }
+
+        if (this.selected === 1 && x === -2) {
+            if (items.length % 2 === 0) {
+                this.selected = items.length - 1;
+            } else {
+                this.selected = items.length - 2;
+            }
+        } else {
+            this.selected += x;
+        }
+
+        if (this.selected > items.length - 1) {
+            this.selected = (this.selected + 10) % 2;
+        }
+
+        if (this.selected < 0) {
+            this.selected = (this.selected + 10) % 2;
+            this.selected += items.length - (items.length % 2) - 2;
+            if (this.selected < 0) {
+                this.selected = (this.selected + 10) % 2;
+            }
+            console.log(this.selected);
+        }
+
+        let y = 0;
+        if (keyDown(keys.up, false)) {
+            y -= 1;
+        }
+        if (keyDown(keys.down, false)) {
+            y += 1;
+        }
+
+        if (y !== 0) {
+            if (this.selected % 2 === 0) {
+                if (this.selected !== items.length - 1) {
+                    this.selected += 1;
+                }
+            } else {
+                this.selected -= 1;
+            }
+        }
+    }
+
+    _draw() {
+        MDog.Draw.clear();
+        this.gameModeAttack.battleBox.draw();
+        this.drawStats();
+
+        if (this.message !== "") {
+            drawText(this.gameModeAttack.battleBox, this.message, 0);
+
+            return;
+        }
+
+        const items = this.gameModeAttack.playerStats.items;
+
+        const page = Math.floor(this.selected / 4);
+
+        for (let i = 0; i < 4; i++) {
+            const item = i + page * 4;
+            if (item >= items.length) {
+                break;
+            }
+
+            const displayText = "* " + items[item].abbreviation;
+
+            drawText(this.gameModeAttack.battleBox, displayText, i, this.selected === item);
+        }
+
+        let y = this.gameModeAttack.battleBox.getTopY() + 20 + 2 * 25;
+        let x = this.gameModeAttack.battleBox.getX() + 53;
+
+        drawTextWithBG(
+            "PAGE " + (page + 1) + "    ",
+            x,
+            y);
+    }
+}
+
+class TalkMode extends Mode {
+    constructor(gameModeAttack, back) {
+        super(gameModeAttack, back);
+        this.back = back;
+        this.selected = 0;
+
+        this.message = ""; // penis
+    }
+
+    _update() {
+
+        if (this.message !== "") {
+            if (keyDown(keys.yes, false)) {
+                this.gameModeAttack.mode = new FightingMode(this.gameModeAttack);
+            }
+            return;
+        }
+
+        if (keyDown(keys.yes, false)) {
+            const dial = this.gameModeAttack.battleBox.cat.talkOptions[this.selected];
+            this.message = dial.getText();
+            return;
+        }
+
+        if (keyDown(keys.no, false)) {
+            this.gameModeAttack.mode = this.back;
+            return;
+        }
+
+        const dialogues = this.gameModeAttack.battleBox.cat.talkOptions;
+
+        let x = 0;
+        if (keyDown(keys.left, false)) {
+            x -= 2;
+        }
+        if (keyDown(keys.right, false)) {
+            x += 2;
+        }
+
+        if (this.selected === 1 && x === -2) {
+            if (dialogues.length % 2 === 0) {
+                this.selected = dialogues.length - 1;
+            } else {
+                this.selected = dialogues.length - 2;
+            }
+        } else {
+            this.selected += x;
+        }
+
+        if (this.selected > dialogues.length - 1) {
+            this.selected = (this.selected + 10) % 2;
+        }
+
+        if (this.selected < 0) {
+            this.selected = (this.selected + 10) % 2;
+            this.selected += dialogues.length - (dialogues.length % 2) - 2;
+            if (this.selected < 0) {
+                this.selected = (this.selected + 10) % 2;
+            }
+        }
+
+        let y = 0;
+        if (keyDown(keys.up, false)) {
+            y -= 1;
+        }
+        if (keyDown(keys.down, false)) {
+            y += 1;
+        }
+
+        if (y !== 0) {
+            if (this.selected % 2 === 0) {
+                if (this.selected !== dialogues.length - 1) {
+                    this.selected += 1;
+                }
+            } else {
+                this.selected -= 1;
+            }
+        }
+    }
+
+    _draw() {
+        MDog.Draw.clear();
+        this.gameModeAttack.battleBox.draw();
+        this.drawStats();
+
+        if (this.message !== "") {
+
+            const split = this.message.split('\n');
+
+            for (let i = 0; i < split.length; i++) {
+                const line = split[i];
+                drawText(this.gameModeAttack.battleBox, line, i, undefined, 3);
+            }
+
+            return;
+        }
+
+        const dialogues = this.gameModeAttack.battleBox.cat.talkOptions;
+
+        const page = Math.floor(this.selected / 4);
+
+        for (let i = 0; i < 4; i++) {
+            const item = i + page * 4;
+            if (item >= dialogues.length) {
+                break;
+            }
+
+            const displayText = "* " + dialogues[item].text;
+
+            drawText(this.gameModeAttack.battleBox, displayText, i, this.selected === item);
+        }
+
+        // let y = this.gameModeAttack.battleBox.getTopY() + 20 + 2 * 25;
+        // let x = this.gameModeAttack.battleBox.getX() + 53;
+        //
+        // drawTextWithBG(
+        //     "PAGE " + (page + 1) + "    ",
+        //     x,
+        //     y);
+    }
+}
+
 class TextMode extends Mode {
     constructor(gameModeAttack, text, nextMode, prevMode) {
         super(gameModeAttack);
@@ -362,6 +613,8 @@ class TextMode extends Mode {
         let text = this.text;
 
         let heart = undefined;
+
+        let color = "#ffffff";
 
         if (text.startsWith("?")) {
 
@@ -384,11 +637,13 @@ class TextMode extends Mode {
                 14,
                 "#00ff00"
             );
+
+            color = "#ffff00";
         }
 
         const fontSize = 24;
 
-        drawText(this.gameModeAttack.battleBox, text, 0, heart);
+        drawText(this.gameModeAttack.battleBox, text, 0, heart, 2, color);
     }
 
     _update() {
@@ -582,13 +837,16 @@ class PickingMode extends Mode {
             this.choice = (this.choice + 1) % 4;
         }
         if (keyDown(keys.yes, false) && this.gameModeAttack.battleBox.doneMoving()) {
+            const back = this;
             if (this.choice === 0) {
                 const att = new AttackingMode(this.gameModeAttack);
-                const back = this;
                 this.gameModeAttack.mode = new TextMode(this.gameModeAttack, "?* Sbot", att, back);
+            } else if (this.choice === 1) {
+                this.gameModeAttack.mode = new TalkMode(this.gameModeAttack, back);
             } else if (this.choice === 2) {
-                const back = this;
                 this.gameModeAttack.mode = new ItemMode(this.gameModeAttack, back);
+            } else if (this.choice === 3) {
+                this.gameModeAttack.mode = new MercyMode(this.gameModeAttack, back);
             }
         }
     }
@@ -610,16 +868,19 @@ class PickingMode extends Mode {
 }
 
 
-function drawText(battleBox, text, i, hI) {
+function drawText(battleBox, text, i, hI, wrap, color) {
+
+    wrap = wrap ?? 2;
+    color = color ?? "#ffffff";
 
     let x = battleBox.getLeftX() + 50;
-    let y = battleBox.getTopY() + 19 + (i % 2) * 25;
+    let y = battleBox.getTopY() + 19 + (i % wrap) * 25;
 
     if (hI === undefined) {
         x = battleBox.getLeftX() + 18;
     }
 
-    if (i >= 2) {
+    if (i >= wrap) {
         x = battleBox.getX() + 16;
 
         if (hI === undefined) {
@@ -627,7 +888,7 @@ function drawText(battleBox, text, i, hI) {
         }
     }
 
-    drawTextWithBG(text, x, y);
+    drawTextWithBG(text, x, y, color);
 
     if (hI === true) {
         MDog.Draw.image(
@@ -637,7 +898,9 @@ function drawText(battleBox, text, i, hI) {
     }
 }
 
-function drawTextWithBG(text, x, y) {
+function drawTextWithBG(text, x, y, color) {
+
+    color = color ?? "#ffffff";
 
     const fontSize = 24;
 
@@ -649,7 +912,7 @@ function drawTextWithBG(text, x, y) {
         text,
         x,
         y - 4,
-        "#ffffff",
+        color,
         {size: fontSize, font: "determination"});
 }
 
@@ -760,6 +1023,9 @@ class Cat {
 
         this.catScale = 3;
 
+        this.catnipped = false;
+        this.rizzed = false;
+
         // this.health =
 
         this.animations = {
@@ -772,6 +1038,76 @@ class Cat {
 
         this.mood = CatMood.Normal; // 0 = normal, 1 = cup
         this.spawnedCup = false;
+
+        this.talkOptions = [
+                new this.TalkOptionCheck(this),
+                new this.TalkOptionMeow(this),
+                new this.TalkOptionRizz(this),
+            ];
+    }
+
+    TalkOption = class {
+        constructor(cat, text) {
+            this.cat = cat;
+            this.text = text;
+        }
+        getText() {
+            return "You forgot to set the\ntext for this one\n>:(";
+        }
+    }
+
+    TalkOptionCheck = class extends this.TalkOption {
+
+        constructor(cat) {
+            super(cat, "Check")
+        }
+
+        getText() {
+            return "* SBOT - ATK 8 DEF 8\n* I've never seen anyone\n  use the check feature."
+        }
+    }
+
+    TalkOptionMeow = class extends this.TalkOption {
+
+        count = 0;
+        texts = [
+            "Sbot tells you not to\nbe so vulgar.",
+            "Sbot once again tells\nyou off for saying\nsuch terrible words.",
+            "Sbot glares at you.",
+            "Sbot looks hurt."
+        ];
+
+        constructor(cat) {
+            super(cat, "Meow")
+        }
+
+        getText() {
+            const phrase = this.texts[this.count];
+
+            this.count += 1;
+
+            if (this.count > this.texts.length) {
+                this.count = 0;
+            }
+
+            return phrase;
+        }
+    }
+
+    TalkOptionRizz = class extends this.TalkOption {
+
+        constructor(cat) {
+            super(cat, "Rizz")
+        }
+
+        getText() {
+            if (this.cat.catnipped) {
+                this.cat.rizzed = true;
+                // TODO make cat rizzed animation
+                return "Aeugh >w<";
+            }
+            return "Sbot gives you the\ncold shoulder.";
+        }
     }
 
     draw() {
