@@ -31,7 +31,9 @@ class PlayerStats {
         this.health = this.maxHealth;
         this.items = [
             new CatNip(),
-            new FoodItem("Cream Pie", "Cream Pie", "Yummy yummers!", 10),
+            new FoodItem("Cream Pie", "Cream Pie", "Yummy yummers!", 6),
+            new FoodItem("Hot Dog", "Hot Dog", "Sbot doesn't swing that way", 6),
+            new FoodItem("Hot Cat", "Hot Cat", "Sbot has to go\nto the bathroom\nreal fast.", 10),
         ]
     }
 }
