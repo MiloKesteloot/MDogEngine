@@ -453,7 +453,13 @@ class MercyMode extends Mode {
 
         const page = Math.floor(this.selected / 4);
 
-        drawText(this.gameModeAttack.battleBox, "* Mercy", 0, this.selected === 0);
+        let mercyColor = "#ffffff";
+
+        if (this.gameModeAttack.battleBox.cat.rizzed) {
+            mercyColor = "#ffff00";
+        }
+
+        drawText(this.gameModeAttack.battleBox, "* Mercy", 0, this.selected === 0, undefined, mercyColor);
         drawText(this.gameModeAttack.battleBox, "* Flee", 1, this.selected === 1);
     }
 }
