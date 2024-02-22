@@ -1027,7 +1027,7 @@ class Cat {
         }
 
         this.mood = CatMood.Normal;
-        this.mood = CatMood.Rizzed;
+        // this.mood = CatMood.Rizzed;
 
         this.spawnedCup = false;
 
@@ -1147,11 +1147,11 @@ class Cat {
             MDog.Draw.text(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y+Math.floor((y1+y2)/2)-3, "#000000", {size: 16*3, font: "determination", textAlign: "center", textBaseline: "middle"});
         }
 
-        if (MDog.Input.Keyboard.isDown("q")) {
-            this.mood = CatMood.Normal;
-        } else {
-            this.mood = CatMood.Rizzed;
-        }
+        // if (MDog.Input.Keyboard.isDown("q")) {
+        //     this.mood = CatMood.Normal;
+        // } else {
+        //     this.mood = CatMood.Rizzed;
+        // }
 
         if (this.mood === CatMood.Yarn) {
             if (this.battleBox.attacks.length === 0) {
