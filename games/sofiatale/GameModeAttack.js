@@ -446,7 +446,6 @@ class MercyMode extends Mode {
 
         if (this.message !== "") {
             drawText(this.gameModeAttack.battleBox, this.message, 0);
-
             return;
         }
 
@@ -454,24 +453,14 @@ class MercyMode extends Mode {
 
         const page = Math.floor(this.selected / 4);
 
-        for (let i = 0; i < 4; i++) {
-            const item = i + page * 4;
-            if (item >= items.length) {
-                break;
-            }
+        let mercyColor = "#ffffff";
 
-            const displayText = "* " + items[item].abbreviation;
-
-            drawText(this.gameModeAttack.battleBox, displayText, i, this.selected === item);
+        if (this.gameModeAttack.battleBox.cat.rizzed) {
+            mercyColor = "#ffff00";
         }
 
-        let y = this.gameModeAttack.battleBox.getTopY() + 20 + 2 * 25;
-        let x = this.gameModeAttack.battleBox.getX() + 53;
-
-        drawTextWithBG(
-            "PAGE " + (page + 1) + "    ",
-            x,
-            y);
+        drawText(this.gameModeAttack.battleBox, "* Mercy", 0, this.selected === 0, undefined, mercyColor);
+        drawText(this.gameModeAttack.battleBox, "* Flee", 1, this.selected === 1);
     }
 }
 
@@ -906,7 +895,7 @@ function drawTextWithBG(text, x, y, color) {
 
     const width = MDog.Draw.measureText(text, {size: fontSize, font: "determination"});
 
-    MDog.Draw.rectangleFill(x - 2, y - 2, width + 4, 15 + 12, "#000000");
+    // MDog.Draw.rectangleFill(x - 2, y - 2, width + 4, 15 + 12, "#000000");
 
     MDog.Draw.text(
         text,
