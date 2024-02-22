@@ -1015,6 +1015,7 @@ const CatMood = {
     Normal: 0,
     Cup: 1,
     Yarn: 2,
+    Rizzed: 3,
 }
 
 class Cat {
@@ -1036,7 +1037,9 @@ class Cat {
             yarn: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/yarn_cat.png", [0, 1, 0, 1, 0, 2, 0, 2], 3, 91),
         }
 
-        this.mood = CatMood.Normal; // 0 = normal, 1 = cup
+        this.mood = CatMood.Normal;
+        this.mood = CatMood.Rizzed;
+
         this.spawnedCup = false;
 
         this.talkOptions = [
@@ -1103,6 +1106,7 @@ class Cat {
         getText() {
             if (this.cat.catnipped) {
                 this.cat.rizzed = true;
+                this.cat.mood = CatMood.Rizzed;
                 // TODO make cat rizzed animation
                 return "Aeugh >w<";
             }
@@ -1154,6 +1158,12 @@ class Cat {
             MDog.Draw.text(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y+Math.floor((y1+y2)/2)-3, "#000000", {size: 16*3, font: "determination", textAlign: "center", textBaseline: "middle"});
         }
 
+        if (MDog.Input.Keyboard.isDown("q")) {
+            this.mood = CatMood.Normal;
+        } else {
+            this.mood = CatMood.Rizzed;
+        }
+
         if (this.mood === CatMood.Yarn) {
             if (this.battleBox.attacks.length === 0) {
                 this.mood = CatMood.Normal;
@@ -1185,6 +1195,10 @@ class Cat {
 
         if (this.mood === CatMood.Yarn) {
             MDog.Draw.animation(this.animations.yarn, x - 3*15-1, y - 27, {scale: this.catScale});
+        }
+
+        if (this.mood === CatMood.Rizzed) {
+            MDog.Draw.image("sofiatale/rawfiles/hardcat.png", x, y, {scale: this.catScale});
         }
 
         if (MDog.Input.Keyboard.isDown(" ")) {
