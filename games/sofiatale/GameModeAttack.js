@@ -1187,7 +1187,7 @@ class Cat {
         }
 
         if (this.mood === CatMood.Rizzed) {
-            MDog.Draw.image("sofiatale/rawfiles/hardcat.png", x, y, {scale: this.catScale});
+            MDog.Draw.image("sofiatale/cat/cat_flirt.png", x, y, {scale: this.catScale});
         }
 
         if (MDog.Input.Keyboard.isDown(" ")) {
