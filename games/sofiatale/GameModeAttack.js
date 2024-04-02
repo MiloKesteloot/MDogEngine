@@ -3,7 +3,6 @@ import GameMode from "./GameMode.js";
 let MDog;
 let timeFactor;
 
-
 let screen;
 
 const keys = {
@@ -692,7 +691,7 @@ class AttackingMode extends Mode {
     }
 
     checkOver() {
-        return this.timer >= 60;
+        return this.timer >= (60 + 60);
     }
 
     _draw() {
@@ -700,7 +699,7 @@ class AttackingMode extends Mode {
 
         const battleBox = this.gameModeAttack.battleBox;
 
-        battleBox.draw();
+        battleBox.draw(); // penis
 
         if (battleBox.doneMoving()) {
             MDog.Draw.image(
@@ -713,7 +712,7 @@ class AttackingMode extends Mode {
             let color1 = "#000000";
             let color2 = "#ffffff";
 
-            if (this.done && Math.floor(this.timer/this.shakeRate)%2 === 1) {
+            if (this.done && Math.floor(this.timer/this.shakeRate)%2 === 1 && this.timer < 60) {
                 MDog.Draw.translate(-2, -2);
             } else {
                 MDog.Draw.translate(0, 0);
@@ -1013,6 +1012,9 @@ class Cat {
 
         this.catScale = 3;
 
+        this.maxHealth = 100;
+        this.health = this.maxHealth;
+
         this.catnipped = false;
         this.rizzed = false;
 
@@ -1096,19 +1098,26 @@ class Cat {
             if (this.cat.catnipped) {
                 this.cat.rizzed = true;
                 this.cat.mood = CatMood.Rizzed;
-                // TODO make cat rizzed animation
                 return "Aeugh >w<";
             }
             return "Sbot gives you the\ncold shoulder.";
         }
     }
 
-    draw() {
+    // Settings: showHealth
+    draw(settings) {
+
+        settings = settings ?? {};
+        let showHealth = settings.showHealth ?? false;
 
         const battleBox = this.battleBox;
 
         const x = battleBox.getX();
         const y = battleBox.getY() - Math.floor(battleBox.getHeight() / 2) - this.catScale * 30 + 2;
+
+        if (showHealth) {
+            MDog.Draw.rectangle(x, y, 10, 20, "#00ff00");
+        }
 
         if (battleBox.dialogueTimer > 0) {
 
@@ -1194,6 +1203,8 @@ class Cat {
             // MDog.Draw.image("sofiatale/cat.png", battleBox.getX(), battleBox.getY() - Math.floor(battleBox.getHeight() / 2) - this.catScale * 30 + 2, {scale: this.catScale});
             // this.mood = 1;
         }
+
+
     }
 
     drawNormalCat(x, y) {
@@ -1395,7 +1406,9 @@ class BattleBox {
         }
     }
 
-    draw() {
+    draw(settings) {
+
+        settings =
 
         // 3 -> 92
         // 2 -> 62
