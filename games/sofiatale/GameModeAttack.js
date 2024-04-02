@@ -1408,7 +1408,8 @@ class BattleBox {
 
     draw(settings) {
 
-        settings =
+        settings = settings ?? {};
+        
 
         // 3 -> 92
         // 2 -> 62
