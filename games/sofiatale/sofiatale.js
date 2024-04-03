@@ -57,6 +57,7 @@ class CatNip extends Item {
 
     use(gameModeAttack) {
         gameModeAttack.battleBox.cat.catnipped = true;
+        gameModeAttack.battleBox.nextAttack = "eep";
     }
 }
 

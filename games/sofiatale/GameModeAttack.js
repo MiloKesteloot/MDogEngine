@@ -370,7 +370,7 @@ class MercyMode extends Mode {
         if (keyDown(keys.yes, false)) {
             if (this.selected === 0) {
                 if (this.gameModeAttack.battleBox.cat.rizzed) {
-                    this.message = "* YOU WON!\n*You earned 0 XP and 0 gold.";
+                    this.message = "* YOU WON!\n* You earned 0 XP\n  and 0 gold.";
                 } else {
                     this.message = "* Sbot won't let\n  you escape!";
                 }
@@ -444,7 +444,10 @@ class MercyMode extends Mode {
         this.drawStats();
 
         if (this.message !== "") {
-            drawText(this.gameModeAttack.battleBox, this.message, 0);
+            const messageLines = this.message.split("\n");
+            for (let i = 0; i < messageLines.length; i++) {
+                drawText(this.gameModeAttack.battleBox, messageLines[i], i, undefined, 3); // penis
+            }
             return;
         }
 
@@ -469,7 +472,7 @@ class TalkMode extends Mode {
         this.back = back;
         this.selected = 0;
 
-        this.message = ""; // penis
+        this.message = "";
     }
 
     _update() {
@@ -677,8 +680,9 @@ class AttackingMode extends Mode {
                 this.timer += 1;
             }
 
-            if (keyDown(keys.yes, false)) {
+            if (!this.done && keyDown(keys.yes, false)) {
                 this.done = true;
+                this.gameModeAttack.battleBox.cat.damage(20);
             }
         }
 
@@ -699,7 +703,15 @@ class AttackingMode extends Mode {
 
         const battleBox = this.gameModeAttack.battleBox;
 
-        battleBox.draw(); // penis
+        let showHealth = false;
+
+        if (this.done) {
+            showHealth = true;
+        }
+
+        let progressBar = Math.min(Math.max(0, this.timer - 0) / 60 * 2, 1);
+
+        battleBox.draw({catSettings: {showHealth: showHealth, healthBarProgress: progressBar}});
 
         if (battleBox.doneMoving()) {
             MDog.Draw.image(
@@ -758,15 +770,31 @@ class FightingMode extends Mode {
 
         // const rnd = Math.floor(Math.random()*2);
 
-        attackID += 1;
+        let attackToDo = null;
 
-        if (attackID % 2 === 0) {
+        if (gameModeAttack.battleBox.nextAttack === null) {
+            attackID += 1;
+
+            if (attackID % 2 === 0) {
+                attackToDo = "cup";
+            } else if (attackID % 2 === 1) {
+                attackToDo = "yarn";
+            }
+        } else {
+            attackToDo = gameModeAttack.battleBox.nextAttack;
+            gameModeAttack.battleBox.nextAttack = null;
+        }
+
+        if (attackToDo === "cup") {
             this.attack = "cup";
             this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
             this.gameModeAttack.battleBox.setDialogue("mow", 200);
             this.gameModeAttack.battleBox.cat.mood = CatMood.Cup;
-        } else if (attackID % 2 === 1) {
+        } else if (attackToDo === "yarn") {
             this.attack = "yarn";
+            this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
+        } else if (attackToDo === "eep") {
+            this.attack = "eep";
             this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
         }
 
@@ -785,8 +813,12 @@ class FightingMode extends Mode {
         }
 
         if (this.gameModeAttack.battleBox.doneMoving()) {
-            if (!this.spawnedAttack && this.attack === "yarn" && this.gameModeAttack.battleBox.doneMoving()) {
+            if (!this.spawnedAttack && this.attack === "yarn") {
                 this.gameModeAttack.battleBox.addAttack(new YarnAttack(this.gameModeAttack));
+                this.spawnedAttack = true;
+            }
+            if (!this.spawnedAttack && this.attack === "eep") {
+                this.gameModeAttack.battleBox.addAttack(new EepyAttack(this.gameModeAttack));
                 this.spawnedAttack = true;
             }
         }
@@ -1014,6 +1046,8 @@ class Cat {
 
         this.maxHealth = 100;
         this.health = this.maxHealth;
+        this.oldHealth = this.health;
+        this.firstMoveFrame = true;
 
         this.catnipped = false;
         this.rizzed = false;
@@ -1038,6 +1072,11 @@ class Cat {
                 new this.TalkOptionMeow(this),
                 new this.TalkOptionRizz(this),
             ];
+    }
+
+    damage(damage) {
+        this.oldhealth = this.health;
+        this.health -= damage;
     }
 
     TalkOption = class {
@@ -1109,15 +1148,12 @@ class Cat {
 
         settings = settings ?? {};
         let showHealth = settings.showHealth ?? false;
+        let healthBarProgress = settings.healthBarProgress ?? 1;
 
         const battleBox = this.battleBox;
 
         const x = battleBox.getX();
         const y = battleBox.getY() - Math.floor(battleBox.getHeight() / 2) - this.catScale * 30 + 2;
-
-        if (showHealth) {
-            MDog.Draw.rectangle(x, y, 10, 20, "#00ff00");
-        }
 
         if (battleBox.dialogueTimer > 0) {
 
@@ -1204,7 +1240,25 @@ class Cat {
             // this.mood = 1;
         }
 
+        if (showHealth) {
 
+            if (this.firstMoveFrame) {
+                this.oldHealth = this.health;
+            }
+
+            const downOffset = 55;
+            const barHeight = 10;
+            const outlineThickness = 2;
+            MDog.Draw.rectangleFill(x - Math.floor(this.maxHealth/2) - outlineThickness, y + downOffset - outlineThickness, this.maxHealth + outlineThickness*2, barHeight + outlineThickness*2, "#000000");
+            MDog.Draw.rectangleFill(x - Math.floor(this.maxHealth/2), y + downOffset, this.maxHealth, barHeight, "#4d4d4d");
+            MDog.Draw.rectangleFill(x - Math.floor(this.maxHealth/2), y + downOffset, MDog.Math.lerp(this.oldHealth, this.health, healthBarProgress), barHeight, "#00ff00");
+
+            if (this.firstMoveFrame) {
+                this.firstMoveFrame = false;
+            }
+        } else {
+            this.firstMoveFrame = false;
+        }
     }
 
     drawNormalCat(x, y) {
@@ -1233,6 +1287,7 @@ class BattleBox {
 
         this.heart = new Heart(this.gameModeAttack, this.getX(), this.getX());
 
+        this.nextAttack = null;
         this.attacks = [];
 
         this.dialogueTimer = 0;
@@ -1406,17 +1461,18 @@ class BattleBox {
         }
     }
 
+    // Settings: catSettings
     draw(settings) {
 
         settings = settings ?? {};
-        
+        let catSettings = settings.catSettings ?? {};
 
         // 3 -> 92
         // 2 -> 62
 
         this.drawBox();
 
-        this.cat.draw();
+        this.cat.draw(catSettings);
 
         if (this.gameModeAttack.mode.drawBattleHeart()) {
             if (this.doneMoving()) {
@@ -1487,6 +1543,108 @@ class CupAttack extends ModeAttack {
         //     this.cups[i].draw();
         // }
         this.cup.draw();
+    }
+}
+
+class EepyAttack extends ModeAttack {
+    constructor(gameModeAttack) {
+        super(gameModeAttack);
+
+        this.eepyCat = new EepyCat(this.gameModeAttack,112, -20);
+        // this.cups.push(new Cup(0, 40, vel.getX(), vel.getY()));
+        // this.cups.push(new Cup(0, 100, vel.getX(), vel.getY()));
+
+    }
+
+    checkDeath() {
+        return this.eepyCat.checkDeath(); // this.cups.checkDeath();
+    }
+
+    update() {
+        // for (let i = 0; i < this.cups.length; i++) {
+        //     this.cups[i].update();
+        // }
+        this.eepyCat.update();
+    }
+
+    draw() {
+        // for (let i = 0; i < this.cups.length; i++) {
+        //     this.cups[i].draw();
+        // }
+        this.eepyCat.draw();
+    }
+}
+
+class EepyCat {
+    constructor(gameModeAttack, x, y) {
+        this.gameModeAttack = gameModeAttack;
+        this.x = x;
+        this.y = y;
+        this.timer = 60*8;
+        this.scale = 1; // Scale is not fully supported // penis
+        this.animationSpeed = 60;
+    }
+
+    checkDeath() {
+        return this.timer <= 0;
+    }
+
+    update() {
+        this.timer -= 1;
+
+        const x = this.getX();
+        const y = this.getY();
+
+        let hit = false;
+
+        const heart = this.gameModeAttack.battleBox.heart;
+
+        // Check for cat body
+        hit = (
+            (heart.getYCenter() > (y - 8)) &&
+            (heart.getX() + 16 >= x) &&
+            (heart.getX() <= x+(92/2/2 * 0.8))
+        );
+
+        // Check for cat tail
+        hit = hit || (
+            (heart.getYCenter() > (y - 4)) &&
+            (heart.getX() + 16 >= x) &&
+            (heart.getX() <= x+92/2 - 4)
+        );
+
+        if (hit && this.gameModeAttack.mode.iFrames === 0) {
+            this.gameModeAttack.playerStats.health -= 7;
+            this.gameModeAttack.mode.iFrames = this.gameModeAttack.mode.maxIFrames;
+        } // penis
+    }
+
+    getX() {
+        return this.gameModeAttack.battleBox.getLeftX() + Math.floor(this.gameModeAttack.battleBox.getWidth()/2 - (92/2/4)*this.scale);
+    }
+
+    getY() {
+        return this.gameModeAttack.battleBox.getBottomY() - 16*this.scale;
+    }
+
+    draw() {
+        const x = this.getX();
+        const y = this.getY();
+
+        let shift = 0;
+
+        if (Math.floor((this.timer / this.animationSpeed) % 2) === 1) {
+            shift = 1;
+        }
+
+        shift *= 92/2;
+
+        MDog.Draw.image(
+            "sofiatale/cat/eepycat.png",
+            x,
+            y,
+            {scale: this.scale, width: 92/2, offsetX: shift}
+        );
     }
 }
 

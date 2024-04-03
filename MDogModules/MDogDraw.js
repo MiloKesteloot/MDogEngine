@@ -310,7 +310,7 @@ class Draw extends Module {
         // this.rectangleFill(-canvas.offset.getX(), -canvas.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels, color, {layer: layer});
     }
 
-    findIntersections(points, y) {
+    findIntersections(points, y) { // TODO what is this function?
         let xValues = [];
         for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
             const x1 = points[i].x;
