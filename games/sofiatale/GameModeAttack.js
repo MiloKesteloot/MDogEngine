@@ -682,7 +682,7 @@ class AttackingMode extends Mode {
 
             if (!this.done && keyDown(keys.yes, false)) {
                 this.done = true;
-                this.gameModeAttack.battleBox.cat.damage(20);
+                this.gameModeAttack.battleBox.cat.damage(15); // TODO make you do more damage if you're closer to the center
             }
         }
 

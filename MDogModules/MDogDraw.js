@@ -285,6 +285,7 @@ class Draw extends Module {
         canvas.ctx.fillRect(x, y, 1, 1)
     }
 
+    // Settings - color, layer
     clear(settings) {
         settings = settings ?? {};
         const color = settings.color ?? "#000000";
@@ -383,6 +384,7 @@ class Draw extends Module {
         canvas.ctx.fillRect(x+width-1, y+1, 1, height-2);
     }
 
+    // Settings - layer
     circle(x, y, radius, color, settings) {
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
