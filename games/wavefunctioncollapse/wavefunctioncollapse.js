@@ -52,7 +52,7 @@ function newOptionList() {
     return ret;
 }
 
-let size = 10;
+let size = 64;
 let map = [];
 
 for (let i = 0; i < size; i++) {
@@ -65,7 +65,7 @@ for (let i = 0; i < size; i++) {
 function randFromList(list) {
     const length = list.length;
     if (length === 0) return null;
-    // if (list.includes(0) && Math.random() > 0.05) return 0;
+    if (list.includes(0) && Math.random() > 0.5) return 0;
     return list[Math.floor(Math.random()*length)];
 }
 
