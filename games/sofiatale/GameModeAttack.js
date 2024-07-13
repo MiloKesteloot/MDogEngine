@@ -34,8 +34,8 @@ function keyDown(keySet, hold) {
 let attackID = Math.floor(Math.random()*2);
 
 class GameModeAttack extends GameMode {
-    constructor(TempMDog, playerStats) {
-        super(TempMDog, playerStats);
+    constructor(game, TempMDog, playerStats) {
+        super(game, TempMDog, playerStats);
 
         MDog = TempMDog;
         timeFactor = 160 / MDog.ticksPerSecond;
@@ -46,6 +46,7 @@ class GameModeAttack extends GameMode {
 
         // this.mode = new PickingMode(this);
         this.mode = new IntroMode(this);
+        // this.mode = new DeadMode(this);
 
         MDog.Draw.setBackgroundColor("#141414");
     }
@@ -196,7 +197,7 @@ class IntroMode extends Mode {
     _update() {
         this.time += 1;
 
-        if (MDog.Input.Keyboard.downKeys.length !== 0) {
+        if (MDog.Input.Keyboard.clickedKeys.length !== 0) {
             this.gameModeAttack.mode = new PickingMode(this.gameModeAttack);
         }
     }
@@ -213,6 +214,8 @@ class IntroMode extends Mode {
             MDog.Draw.text("[PRESS ANY BUTTON]", 512 / 2, 310, "#6e6e6e", {size: 12, font: "mars", textAlign: "center"});
             // "Press " + this.startButton + " to start"
         }
+
+        // MDog.Draw.textImage("hello", 10, 10, "#ffffff", "sofiatale/marsfont.png", {size: 2});
     }
 }
 
@@ -222,9 +225,14 @@ class DeadMode extends Mode {
 
         this.timer = 0;
 
-        this.explodeTime = 150;
+        this.breakTime = 130;
+        this.explodeTime = 260;
+        this.deathTextTime = 450;
+        this.textTime = 650;
 
         this.particleSystem = new MDog.FX.ParticleSystem();
+
+        this.selector = 0;
     }
 
     _update() {
@@ -236,21 +244,29 @@ class DeadMode extends Mode {
 
             const r = 6;
 
-            const x = heart.x + heart.width / 2;
-            const y = heart.y + heart.height / 2;
+            const x = heart.getXCenter();
+            const y = heart.getYCenter();
 
             for (let i = 0; i < 6; i++) {
-                const particle = new MDog.FX.ChunkParticle(
+                const particle = new MDog.FX.AnimationParticle(
                     Math.floor(x + Math.random() * 2 * r - r),
                     Math.floor(y + Math.random() * 2 * r - r),
-                    500,
-                    "#ff0000",
-                    Math.random()*2-1,
+                    1000,
+                    new MDog.Draw.SpriteSheetAnimation("sofiatale/deathparticle.png", [0, 1, 2, 1], 5, 4, {}),
+                    (Math.random()*2-1)/1.6,
                     -Math.random()*1.5,
-                    {gy: 0.01, size: 2}
+                    {gy: 0.006}
                 );
                 this.particleSystem.addParticle(particle);
             }
+        }
+
+        if (keyDown(keys.yes, false)) {
+            this.gameModeAttack.game.newGame();
+        }
+
+        if (keyDown(keys.left, false) || keyDown(keys.right, false)) {
+            this.selector = (this.selector + 1) % 2;
         }
 
         this.particleSystem.update();
@@ -259,10 +275,38 @@ class DeadMode extends Mode {
     _draw() {
         MDog.Draw.clear();
 
-        if (this.particleSystem.isEmpty()) {
-            this.gameModeAttack.battleBox.heart.draw();
+        if (this.timer < this.explodeTime) {
+            let x = this.gameModeAttack.battleBox.heart.getX();
+            let y = this.gameModeAttack.battleBox.heart.getY();
+            if (this.timer < this.breakTime) {
+                MDog.Draw.image("sofiatale/heart.png", x, y);
+            } else {
+                MDog.Draw.image("sofiatale/heartbroken.png", x - 1, y);
+            }
         } else {
             MDog.Draw.particleSystem(this.particleSystem);
+        }
+
+        if (this.timer > this.deathTextTime) {
+            const scale = 5;
+            MDog.Draw.image("sofiatale/gameover.png", (512-52*scale)/2, 50, {scale});
+        }
+
+        if (this.timer > this.textTime) {
+            MDog.Draw.text("Stay determined!", 512/2, 200, "#ffffff", {size: 24, font: "determination", textAlign: "center"}); // penis
+            MDog.Draw.text("Play again?", 512/2, 240, "#ffffff", {size: 24, font: "determination", textAlign: "center"}); // penis
+            let options = ["Yes", "No"];
+            for (let i = 0; i < options.length; i++) {
+                const text = options[i];
+                const sets = {size: 24, font: "determination", textAlign: "center"};
+                const width = MDog.Draw.measureText(text, sets);
+                const x = 512/2 + (i*2-1)*50;
+                const y = 280;
+                if (this.selector === i) {
+                    MDog.Draw.image("sofiatale/heart.png", x - width / 2 - 20, y + 3);
+                }
+                MDog.Draw.text(text, x, y, "#ffffff", sets); // penis
+            }
         }
     }
 }

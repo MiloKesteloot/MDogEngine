@@ -15,11 +15,16 @@ class Game {
         }
 
         this.playerStats = new PlayerStats();
-        this.gameMode = new GameModeAttack(MDog, this.playerStats);
+        this.gameMode = new GameModeAttack(this, MDog, this.playerStats);
     }
 
     _main() {
         this.gameMode._main();
+    }
+
+    newGame() {
+        game = new Game();
+        MDog.setActiveFunction(game._main.bind(game));
     }
 }
 
@@ -75,6 +80,6 @@ class FoodItem extends Item {
     }
 }
 
-const game = new Game();
+let game = new Game();
 
 MDog.setActiveFunction(game._main.bind(game));

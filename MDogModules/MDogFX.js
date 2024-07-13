@@ -10,6 +10,7 @@ class FX extends Module {
         this.ParticleSystem = ParticleSystem;
         this.Particle = Particle;
         this.ChunkParticle = ChunkParticle;
+        this.AnimationParticle = AnimationParticle;
         this.LineParticle = LineParticle;
     }
 }
@@ -39,7 +40,7 @@ class Particle {
     _draw() {};
 }
 
-// Extra perams: gx, gy, size, layer, tags
+// Extra perams: gx, gy, size, layer, tags // TODO add extra perams like color?
 class ChunkParticle extends Particle {
     constructor(x, y, life, color, vx, vy, settings) {
         settings = settings ?? {};
@@ -66,6 +67,34 @@ class ChunkParticle extends Particle {
             this.size,
             this.color,
             {layer: this.layer});
+    }
+}
+
+// Extra perams: gx, gy, size, layer, tags
+class AnimationParticle extends Particle {
+    constructor(x, y, life, animation, vx, vy, settings) {
+        settings = settings ?? {};
+        super(x, y, life, {layer: settings.layer, tags: settings.tags});
+        this.velocity = new Vector(vx, vy);
+        this.animation = animation;
+        this.gx = settings.gx ?? 0;
+        this.gy = settings.gy ?? 0;
+        this.size = settings.size ?? 1;
+    }
+
+    _update() {
+        this.velocity.x += this.gx;
+        this.velocity.y += this.gy;
+        this.position.x += this.velocity.x;
+        this.position.y += this.velocity.y;
+    }
+
+    _draw(Draw) {
+        Draw.animation(
+            this.animation,
+            Math.floor(this.position.x - this.size/2),
+            Math.floor(this.position.y - this.size/2),
+            {layer: this.layer,});
     }
 }
 

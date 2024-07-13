@@ -4,8 +4,8 @@ let MDog;
 let screen;
 
 class GameModeExplore extends GameMode {
-    constructor(TempMDog, playerStats) {
-        super(TempMDog, playerStats);
+    constructor(game, TempMDog, playerStats) {
+        super(game, TempMDog, playerStats);
 
         MDog = TempMDog;
         screen = {width: MDog.Draw.getScreenWidthInArtPixels(), height: MDog.Draw.getScreenHeightInArtPixels()};

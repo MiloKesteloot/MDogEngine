@@ -508,6 +508,34 @@ class Draw extends Module {
         // console.log(canvas.ctx.measureText("lotsof").width);
     }
 
+    textImage(text, x, y, color, font, settings) {
+
+        settings = settings ?? {};
+
+        let size = settings.size ?? 1;
+
+        const alph = "abcdefghijklmnopqrstuvwxyz0123456789!~-.,?";
+
+        let xPos = 0;
+        let yPos = 0;
+
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+
+            if (char === "\n") {
+                xPos = 0;
+                yPos += 6*size;
+                continue;
+            }
+
+            const index = alph.indexOf(char);
+
+            this.image(font, x+xPos, y+yPos, {width: 4, xOffset: index*5, scale: size});
+
+            xPos += 5*size;
+        }
+    }
+
     // Perams: layer, scale, scaleX, scaleY, offsetX, offsetY, width, height, flipX, flipY
     image(fileName, x, y, settings) {
 
