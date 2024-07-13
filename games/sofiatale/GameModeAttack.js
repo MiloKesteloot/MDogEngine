@@ -1110,7 +1110,7 @@ class Cat {
         this.rizzed = false;
 
         this.animations = {
-            head: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/faces.png", 4, 0, 45),
+            head: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/faces.png", [0, 1, 2, 3, 2, 1, 0], 5, 45),
             tail: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/tail.png", 4, Math.floor(timeFactor*3), 30),
             back: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/back.png", 2, 1, 19),
             cup: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/cup.png", 4, 3, 47),
@@ -1130,6 +1130,8 @@ class Cat {
         this.cupTimer = 0;
 
         this.angy = false;
+
+        this.nextBlink = 0;
     }
 
     damage(damage) {
@@ -1346,17 +1348,33 @@ class Cat {
 
         MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale})
         MDog.Draw.animation(this.animations.back, x + 66, y + 27, {scale: this.catScale});
-        MDog.Draw.animation(this.animations.head, x, y, {scale: this.catScale});
+        const head = this.animations.head;
+
+        MDog.Draw.animation(head, x, y,
+            {
+                scale: this.catScale,
+                update: head.getRawFrame() !== head.order.length - 1
+            });
+
+        if (this.nextBlink > 0) {
+            this.nextBlink -= 1;
+        }
+
+        if (this.nextBlink === 0) {
+            head.reset();
+
+            this.nextBlink = Math.floor(Math.random()*2000) + 500;
+        }
     }
 
     drawCupCat(x, y) {
         if (this.cupTimer === 0) {
-            MDog.Draw.animation(this.animations.cup, x - 3, y - 33, {
+            MDog.Draw.animation(this.animations.cup, x - 3, y - 33 - 4*this.catScale, {
                 scale: this.catScale,
                 update: this.cupTimer === 0
             });
         } else {
-            MDog.Draw.image("sofiatale/cat/cup.png", x - 3, y - 33,
+            MDog.Draw.image("sofiatale/cat/cup.png", x - 3, y - 33 - 4*this.catScale,
                 {
                     scale: this.catScale,
                     offsetX: 47*3
