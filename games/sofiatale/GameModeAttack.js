@@ -328,7 +328,6 @@ class ItemMode extends Mode {
             if (this.selected < 0) {
                 this.selected = (this.selected + 10) % 2;
             }
-            console.log(this.selected);
         }
 
         let y = 0;
@@ -455,7 +454,6 @@ class MercyMode extends Mode {
             if (this.selected < 0) {
                 this.selected = (this.selected + 10) % 2;
             }
-            console.log(this.selected);
         }
 
         let y = 0;
@@ -485,7 +483,7 @@ class MercyMode extends Mode {
         if (this.message !== "") {
             const messageLines = this.message.split("\n");
             for (let i = 0; i < messageLines.length; i++) {
-                drawText(this.gameModeAttack.battleBox, messageLines[i], i, undefined, 3); // penis
+                drawText(this.gameModeAttack.battleBox, messageLines[i], i, undefined, 3);
             }
             return;
         }
@@ -721,7 +719,18 @@ class AttackingMode extends Mode {
 
             if (!this.done && keyDown(keys.yes, false)) {
                 this.done = true;
-                this.gameModeAttack.battleBox.cat.damage(15); // TODO make you do more damage if you're closer to the center
+
+                // 0
+                // 226
+                // 458
+
+                const dmgPerf = 16;
+                const dmgWorst = 5;
+
+                const dist = Math.min(Math.abs(this.xPos - 226)/226, 1);
+                const damage = Math.floor(MDog.Math.lerp(dmgPerf, dmgWorst, dist));
+
+                this.gameModeAttack.battleBox.cat.damage(damage);
             }
         }
 
@@ -921,7 +930,11 @@ class PickingMode extends Mode {
         this.drawStats();
 
         if (battleBox.doneMoving()) {
-            drawText(battleBox, "* Bark bark!", 0);
+            let text = "* Bark bark!";
+            if (battleBox.cat.angy) {
+                text = "* Sbot is now angwy >:(";
+            }
+            drawText(battleBox, text, 0);
         }
     }
 }
@@ -1091,8 +1104,6 @@ class Cat {
         this.catnipped = false;
         this.rizzed = false;
 
-        // this.health =
-
         this.animations = {
             head: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/faces.png", 4, 0, 45),
             tail: new MDog.Draw.SpriteSheetAnimation("sofiatale/cat/tail.png", 4, Math.floor(timeFactor*3), 30),
@@ -1102,15 +1113,18 @@ class Cat {
         }
 
         this.mood = CatMood.Normal;
-        // this.mood = CatMood.Rizzed;
 
-        this.spawnedCup = false;
+        this.spawnedThings = 0;
 
         this.talkOptions = [
                 new this.TalkOptionCheck(this),
                 new this.TalkOptionMeow(this),
                 new this.TalkOptionRizz(this),
             ];
+
+        this.cupTimer = 0;
+
+        this.angy = false;
     }
 
     damage(damage) {
@@ -1185,6 +1199,10 @@ class Cat {
     // Settings: showHealth
     draw(settings) {
 
+        if (this.health <= 50) {
+            this.angy = true;
+        }
+
         settings = settings ?? {};
         let showHealth = settings.showHealth ?? false;
         let healthBarProgress = settings.healthBarProgress ?? 1;
@@ -1231,12 +1249,6 @@ class Cat {
             MDog.Draw.text(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y+Math.floor((y1+y2)/2)-3, "#000000", {size: 16*3, font: "determination", textAlign: "center", textBaseline: "middle"});
         }
 
-        // if (MDog.Input.Keyboard.isDown("q")) {
-        //     this.mood = CatMood.Normal;
-        // } else {
-        //     this.mood = CatMood.Rizzed;
-        // }
-
         if (this.mood === CatMood.Yarn) {
             if (this.battleBox.attacks.length === 0) {
                 this.mood = CatMood.Normal;
@@ -1248,18 +1260,42 @@ class Cat {
         }
 
         if (this.mood === CatMood.Cup) {
+
+            if (this.cupTimer > 0) {
+                this.cupTimer -= 1;
+            }
+
             if (this.battleBox.dialogueTimer !== 0) {
                 this.drawNormalCat(x, y);
             } else {
                 this.drawCupCat(x, y);
-                if (this.animations.cup.getRawFrame() >= this.animations.cup.frames) {
-                    this.mood = CatMood.Normal;
+
+                if (this.animations.cup.getRawFrame() >= this.animations.cup.frames &&
+                    (this.spawnedThings === 1 || (this.angy && this.spawnedThings === 2))) {
                     this.animations.cup.reset();
-                    this.spawnedCup = false;
+
+                    this.mood = CatMood.Normal;
+                    this.spawnedThings = 0;
                 }
+                // if (this.animations.cup.getRawFrame() === this.animations.cup.frames - 1 &&
+                //     this.spawnedThings === 1) {
+                //
+                // }
                 if (this.animations.cup.getRawFrame() === this.animations.cup.frames - 1 &&
-                    !this.spawnedCup) {
-                    this.spawnedCup = true;
+                    (this.spawnedThings < 1 || (this.angy && this.spawnedThings < 2))) {
+
+                    this.spawnedThings += 1;
+
+                    if (this.angy) {
+                        if (this.spawnedThings < 2) {
+                            this.animations.cup.reset();
+                        }
+
+                        if (this.spawnedThings === 1) {
+                            this.cupTimer = 280;
+                        }
+                    }
+
                     battleBox.addAttack(new CupAttack(this.battleBox.gameModeAttack));
                     this.battleBox.gameModeAttack.mode.spawnedAttack = true;
                 }
@@ -1309,11 +1345,20 @@ class Cat {
     }
 
     drawCupCat(x, y) {
-        MDog.Draw.animation(this.animations.cup, x - 3, y - 33, {scale: this.catScale})
-        MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale})
+        if (this.cupTimer === 0) {
+            MDog.Draw.animation(this.animations.cup, x - 3, y - 33, {
+                scale: this.catScale,
+                update: this.cupTimer === 0
+            });
+        } else {
+            MDog.Draw.image("sofiatale/cat/cup.png", x - 3, y - 33,
+                {
+                    scale: this.catScale,
+                    offsetX: 47*3
+                });
+        }
+        MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale});
     }
-
-
 }
 
 class BattleBox {
@@ -1561,9 +1606,6 @@ class CupAttack extends ModeAttack {
         const vel = new MDog.Math.Vector(-0.1, -1.2);
 
         this.cup = new Cup(this.gameModeAttack,112, -20, vel.getX(), vel.getY());
-        // this.cups.push(new Cup(0, 40, vel.getX(), vel.getY()));
-        // this.cups.push(new Cup(0, 100, vel.getX(), vel.getY()));
-
     }
 
     checkDeath() {
@@ -1620,7 +1662,7 @@ class EepyCat {
         this.x = x;
         this.y = y;
         this.timer = 60*8;
-        this.scale = 1; // Scale is not fully supported // penis
+        this.scale = 1; // Scale is not fully supported
         this.animationSpeed = 60;
     }
 
@@ -1655,7 +1697,7 @@ class EepyCat {
         if (hit && this.gameModeAttack.mode.iFrames === 0) {
             this.gameModeAttack.playerStats.health -= 7;
             this.gameModeAttack.mode.iFrames = this.gameModeAttack.mode.maxIFrames;
-        } // penis
+        }
     }
 
     getX() {
@@ -1871,6 +1913,10 @@ class YarnBall {
 
         this.lines = [new MDog.Math.Vector(this.pos.getX(), this.pos.getY())];
 
+        this.maxSpeed = 0.8;
+        if (this.gameModeAttack.battleBox.cat.angy) {
+            this.maxSpeed = 1.2;
+        }
         this.speed = 0;
         this.acc = 0.01;
     }
@@ -1882,11 +1928,11 @@ class YarnBall {
     update() {
         const battleBox = this.gameModeAttack.battleBox;
 
-        if (this.speed < 1) {
+        if (this.speed < this.maxSpeed) {
             this.speed += this.acc;
         }
-        if (this.speed > 1) {
-            this.speed = 1;
+        if (this.speed > this.maxSpeed) {
+            this.speed = this.maxSpeed;
         }
 
         this.pos.add(this.velocity.clone().multiply(this.speed));

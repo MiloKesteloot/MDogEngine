@@ -27,7 +27,7 @@ class PlayerStats {
     constructor() {
         this.name = "roomba";
 
-        this.maxHealth = 20;
+        this.maxHealth = 100;
         this.health = this.maxHealth;
         this.items = [
             new CatNip(),
