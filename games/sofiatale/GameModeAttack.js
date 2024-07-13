@@ -666,7 +666,12 @@ class TextMode extends Mode {
                 "#00ff00"
             );
 
-            color = "#ffff00";
+            if (text === "* Sbot") {
+                if (this.gameModeAttack.battleBox.cat.rizzed) {
+                    color = "#ffff00";
+                }
+            }
+
         }
 
         const fontSize = 24;
