@@ -93,20 +93,20 @@ class Mode {
 
         const y = screen.height - 66;
 
-        MDog.Draw.text(this.gameModeAttack.playerStats.name, 22, y, "#ffffff", {font: "mars", size: 24});
+        MDog.Draw.textImage(this.gameModeAttack.playerStats.name, 22, y + 3, "#ffffff", "fonts/marsfont.png", {size: 3});
 
         // MDog.Draw.text("LV 69", 140, screen.height - 66, "#ffffff", {font: "mars", size: 24});
 
         const x = 220;
 
-        MDog.Draw.text("HP", x - 25, y + 3, "#ffffff", {font: "mars", size: 16});
+        MDog.Draw.textImage("HP", x - 25, y + 3 + 2, "#ffffff", "fonts/marsfont.png", {size: 2});
 
         const health = this.gameModeAttack.playerStats.health;
 
         MDog.Draw.rectangleFill(x, y + 2, 20, 17, "#ff0000");
         MDog.Draw.rectangleFill(x, y + 2, health, 17, "#ffff00");
 
-        MDog.Draw.text(health + " / 20", x + 30, y, "#ffffff", {font: "mars", size: 24});
+        MDog.Draw.textImage(health + " / 20", x + 30, y + 3, "#ffffff", "fonts/marsfont.png", {size: 3});
     }
 
     drawOptions() {
@@ -163,12 +163,13 @@ class Mode {
 
             const width = MDog.Draw.measureText(settings.options[i].name, {size: textSize, font: "determination"});
 
-            MDog.Draw.text(
+            MDog.Draw.textImage(
                 settings.options[i].name,
-                tempX + settings.width - width - 3,
-                y + 4,
+                tempX + settings.width - 8,
+                y + 11,
                 color,
-                {size: textSize, font: "determination"}
+                "fonts/marsfont.png",
+                {size: 2, textAlign: "right"}
             );
 
             const image = settings.options[i].image;
@@ -197,7 +198,9 @@ class IntroMode extends Mode {
     _update() {
         this.time += 1;
 
-        if (MDog.Input.Keyboard.clickedKeys.length !== 0) {
+        const clickedKeys = MDog.Input.Keyboard.clickedKeys;
+
+        if (!clickedKeys.includes("Control") && !clickedKeys.includes("Alt") && clickedKeys.length !== 0) {
             this.gameModeAttack.mode = new PickingMode(this.gameModeAttack);
         }
     }
@@ -206,16 +209,15 @@ class IntroMode extends Mode {
         MDog.Draw.clear();
 
         MDog.Draw.image("sofiatale/logo.png", 120, 90, {scale: 4}); //,
-        MDog.Draw.text("A game by:", 512/2, 180, "#FFFFFF", {size: 24, font: "mars", textAlign: "center"}); //determination
-        MDog.Draw.text(this.names[0], 512/2, 220, "#FFFFFF", {size: 24, font: "mars", textAlign: "center"});
-        MDog.Draw.text(this.names[1], 512/2, 240, "#FFFFFF", {size: 24, font: "mars", textAlign: "center"});
+        MDog.Draw.textImage("A game by:", 512/2, 180, "#FFFFFF", "fonts/marsfont.png", {size: 3, textAlign: "center"});
+        MDog.Draw.textImage(this.names[0], 512/2, 220, "#FFFFFF", "fonts/marsfont.png", {size: 3, textAlign: "center"});
+        MDog.Draw.textImage(this.names[1], 512/2, 240, "#FFFFFF", "fonts/marsfont.png", {size: 3, textAlign: "center"});
 
         if ((this.time % (this.blinkSpeed*2)) < this.blinkSpeed) {
-            MDog.Draw.text("[PRESS ANY BUTTON]", 512 / 2, 310, "#6e6e6e", {size: 12, font: "mars", textAlign: "center"});
-            // "Press " + this.startButton + " to start"
+            MDog.Draw.textImage("[PRESS ANY BUTTON]", 512/2, 310, "#6e6e6e", "fonts/marsfont.png", {size: 2, textAlign: "center"});
         }
 
-        // MDog.Draw.textImage("hello", 10, 10, "#ffffff", "sofiatale/marsfont.png", {size: 2});
+        // MDog.Draw.textImage("hello", 10, 10, "#ffffff", "fonts/marsfont.png", {size: 2});
     }
 }
 
@@ -293,19 +295,19 @@ class DeadMode extends Mode {
         }
 
         if (this.timer > this.textTime) {
-            MDog.Draw.text("Stay determined!", 512/2, 200, "#ffffff", {size: 24, font: "determination", textAlign: "center"}); // penis
-            MDog.Draw.text("Play again?", 512/2, 240, "#ffffff", {size: 24, font: "determination", textAlign: "center"}); // penis
+            MDog.Draw.textImage("Stay determined!", 512/2, 200, "#ffffff", "fonts/determinationfont.png", {size: 2, textAlign: "center"}); // penis
+            MDog.Draw.textImage("Play again?", 512/2, 240, "#ffffff", "fonts/determinationfont.png", {size: 2, textAlign: "center"}); // penis
             let options = ["Yes", "No"];
             for (let i = 0; i < options.length; i++) {
                 const text = options[i];
-                const sets = {size: 24, font: "determination", textAlign: "center"};
-                const width = MDog.Draw.measureText(text, sets);
+                const sets = {size: 2, font: "determination", textAlign: "center"};
+                const width = text.length * sets.size * 8;
                 const x = 512/2 + (i*2-1)*50;
                 const y = 280;
                 if (this.selector === i) {
                     MDog.Draw.image("sofiatale/heart.png", x - width / 2 - 20, y + 3);
                 }
-                MDog.Draw.text(text, x, y, "#ffffff", sets); // penis
+                MDog.Draw.textImage(text, x, y, "#ffffff", "fonts/determinationfont.png", sets); // penis
             }
         }
     }
@@ -420,8 +422,8 @@ class ItemMode extends Mode {
             drawText(this.gameModeAttack.battleBox, displayText, i, this.selected === item);
         }
 
-        let y = this.gameModeAttack.battleBox.getTopY() + 20 + 2 * 25;
-        let x = this.gameModeAttack.battleBox.getX() + 53;
+        let y = this.gameModeAttack.battleBox.getTopY() + 79;
+        let x = this.gameModeAttack.battleBox.getX() + 126;
 
         drawTextWithBG(
             "PAGE " + (page + 1) + "    ",
@@ -999,15 +1001,15 @@ function drawText(battleBox, text, i, hI, wrap, color) {
     wrap = wrap ?? 2;
     color = color ?? "#ffffff";
 
-    let x = battleBox.getLeftX() + 50;
-    let y = battleBox.getTopY() + 19 + (i % wrap) * 25;
+    let x = battleBox.getLeftX() + 40;
+    let y = battleBox.getTopY() + 20 + (i % wrap) * 28;
 
     if (hI === undefined) {
         x = battleBox.getLeftX() + 18;
     }
 
     if (i >= wrap) {
-        x = battleBox.getX() + 16;
+        x = battleBox.getX() + 20;
 
         if (hI === undefined) {
             x = battleBox.getX() - 16; // TODO this is a little weird
@@ -1019,8 +1021,8 @@ function drawText(battleBox, text, i, hI, wrap, color) {
     if (hI === true) {
         MDog.Draw.image(
             "sofiatale/heart.png",
-            x - 32,
-            y - 2);
+            x - 25,
+            y - 1);
     }
 }
 
@@ -1028,18 +1030,18 @@ function drawTextWithBG(text, x, y, color) {
 
     color = color ?? "#ffffff";
 
-    const fontSize = 24;
+    const fontSize = 2;
 
-    const width = MDog.Draw.measureText(text, {size: fontSize, font: "determination"});
-
+    // const width = MDog.Draw.measureText(text, {size: fontSize, font: "determination"});
     // MDog.Draw.rectangleFill(x - 2, y - 2, width + 4, 15 + 12, "#000000");
 
-    MDog.Draw.text(
+    MDog.Draw.textImage(
         text,
         x,
         y - 4,
         color,
-        {size: fontSize, font: "determination"});
+        "fonts/determinationfont.png",
+        {size: fontSize});
 }
 
 
@@ -1303,7 +1305,7 @@ class Cat {
                     "#ffffff");
             }
 
-            MDog.Draw.text(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y+Math.floor((y1+y2)/2)-3, "#000000", {size: 16*3, font: "determination", textAlign: "center", textBaseline: "middle"});
+            MDog.Draw.textImage(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y-5, "#000000", "fonts/determinationfont.png", {size: 4, textAlign: "center"});
         }
 
         if (this.mood === CatMood.Yarn) {

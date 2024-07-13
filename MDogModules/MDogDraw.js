@@ -161,8 +161,8 @@ class Draw extends Module {
         this.fonts = [];
         this.loadFont("undertale-hud", "assets/sofiatale/hud.ttf");
         this.loadFont("rainyhearts", "assets/sofiatale/rainyhearts.ttf");
-        this.loadFont("mars", "/MDogEngine/assets/sofiatale/mars.ttf");
-        this.loadFont("determination", "/MDogEngine/assets/sofiatale/determination.ttf");
+        this.loadFont("mars", "/MDogEngine/assets/fonts/mars.ttf");
+        this.loadFont("determination", "/MDogEngine/assets/fonts/determination.ttf");
     }
 
     translate(x, y, settings) {
@@ -510,33 +510,76 @@ class Draw extends Module {
 
     textImage(text, x, y, color, font, settings) {
 
+        let fontWidth = undefined;
+        let fontHeight = undefined;
+
+        if (font === "fonts/marsfont.png") {
+            fontWidth = 5;
+            fontHeight = 5;
+        }
+
+        if (font === "fonts/determinationfont.png") {
+            fontWidth = 8;
+            fontHeight = 13;
+        }
+
         settings = settings ?? {};
 
-        let size = settings.size ?? 1;
+        const size = settings.size ?? 1;
+        const textAlign = settings.textAlign ?? "left";
 
-        const alph = "abcdefghijklmnopqrstuvwxyz0123456789!~-.,?";
+        const alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*";
 
-        let xPos = 0;
+        let tint = undefined;
+
+        if (color.toLowerCase() !== "#ffffff") {
+            tint = this._hexToRgbArray(color);
+            tint.push(1);
+        }
+
+        const lines = text.split("\n");
+
         let yPos = 0;
 
-        for (let i = 0; i < text.length; i++) {
-            const char = text[i];
-
-            if (char === "\n") {
-                xPos = 0;
-                yPos += 6*size;
-                continue;
+        for (const line of lines) {
+            let xPos = 0;
+            if (textAlign === "center") {
+                xPos -= Math.floor(line.length * fontWidth * size / 2);
             }
+            if (textAlign === "right") {
+                xPos -= line.length * fontWidth * size;
+            }
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
 
-            const index = alph.indexOf(char);
+                const index = alph.indexOf(char);
 
-            this.image(font, x+xPos, y+yPos, {width: 4, xOffset: index*5, scale: size});
+                if (index !== -1) {
+                    this.image(font, x + xPos, y + yPos, {width: fontWidth, offsetX: index * fontWidth, scale: size, tint: tint});
+                }
 
-            xPos += 5*size;
+                xPos += fontWidth * size;
+            }
+            xPos = 0;
+            yPos += fontHeight * size;
         }
     }
 
-    // Perams: layer, scale, scaleX, scaleY, offsetX, offsetY, width, height, flipX, flipY
+    // TODO move this to the right place
+    _hexToRgbArray(hex) {
+        // Remove the # if it's included
+        hex = hex.replace('#', '');
+
+        // Convert the hex string to separate R, G, B components
+        let r = parseInt(hex.substring(0, 2), 16);
+        let g = parseInt(hex.substring(2, 4), 16);
+        let b = parseInt(hex.substring(4, 6), 16);
+
+        // Return the RGB values as an array
+        return [r, g, b];
+    }
+
+    // Perams: layer, scale, scaleX, scaleY, offsetX, offsetY, width, height, flipX, flipY, tint
     image(fileName, x, y, settings) {
 
         const pathName = "assets/" + fileName;
@@ -558,7 +601,6 @@ class Draw extends Module {
         const scaleX = settings.scaleX ?? scale;
         const scaleY = settings.scaleY ?? scale;
 
-
         const offsetX = settings.offsetX ?? 0;
         const offsetY = settings.offsetY ?? 0;
 
@@ -577,6 +619,8 @@ class Draw extends Module {
         const flipX = settings.flipX ?? false;
         const flipY = settings.flipY ?? false;
 
+        const tint = settings.tint ?? undefined;
+
         canvas.ctx.save();
 
         let xShift = 0;
@@ -590,16 +634,69 @@ class Draw extends Module {
             yShift = -y*2 - height;
         }
 
-        canvas.ctx.drawImage(
-            image,
-            offsetX,
-            offsetY,
-            width,
-            height,
-            x + xShift,
-            y + yShift,
-            width * scaleX,
-            height * scaleY);
+        if (tint === undefined) {
+            canvas.ctx.drawImage(
+                image,
+                offsetX,
+                offsetY,
+                width,
+                height,
+                x + xShift,
+                y + yShift,
+                width * scaleX,
+                height * scaleY);
+        } else {
+
+            // Image tinting code from ChatGPT
+
+            const tempCanvas = document.createElement('canvas');
+
+            tempCanvas.width = width * scaleX;
+            tempCanvas.height = height * scaleY;
+
+            tempCanvas.style.imageRendering = "pixelated";
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.imageSmoothingEnabled = false;
+            tempCanvas.webkitF = "never";
+
+            //penis
+
+            tempCtx.drawImage(
+                image,
+                offsetX,
+                offsetY,
+                width,
+                height,
+                0,
+                0,
+                width * scaleX,
+                height * scaleY
+            );
+
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const data = imageData.data;
+
+            // Apply tint color to each pixel
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = data[i] * (1 - tint[3]) + tint[0] * tint[3];     // Red
+                data[i + 1] = data[i + 1] * (1 - tint[3]) + tint[1] * tint[3]; // Green
+                data[i + 2] = data[i + 2] * (1 - tint[3]) + tint[2] * tint[3]; // Blue
+            }
+
+            tempCtx.putImageData(imageData, 0, 0);
+
+            canvas.ctx.drawImage(
+                tempCanvas,
+                0,
+                0,
+                tempCanvas.width,
+                tempCanvas.height,
+                x + xShift,
+                y + yShift,
+                width * scaleX,
+                height * scaleY
+            );
+        }
 
         canvas.ctx.restore();
     }
