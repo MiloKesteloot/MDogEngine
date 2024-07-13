@@ -280,6 +280,7 @@ class ItemMode extends Mode {
 
         if (this.message !== "") {
             if (keyDown(keys.yes, false)) {
+                console.log("here?")
                 this.gameModeAttack.mode = new FightingMode(this.gameModeAttack);
             }
             return;
@@ -516,7 +517,12 @@ class TalkMode extends Mode {
 
         if (this.message !== "") {
             if (keyDown(keys.yes, false)) {
-                this.gameModeAttack.mode = new FightingMode(this.gameModeAttack);
+                if (this.gameModeAttack.battleBox.cat.talkOptions[this.selected].fightBack) {
+                    this.gameModeAttack.mode = new FightingMode(this.gameModeAttack);
+                } else {
+                    this.gameModeAttack.mode = this.back;
+                    this.gameModeAttack.battleBox.cat.mood = CatMood.Normal;
+                }
             }
             return;
         }
@@ -697,7 +703,6 @@ class AttackingMode extends Mode {
         this.done = false;
         this.timer = 0;
         this.shakeRate = 15;
-        this.shakes = 3; // TODO what is this?
         this.flashRate = 15;
 
         this.imageWidth = 82;
@@ -1140,9 +1145,10 @@ class Cat {
     }
 
     TalkOption = class {
-        constructor(cat, text) {
+        constructor(cat, text, fightBack) {
             this.cat = cat;
             this.text = text;
+            this.fightBack = fightBack;
         }
         getText() {
             return "You forgot to set the\ntext for this one\n>:(";
@@ -1152,7 +1158,7 @@ class Cat {
     TalkOptionCheck = class extends this.TalkOption {
 
         constructor(cat) {
-            super(cat, "Check")
+            super(cat, "Check", true)
         }
 
         getText() {
@@ -1171,7 +1177,7 @@ class Cat {
         ];
 
         constructor(cat) {
-            super(cat, "Meow")
+            super(cat, "Meow", true)
         }
 
         getText() {
@@ -1190,7 +1196,7 @@ class Cat {
     TalkOptionRizz = class extends this.TalkOption {
 
         constructor(cat) {
-            super(cat, "Rizz")
+            super(cat, "Rizz", false)
         }
 
         getText() {
@@ -1317,11 +1323,6 @@ class Cat {
             MDog.Draw.image("sofiatale/cat/cat_flirt.png", x, y, {scale: this.catScale});
         }
 
-        if (MDog.Input.Keyboard.isDown(" ")) {
-            // MDog.Draw.image("sofiatale/cat.png", battleBox.getX(), battleBox.getY() - Math.floor(battleBox.getHeight() / 2) - this.catScale * 30 + 2, {scale: this.catScale});
-            // this.mood = 1;
-        }
-
         if (showHealth) {
 
             if (this.firstMoveFrame) {
@@ -1348,12 +1349,26 @@ class Cat {
 
         MDog.Draw.animation(this.animations.tail, x + 75, y + 54, {scale: this.catScale})
         MDog.Draw.animation(this.animations.back, x + 66, y + 27, {scale: this.catScale});
+
         const head = this.animations.head;
+        let update = head.getRawFrame() !== head.order.length - 1;
+
+        if ((this.battleBox.attacks.length > 0 && this.battleBox.attacks[0] instanceof EepyAttack) ||
+            this.battleBox.gameModeAttack.mode.attack === "eep") {
+            update = true;
+            if (head.getRawFrame() > head.frames) {
+                head.reset();
+            }
+            if (head.getRawFrame() === head.frames) {
+                update = false;
+            }
+        }
+
 
         MDog.Draw.animation(head, x, y,
             {
                 scale: this.catScale,
-                update: head.getRawFrame() !== head.order.length - 1
+                update: update
             });
 
         if (this.nextBlink > 0) {
@@ -1617,7 +1632,7 @@ class ModeAttack {
     draw() {}
 
     checkDeath() {
-        console.log("Using Attack class checkDeath() function!");
+        console. log("Using Attack class checkDeath() function!");
         return false;
     }
 }
@@ -2117,12 +2132,3 @@ function pointCollide(x1, y1, x2, y2, r) {
 }
 
 export default GameModeAttack;
-
-// TODO go back to picking when the attack ends
-// TODO add cat health
-// TODO add player health
-// TODO add items?
-// TODO button art and labels
-// TODO dialauge
-// TODO mousetrap
-// TODO ear animation
