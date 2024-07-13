@@ -489,14 +489,14 @@ class Draw extends Module {
         //     fullWidth += width;
         // }
 
-        // const split = text.split('\n');
-        //
-        // for (let i = 0; i < split.length; i++) {
-        //     const line = split[i];
-        //     ctx.fillText(line, x, y + lineHeight*i);
-        // }
+        const split = text.split('\n');
 
-        ctx.fillText(text, x, y);
+        for (let i = 0; i < split.length; i++) {
+            const line = split[i];
+            ctx.fillText(line, x, y + lineHeight*i);
+        }
+
+        // ctx.fillText(text, x, y);
 
         // for (let i = 0; i < 10; i++) {
         //     canvas.ctx.fillText(text, x, y + 10);

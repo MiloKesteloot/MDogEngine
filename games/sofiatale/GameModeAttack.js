@@ -44,7 +44,8 @@ class GameModeAttack extends GameMode {
 
         this.battleBox = new BattleBox(this, Math.floor(screen.width/2), 256, 5, 5);
 
-        this.mode = new PickingMode(this);
+        // this.mode = new PickingMode(this);
+        this.mode = new IntroMode(this);
 
         MDog.Draw.setBackgroundColor("#141414");
     }
@@ -173,6 +174,44 @@ class Mode {
             if (image !== "") {
                 // MDog.Draw.image(image, tempX + 1, y + 1);
             }
+        }
+    }
+}
+
+class IntroMode extends Mode {
+    constructor(gameModeAttack) {
+        super(gameModeAttack);
+
+        this.names = ["Sofia Aminifard", "Milo Kesteloot"];
+        if (Math.random() > 0.5) {
+            this.names = ["Milo Kesteloot", "Sofia Aminifard"];
+        }
+
+        this.blinkSpeed = 120;
+        this.time = 0;
+
+        this.startButton = "Z";
+    }
+
+    _update() {
+        this.time += 1;
+
+        if (MDog.Input.Keyboard.downKeys.length !== 0) {
+            this.gameModeAttack.mode = new PickingMode(this.gameModeAttack);
+        }
+    }
+
+    _draw() {
+        MDog.Draw.clear();
+
+        MDog.Draw.image("sofiatale/logo.png", 120, 90, {scale: 4}); //,
+        MDog.Draw.text("A game by:", 512/2, 180, "#FFFFFF", {size: 24, font: "mars", textAlign: "center"}); //determination
+        MDog.Draw.text(this.names[0], 512/2, 220, "#FFFFFF", {size: 24, font: "mars", textAlign: "center"});
+        MDog.Draw.text(this.names[1], 512/2, 240, "#FFFFFF", {size: 24, font: "mars", textAlign: "center"});
+
+        if ((this.time % (this.blinkSpeed*2)) < this.blinkSpeed) {
+            MDog.Draw.text("[PRESS ANY BUTTON]", 512 / 2, 310, "#6e6e6e", {size: 12, font: "mars", textAlign: "center"});
+            // "Press " + this.startButton + " to start"
         }
     }
 }

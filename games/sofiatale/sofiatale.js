@@ -32,8 +32,8 @@ class PlayerStats {
         this.items = [
             new CatNip(),
             new FoodItem("Cream Pie", "Cream Pie", "Yummy yummers!", 6),
-            new FoodItem("Hot Dog", "Hot Dog", "Sbot doesn't swing that way", 6),
-            new FoodItem("Hot Cat", "Hot Cat", "Sbot has to go\nto the bathroom\nreal fast.", 10),
+            new FoodItem("Hot Dog", "Hot Dog", "Sbot doesn't swing\nthat way", 6),
+            new FoodItem("Hot Cat", "Hot Cat", "Sbot has to go to the\nbathroom real fast.", 10),
         ]
     }
 }
@@ -52,7 +52,7 @@ class Item {
 
 class CatNip extends Item {
     constructor() {
-        super("Cat Nip", "Cat Nip", "You fed the cat cat nip.");
+        super("Cat Nip", "Cat Nip", "You fed Sbot cat nip.");
     }
 
     use(gameModeAttack) {
