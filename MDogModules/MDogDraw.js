@@ -530,13 +530,6 @@ class Draw extends Module {
 
         const alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*";
 
-        let tint = undefined;
-
-        if (color.toLowerCase() !== "#ffffff") {
-            tint = this._hexToRgbArray(color);
-            tint.push(1);
-        }
-
         const lines = text.split("\n");
 
         let yPos = 0;
@@ -555,7 +548,7 @@ class Draw extends Module {
                 const index = alph.indexOf(char);
 
                 if (index !== -1) {
-                    this.image(font, x + xPos, y + yPos, {width: fontWidth, offsetX: index * fontWidth, scale: size, tint: tint});
+                    this.image(font, x + xPos, y + yPos, {width: fontWidth, offsetX: index * fontWidth, scale: size, tint: color});
                 }
 
                 xPos += fontWidth * size;
@@ -659,8 +652,6 @@ class Draw extends Module {
             tempCtx.imageSmoothingEnabled = false;
             tempCanvas.webkitF = "never";
 
-            //penis
-
             tempCtx.drawImage(
                 image,
                 offsetX,
@@ -673,17 +664,22 @@ class Draw extends Module {
                 height * scaleY
             );
 
-            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-            const data = imageData.data;
+            tempCtx.globalCompositeOperation = "source-in";
 
-            // Apply tint color to each pixel
-            for (let i = 0; i < data.length; i += 4) {
-                data[i] = data[i] * (1 - tint[3]) + tint[0] * tint[3];     // Red
-                data[i + 1] = data[i + 1] * (1 - tint[3]) + tint[1] * tint[3]; // Green
-                data[i + 2] = data[i + 2] * (1 - tint[3]) + tint[2] * tint[3]; // Blue
-            }
+            tempCtx.fillStyle = tint;
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-            tempCtx.putImageData(imageData, 0, 0);
+            // const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            // const data = imageData.data;
+            //
+            // // Apply tint color to each pixel
+            // for (let i = 0; i < data.length; i += 4) {
+            //     data[i] = data[i] * (1 - tint[3]) + tint[0] * tint[3];     // Red
+            //     data[i + 1] = data[i + 1] * (1 - tint[3]) + tint[1] * tint[3]; // Green
+            //     data[i + 2] = data[i + 2] * (1 - tint[3]) + tint[2] * tint[3]; // Blue
+            // }
+            //
+            // tempCtx.putImageData(imageData, 0, 0);
 
             canvas.ctx.drawImage(
                 tempCanvas,
