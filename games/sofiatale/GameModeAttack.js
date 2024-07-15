@@ -474,12 +474,13 @@ class MercyMode extends Mode {
         const items = this.gameModeAttack.playerStats.items;
 
         let x = 0;
-        if (keyDown(keys.left, false)) {
-            x -= 2;
-        }
-        if (keyDown(keys.right, false)) {
-            x += 2;
-        }
+
+        // if (keyDown(keys.left, false)) {
+        //     x -= 2;
+        // }
+        // if (keyDown(keys.right, false)) {
+        //     x += 2;
+        // }
 
         if (this.selected === 1 && x === -2) {
             if (items.length % 2 === 0) {
@@ -889,6 +890,8 @@ class FightingMode extends Mode {
             gameModeAttack.battleBox.nextAttack = null;
         }
 
+        // attackToDo = "cheese"; // penis
+
         if (attackToDo === "cup") {
             this.attack = "cup";
             this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
@@ -899,6 +902,9 @@ class FightingMode extends Mode {
             this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
         } else if (attackToDo === "eep") {
             this.attack = "eep";
+            this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
+        } else if (attackToDo === "cheese") {
+            this.attack = "cheese";
             this.gameModeAttack.battleBox.animate(100, null, null, 200, null);
         }
 
@@ -923,6 +929,10 @@ class FightingMode extends Mode {
             }
             if (!this.spawnedAttack && this.attack === "eep") {
                 this.gameModeAttack.battleBox.addAttack(new EepyAttack(this.gameModeAttack));
+                this.spawnedAttack = true;
+            }
+            if (!this.spawnedAttack && this.attack === "cheese") {
+                this.gameModeAttack.battleBox.addAttack(new CheeseAttack(this.gameModeAttack));
                 this.spawnedAttack = true;
             }
         }
@@ -1714,29 +1724,37 @@ class CupAttack extends ModeAttack {
 class EepyAttack extends ModeAttack {
     constructor(gameModeAttack) {
         super(gameModeAttack);
-
         this.eepyCat = new EepyCat(this.gameModeAttack,112, -20);
-        // this.cups.push(new Cup(0, 40, vel.getX(), vel.getY()));
-        // this.cups.push(new Cup(0, 100, vel.getX(), vel.getY()));
-
     }
 
     checkDeath() {
-        return this.eepyCat.checkDeath(); // this.cups.checkDeath();
+        return this.eepyCat.checkDeath();
     }
 
     update() {
-        // for (let i = 0; i < this.cups.length; i++) {
-        //     this.cups[i].update();
-        // }
         this.eepyCat.update();
     }
 
     draw() {
-        // for (let i = 0; i < this.cups.length; i++) {
-        //     this.cups[i].draw();
-        // }
         this.eepyCat.draw();
+    }
+}
+class CheeseAttack extends ModeAttack {
+    constructor(gameModeAttack) {
+        super(gameModeAttack);
+        this.mouseTrap = new MouseTrap(this.gameModeAttack,112, -20);
+    }
+
+    checkDeath() {
+        return this.mouseTrap.checkDeath();
+    }
+
+    update() {
+        this.mouseTrap.update();
+    }
+
+    draw() {
+        this.mouseTrap.draw();
     }
 }
 
@@ -1810,6 +1828,82 @@ class EepyCat {
             y,
             {scale: this.scale, width: 92/2, offsetX: shift}
         );
+    }
+}
+
+class MouseTrap {
+    constructor(gameModeAttack, x, y) {
+        this.gameModeAttack = gameModeAttack;
+        this.x = x;
+        this.y = y;
+        this.timer = 60*8;
+        this.width = 4*6;
+        this.height = 2;
+        this.cheeseWidth = 4;
+        this.cheeseHeight = 3;
+        this.animationSpeed = 5;
+        this.animationTimer = -1;
+    }
+
+    checkDeath() {
+        return this.timer <= 0;
+    }
+
+    update() {
+
+        if (this.animationTimer >= 0) {
+            this.animationTimer += 1;
+        }
+
+        this.timer -= 1;
+
+        const x = this.getX();
+        const y = this.getY();
+
+        let hit = false;
+
+        const battleBox = this.gameModeAttack.battleBox;
+        const heart = battleBox.heart;
+
+        if (this.animationTimer === -1) {
+            hit = (heart.getY() + heart.height > battleBox.getBottomY() - this.height) &&
+                (heart.getXCenter() + 2 > this.getX() && heart.getXCenter() - 2 < this.getX() + this.width);
+        }
+
+        if (hit && this.animationTimer === -1) {
+            this.gameModeAttack.playerStats.health -= 10;
+            this.gameModeAttack.mode.iFrames = this.gameModeAttack.mode.maxIFrames;
+            this.animationTimer = 0;
+        }
+    }
+
+    getX() {
+        return this.gameModeAttack.battleBox.getLeftX() + Math.floor(this.gameModeAttack.battleBox.getWidth()/2 - this.width/2);
+    }
+
+    getY() {
+        return this.gameModeAttack.battleBox.getBottomY()-2;
+    }
+
+    draw() {
+        const x = this.getX();
+        const y = this.getY();
+
+        if (this.animationTimer === -1) {
+            MDog.Draw.rectangleFill(x, y - 6, 4, this.height, "#ffffff");
+            MDog.Draw.rectangleFill(x + 4, y - 4, 4, this.height, "#ffffff");
+            MDog.Draw.rectangleFill(x + 8, y - 2, 4, this.height, "#ffffff");
+        } else if (this.animationTimer < this.animationSpeed) {
+            MDog.Draw.rectangleFill(x + 10, y - 12, 2, 12, "#ffffff");
+        } else {
+            MDog.Draw.rectangleFill(x+10, y - 2, 12, 2, "#ffffff");
+        }
+
+        MDog.Draw.rectangleFill(x, y, this.width, this.height, "#ffffff");
+
+        if (this.animationTimer < this.animationSpeed) {
+            MDog.Draw.rectangleFill(x + this.width - 8, y - this.cheeseHeight, this.cheeseWidth, this.cheeseHeight, "#ffff00");
+        }
     }
 }
 
