@@ -421,10 +421,12 @@ class Draw extends Module {
         canvas.ctx.fillRect(x, y, width, height);
     }
 
+    // Settings - layer, scale
     line(x1, y1, x2, y2, color, settings) {
 
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
+        const scale = settings.scale ?? 1;
 
         x1 = Math.floor(x1);
         y1 = Math.floor(y1);
