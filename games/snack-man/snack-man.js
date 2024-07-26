@@ -36,7 +36,7 @@ const PM = 4;
 const mapWidth = 28;
 const mapHeight = 31;
 
-const map = [
+const freshMap = [
     HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH,
     HH, __, __, __, __, __, __, __, __, __, __, __, __, HH, HH, __, __, __, __, __, __, __, __, __, __, __, __, HH,
     HH, __, HH, HH, HH, HH, __, HH, HH, HH, HH, HH, __, HH, HH, __, HH, HH, HH, HH, HH, __, HH, HH, HH, HH, __, HH,
@@ -58,9 +58,9 @@ const map = [
     HH, HH, HH, HH, HH, HH, __, HH, HH, _B, HH, HH, HH, HH, HH, HH, HH, HH, _B, HH, HH, __, HH, HH, HH, HH, HH, HH,
     HH, HH, HH, HH, HH, HH, __, HH, HH, _B, HH, HH, HH, HH, HH, HH, HH, HH, _B, HH, HH, __, HH, HH, HH, HH, HH, HH,
     HH, __, __, __, __, __, __, __, __, __, __, __, __, HH, HH, __, __, __, __, __, __, __, __, __, __, __, __, HH,
-    HH, __, HH, HH, HH, HH, __, HH, HH, HH, HH, HH, __, HH, HH, __, HH, HH, HH, HH, HH, __, HH, HH, HH, HH, __, HH,
-    HH, __, HH, HH, HH, HH, __, HH, HH, HH, HH, HH, __, HH, HH, __, HH, HH, HH, HH, HH, __, HH, HH, HH, HH, __, HH,
-    HH, _W, __, __, HH, HH, __, __, __, __, __, __, __, _B, _B, __, __, __, __, __, __, __, HH, HH, __, __, _W, HH,
+    HH, __, HH, HH, HH, HH, __, HH, HH, HH, HH, HH, _B, HH, HH, _B, HH, HH, HH, HH, HH, __, HH, HH, HH, HH, __, HH,
+    HH, __, HH, HH, HH, HH, __, HH, HH, HH, HH, HH, _B, HH, HH, _B, HH, HH, HH, HH, HH, __, HH, HH, HH, HH, __, HH,
+    HH, _W, __, __, HH, HH, __, __, __, __, _B, _B, _B, _B, _B, _B, _B, _B, __, __, __, __, HH, HH, __, __, _W, HH,
     HH, HH, HH, __, HH, HH, __, HH, HH, __, HH, HH, HH, HH, HH, HH, HH, HH, __, HH, HH, __, HH, HH, __, HH, HH, HH, // packman here
     HH, HH, HH, __, HH, HH, __, HH, HH, __, HH, HH, HH, HH, HH, HH, HH, HH, __, HH, HH, __, HH, HH, __, HH, HH, HH,
     HH, __, __, __, __, __, __, HH, HH, __, __, __, __, HH, HH, __, __, __, __, HH, HH, __, __, __, __, __, __, HH,
@@ -70,7 +70,20 @@ const map = [
     HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH, HH,
 ]
 
+let map = [];
+setUpMap();
+
+function setUpMap() {
+    map = [];
+    for (let i = 0; i < freshMap.length; i++) {
+        map.push(freshMap[i]);
+    }
+}
+
 function getMap(x, y) {
+    if (x < 0 || y < 0 || x >= mapWidth || y >= mapHeight) {
+        return _B;
+    }
     return map[x + y*mapWidth];
 }
 
@@ -79,11 +92,11 @@ function setMap(x, y, v) {
 }
 
 function getMapPixels(x, y) {
-    return map[Math.floor(x/8) + Math.floor(y/8)*mapWidth];
+    return getMap(Math.floor(x/8), Math.floor(y/8));
 }
 
 function setMapPixels(x, y, v) {
-    map[Math.floor(x/8) + Math.floor(y/8)*mapWidth] = v;
+    setMap(Math.floor(x/8), Math.floor(y/8), v);
 }
 
 class Point {
@@ -100,11 +113,24 @@ class PacMan {
     constructor(x, y) {
         this.pos = new Vector(x*8, y*8);
         this.dir = new Vector(-1, 0);
-        this.goalDir = new Vector(0, -1);
+        this.goalDir = new Vector(-1, 0);
         this.progress = 0;
         this.speed = 0.4;
         this.length = 1;
         this.points = [];
+        this.dead = false;
+        this.deadTimer = 0;
+    }
+
+    reset(x, y) {
+        this.pos = new Vector(x*8, y*8);
+        this.dir = new Vector(-1, 0);
+        this.goalDir = new Vector(-1, 0);
+        this.progress = 0;
+        this.length = 1;
+        this.points = [];
+        this.dead = false;
+        this.deadTimer = 0;
     }
 
     getTouching(x, y) {
@@ -141,6 +167,19 @@ class PacMan {
 
     update() {
 
+        if (this.dead) {
+            if (this.deadTimer > 0) {
+                this.deadTimer -= 1;
+                return;
+            }
+
+            this.reset(13, 23);
+
+            setUpMap();
+
+            return;
+        }
+
         let options = [
             {keys: keys.left, dir: new Vector(-1, 0)},
             {keys: keys.right, dir: new Vector(1, 0)},
@@ -174,15 +213,76 @@ class PacMan {
             if (ahead !== HH) {
                 this.pos.add(this.dir);
                 this.progress = 0;
+
+                if (this.pos.x < -7) {
+
+                    this.points.unshift(new Point(this.pos.x, this.pos.y));// TODO fix this
+
+                    this.pos.x = 28*8;
+                }
+
             }
         }
+
         this.eat();
+
+        const outerPoints = [];
+
+        if (this.dir.x === 0) {
+            if (this.dir.y < 0) {
+                outerPoints.push(this.pos.clone().add(-2, -2));
+                outerPoints.push(this.pos.clone().add(10, -2));
+            } else {
+                outerPoints.push(this.pos.clone().add(-2, 10));
+                outerPoints.push(this.pos.clone().add(10, 10));
+            }
+        } else {
+            if (this.dir.x < 0) {
+                outerPoints.push(this.pos.clone().add(-2, -2));
+                outerPoints.push(this.pos.clone().add(-2, 10));
+            } else {
+                outerPoints.push(this.pos.clone().add(10, -2));
+                outerPoints.push(this.pos.clone().add(10, 10));
+            }
+        }
 
         let lastPoint = this;
         let dist = 0;
         let savedDist = 0;
         for (let i = 0; i < this.points.length; i++) {
             const point = this.points[i];
+
+
+            let lowX = Math.min(point.pos.x, lastPoint.pos.x);
+            let highX = Math.max(point.pos.x, lastPoint.pos.x);
+            let width = highX - lowX;
+            let lowY = Math.min(point.pos.y, lastPoint.pos.y);
+            let highY = Math.max(point.pos.y, lastPoint.pos.y);
+            let height = highY - lowY;
+
+            if (lastPoint.pos.x === point.pos.x) {
+                lowX -= 2;
+                lowY += 6;
+                highY -= 1;
+                width = 13;
+            } else {
+                lowX += 6;
+                lowY -= 2;
+                highX -= 1;
+                height = 13;
+            }
+
+            for (let op of outerPoints) {
+                if (op.x >= lowX && op.y >= lowY &&
+                    op.x <= highX && op.y <= highY) {
+                    console.log("kill!");
+                    this.dead = true;
+                    this.deadTimer = 120;
+                    return;
+                }
+            }
+
+
             dist += point.pos.distanceTo(lastPoint.pos);
             if (dist > this.length) {
                 let toSplice = this.points.length-i-1;
@@ -201,6 +301,15 @@ class PacMan {
             lastPoint = point;
             savedDist = dist;
         }
+
+        if (dist < this.length) {
+            if (this.points.length === 0) {
+                this.points.push(new Point(this.pos.x, this.pos.y));
+            } else {
+                const lastPoint = this.points[this.points.length - 1];
+                this.points.push(new Point(lastPoint.pos.x, lastPoint.pos.y));
+            }
+        }
     }
 
     draw() {
@@ -211,21 +320,52 @@ class PacMan {
 
             MDog.Draw.image("snack-man/snack-man-1.png", point.pos.x-2, point.pos.y-2);
 
-            const lowX = Math.min(point.pos.x, lastPoint.pos.x);
+            let lowX = Math.min(point.pos.x, lastPoint.pos.x);
             const highX = Math.max(point.pos.x, lastPoint.pos.x);
-            const width = highX - lowX;
-            const lowY = Math.min(point.pos.y, lastPoint.pos.y);
+            let width = highX - lowX;
+            let lowY = Math.min(point.pos.y, lastPoint.pos.y);
             const highY = Math.max(point.pos.y, lastPoint.pos.y);
-            const height = highY - lowY;
+            let height = highY - lowY;
 
             if (lastPoint.pos.x === point.pos.x) {
-                MDog.Draw.rectangleFill(lowX - 2, lowY + 6, 13, height, "#ffff00");
+                lowX -= 2;
+                lowY += 6;
+                width = 13;
             } else {
-                MDog.Draw.rectangleFill(lowX + 6, lowY - 2, width, 13, "#ffff00");
+                lowX += 6;
+                lowY -= 2;
+                height = 13;
             }
+
+            MDog.Draw.rectangleFill(lowX, lowY, width, height, "#ffff00");
+
 
             lastPoint = point;
         }
+
+        // const outerPoints = [];
+        //
+        // if (this.dir.x === 0) {
+        //     if (this.dir.y < 0) {
+        //         outerPoints.push(this.pos.clone().add(-2, -2));
+        //         outerPoints.push(this.pos.clone().add(10, -2));
+        //     } else {
+        //         outerPoints.push(this.pos.clone().add(-2, 10));
+        //         outerPoints.push(this.pos.clone().add(10, 10));
+        //     }
+        // } else {
+        //     if (this.dir.x < 0) {
+        //         outerPoints.push(this.pos.clone().add(-2, -2));
+        //         outerPoints.push(this.pos.clone().add(-2, 10));
+        //     } else {
+        //         outerPoints.push(this.pos.clone().add(10, -2));
+        //         outerPoints.push(this.pos.clone().add(10, 10));
+        //     }
+        // }
+        //
+        // for (let point of outerPoints) {
+        //     MDog.Draw.rectangleFill(point.x, point.y, 1, 1, "#ff0000");
+        // }
 
     }
 }
