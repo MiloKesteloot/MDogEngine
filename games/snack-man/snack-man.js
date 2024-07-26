@@ -100,8 +100,9 @@ function setMapPixels(x, y, v) {
 }
 
 class Point {
-    constructor(x, y) {
+    constructor(x, y, connect) {
         this.pos = new Vector(x, y);
+        this.connect = connect ?? true;
     }
 
     draw() {
@@ -120,6 +121,11 @@ class PacMan {
         this.points = [];
         this.dead = false;
         this.deadTimer = 0;
+        this.spriteNum = 3;
+        this.spriteTimer = 0;
+        this.spriteSpeed = 10;
+        this.justMoved = false;
+        this.startDelay = 120;
     }
 
     reset(x, y) {
@@ -131,6 +137,7 @@ class PacMan {
         this.points = [];
         this.dead = false;
         this.deadTimer = 0;
+        this.startDelay = 120;
     }
 
     getTouching(x, y) {
@@ -180,6 +187,21 @@ class PacMan {
             return;
         }
 
+        if (this.startDelay > 0) {
+            this.startDelay -= 1;
+            return;
+        }
+
+        if (this.justMoved) {
+            this.spriteTimer += 1;
+            if (this.spriteTimer > this.spriteSpeed) {
+                this.spriteTimer = 0;
+                this.spriteNum = Math.floor(Math.random() * 3) + 1;
+            }
+        }
+
+        this.justMoved = false;
+
         let options = [
             {keys: keys.left, dir: new Vector(-1, 0)},
             {keys: keys.right, dir: new Vector(1, 0)},
@@ -212,13 +234,17 @@ class PacMan {
             }
             if (ahead !== HH) {
                 this.pos.add(this.dir);
+                this.justMoved = true;
                 this.progress = 0;
 
                 if (this.pos.x < -7) {
-
+                    this.points.unshift(new Point(this.pos.x, this.pos.y, false));// TODO fix this
+                    this.pos.x = 28*8-1;
                     this.points.unshift(new Point(this.pos.x, this.pos.y));// TODO fix this
-
-                    this.pos.x = 28*8;
+                } else if (this.pos.x > 28*8-1) {
+                    this.points.unshift(new Point(this.pos.x, this.pos.y, false));// TODO fix this
+                    this.pos.x = -7;
+                    this.points.unshift(new Point(this.pos.x, this.pos.y));// TODO fix this
                 }
 
             }
@@ -252,6 +278,10 @@ class PacMan {
         for (let i = 0; i < this.points.length; i++) {
             const point = this.points[i];
 
+            if (!point.connect) {
+                lastPoint = point;
+                continue;
+            }
 
             let lowX = Math.min(point.pos.x, lastPoint.pos.x);
             let highX = Math.max(point.pos.x, lastPoint.pos.x);
@@ -313,12 +343,15 @@ class PacMan {
     }
 
     draw() {
-        MDog.Draw.image("snack-man/snack-man-1.png", this.pos.x-2, this.pos.y-2);
-
         let lastPoint = this;
         for (let point of this.points) {
 
-            MDog.Draw.image("snack-man/snack-man-1.png", point.pos.x-2, point.pos.y-2);
+            MDog.Draw.image("snack-man/snack-man-right-1.png", point.pos.x-2, point.pos.y-2);
+
+            if (!point.connect) {
+                lastPoint = point;
+                continue;
+            }
 
             let lowX = Math.min(point.pos.x, lastPoint.pos.x);
             const highX = Math.max(point.pos.x, lastPoint.pos.x);
@@ -343,30 +376,14 @@ class PacMan {
             lastPoint = point;
         }
 
-        // const outerPoints = [];
-        //
-        // if (this.dir.x === 0) {
-        //     if (this.dir.y < 0) {
-        //         outerPoints.push(this.pos.clone().add(-2, -2));
-        //         outerPoints.push(this.pos.clone().add(10, -2));
-        //     } else {
-        //         outerPoints.push(this.pos.clone().add(-2, 10));
-        //         outerPoints.push(this.pos.clone().add(10, 10));
-        //     }
-        // } else {
-        //     if (this.dir.x < 0) {
-        //         outerPoints.push(this.pos.clone().add(-2, -2));
-        //         outerPoints.push(this.pos.clone().add(-2, 10));
-        //     } else {
-        //         outerPoints.push(this.pos.clone().add(10, -2));
-        //         outerPoints.push(this.pos.clone().add(10, 10));
-        //     }
-        // }
-        //
-        // for (let point of outerPoints) {
-        //     MDog.Draw.rectangleFill(point.x, point.y, 1, 1, "#ff0000");
-        // }
+        const num = this.spriteNum;
+        const dir = this.dir.x === 0 ? "up" : "right";
+        const flip = this.dir.x === -1 || this.dir.y === 1;
 
+        const name = "snack-man/snack-man-" + dir + "-" + num + ".png";
+
+        MDog.Draw.image("snack-man/bman.png", this.pos.x-2, this.pos.y-2, {flipX: flip, flipY: flip});
+        MDog.Draw.image(name, this.pos.x-2, this.pos.y-2, {flipX: flip, flipY: flip});
     }
 }
 
@@ -388,6 +405,9 @@ function update() {
 
     pacMan.update();
     pacMan.draw();
+
+    MDog.Draw.rectangleFill(-10, 13*8+6, 10, 13, "#000000")
+    MDog.Draw.rectangleFill(28*8, 13*8+6, 11, 13, "#000000")
 }
 
 MDog.Draw.translateX(16*6+8);
