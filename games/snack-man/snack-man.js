@@ -86,6 +86,16 @@ function setMapPixels(x, y, v) {
     map[Math.floor(x/8) + Math.floor(y/8)*mapWidth] = v;
 }
 
+class Point {
+    constructor(x, y) {
+        this.pos = new Vector(x, y);
+    }
+
+    draw() {
+        MDog.Draw.rectangle(this.pos.x, this.pos.y, 8, 8, "#ffff00");
+    }
+}
+
 class PacMan {
     constructor(x, y) {
         this.pos = new Vector(x*8, y*8);
@@ -93,6 +103,8 @@ class PacMan {
         this.goalDir = new Vector(0, -1);
         this.progress = 0;
         this.speed = 0.4;
+        this.length = 1;
+        this.points = [];
     }
 
     getTouching(x, y) {
@@ -119,6 +131,7 @@ class PacMan {
     eatPoint(x, y) {
         if (getMapPixels(x, y) === __) {
             setMapPixels(x, y, _B);
+            this.length += 8;
         }
         if (getMapPixels(x, y) === _W) {
             setMapPixels(x, y, _B);
@@ -127,8 +140,6 @@ class PacMan {
     }
 
     update() {
-
-        let newGoal = new Vector(0, 0);
 
         let options = [
             {keys: keys.left, dir: new Vector(-1, 0)},
@@ -139,6 +150,9 @@ class PacMan {
 
         for (let op of options) {
             if (keyDown(op.keys)) {
+                if (this.length > 1 && op.dir.clone().multiply(-1).equals(this.dir)) {
+                    continue;
+                }
                 this.goalDir.set(op.dir);
             }
         }
@@ -149,26 +163,70 @@ class PacMan {
             const goalAhead = this.getTouching(this.pos.x + this.goalDir.x, this.pos.y + this.goalDir.y);
             if (goalAhead !== HH) {
                 ahead = goalAhead;
-                this.dir.set(this.goalDir);
+                if (!this.dir.equals(this.goalDir)) {
+                    this.dir.set(this.goalDir);
+                    this.points.unshift(new Point(this.pos.x, this.pos.y));
+                }
+
             } else {
                 ahead = this.getTouching(this.pos.x + this.dir.x, this.pos.y + this.dir.y);
             }
-
-
-            if (ahead === HH) {
-            } else {
+            if (ahead !== HH) {
                 this.pos.add(this.dir);
                 this.progress = 0;
             }
-
         }
-
         this.eat();
+
+        let lastPoint = this;
+        let dist = 0;
+        let savedDist = 0;
+        for (let i = 0; i < this.points.length; i++) {
+            const point = this.points[i];
+            dist += point.pos.distanceTo(lastPoint.pos);
+            if (dist > this.length) {
+                let toSplice = this.points.length-i-1;
+                if (toSplice !== 0) {
+                    this.points.splice(-toSplice);
+                }
+
+                if (point.pos.x === lastPoint.pos.x) {
+                    let neg = point.pos.y < lastPoint.pos.y ? -1 : 1;
+                    point.pos.y = lastPoint.pos.y + (this.length - savedDist)*neg;
+                } else {
+                    let neg = point.pos.x < lastPoint.pos.x ? -1 : 1;
+                    point.pos.x = lastPoint.pos.x + (this.length - savedDist)*neg;
+                }
+            }
+            lastPoint = point;
+            savedDist = dist;
+        }
     }
 
     draw() {
         MDog.Draw.image("snack-man/snack-man-1.png", this.pos.x-2, this.pos.y-2);
-        MDog.Draw.rectangle(this.pos.x, this.pos.y, 8, 8, "#ffff00");
+
+        let lastPoint = this;
+        for (let point of this.points) {
+
+            MDog.Draw.image("snack-man/snack-man-1.png", point.pos.x-2, point.pos.y-2);
+
+            const lowX = Math.min(point.pos.x, lastPoint.pos.x);
+            const highX = Math.max(point.pos.x, lastPoint.pos.x);
+            const width = highX - lowX;
+            const lowY = Math.min(point.pos.y, lastPoint.pos.y);
+            const highY = Math.max(point.pos.y, lastPoint.pos.y);
+            const height = highY - lowY;
+
+            if (lastPoint.pos.x === point.pos.x) {
+                MDog.Draw.rectangleFill(lowX - 2, lowY + 6, 13, height, "#ffff00");
+            } else {
+                MDog.Draw.rectangleFill(lowX + 6, lowY - 2, width, 13, "#ffff00");
+            }
+
+            lastPoint = point;
+        }
+
     }
 }
 
