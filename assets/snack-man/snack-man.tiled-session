@@ -3,10 +3,22 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "",
+    "activeFile": "snack-man.tmx",
     "expandedProjectPaths": [
     ],
     "fileStates": {
+        "snack-man.tmx": {
+            "scale": 4,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 122.25,
+                "y": 169.625
+            }
+        },
+        "snack-man.tsx": {
+            "scaleInDock": 4,
+            "scaleInEditor": 1
+        }
     },
     "last.imagePath": "C:/Users/Milo/Documents/GitHub/MDogEngine/assets/snack-man",
     "map.height": 31,
@@ -15,9 +27,13 @@
     "map.tileWidth": 8,
     "map.width": 28,
     "openFiles": [
+        "snack-man.tmx",
+        "snack-man.tsx"
     ],
     "project": "snack-man.tiled-project",
     "recentFiles": [
+        "snack-man.tsx",
+        "snack-man.tmx"
     ],
     "tileset.lastUsedFormat": "tsx",
     "tileset.tileSize": {

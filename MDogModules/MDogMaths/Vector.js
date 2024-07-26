@@ -48,6 +48,14 @@ class Vector {
         return this;
     }
 
+    equals(x_or_vector, y) {
+        if (x_or_vector instanceof Vector) {
+            return this.x === x_or_vector.x && this.y === x_or_vector.y;
+        } else {
+            return this.x === x_or_vector && this.y === y;
+        }
+    }
+
     // Returns a new copy of this vector.
     clone() {
         return new Vector(this.x, this.y);
