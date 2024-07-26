@@ -2,8 +2,6 @@ import MDog from "/MDogEngine/MDogModules/MDogMain.js"
 import GameModeAttack from "./GameModeAttack.js";
 import GameModeExplore from "./GameModeExplore.js";
 
-console.log("Started!");
-
 class Game {
     constructor() {
 
