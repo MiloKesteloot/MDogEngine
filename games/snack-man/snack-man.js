@@ -113,8 +113,8 @@ class Point {
 class PacMan {
     constructor(x, y) {
         this.pos = new Vector(x*8, y*8);
-        this.dir = new Vector(-1, 0);
-        this.goalDir = new Vector(-1, 0);
+        this.dir = new Vector(0, 0);
+        this.goalDir = new Vector(0, 0);
         this.progress = 0;
         this.speed = 0.4;
         this.length = 1;
@@ -444,3 +444,5 @@ MDog.setActiveFunction(update);
 //         str += "\n";
 //     }
 // }
+
+// TODO best is 12!!!
