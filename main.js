@@ -1,5 +1,6 @@
 function urlSetup() {
     const urlParams = new URLSearchParams(window.location.search);
+
     let playingValue = urlParams.get('game');
     urlParams.set('game2', "thing");
 
@@ -45,7 +46,6 @@ function urlSetup() {
     document.body.style.alignItems = "center";
     document.body.style.height = "100vh";
     document.body.style.margin = "0px";
-
 }
 
 urlSetup();

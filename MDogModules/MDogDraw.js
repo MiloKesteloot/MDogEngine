@@ -131,8 +131,22 @@ class Canvas {
         const pixelHeight = draw._getPixelHeight();
         const pixelSize = Math.min(pixelWidth, pixelHeight);
 
-        this.element.style.width = pixelSize * this.element.width + "px";
-        this.element.style.height = pixelSize * this.element.height + "px";
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('fullscreen') === "true") { // TODO this feels weird that I'm checking every time, should probably store it somewhere.
+            const aspectOfScreen = document.body.offsetWidth / document.body.offsetHeight;
+            const aspectOfGame = draw.screenWidthInArtPixels / draw.screenHeightInArtPixels;
+
+            if (aspectOfScreen > aspectOfGame) {
+                this.element.style.height = document.body.offsetHeight + "px";
+                this.element.style.width = (document.body.offsetHeight * aspectOfGame) + "px";
+            } else {
+                this.element.style.width = document.body.offsetWidth + "px";
+                this.element.style.height = (document.body.offsetWidth / aspectOfGame) + "px";
+            }
+        } else {
+            this.element.style.width = pixelSize * this.element.width + "px";
+            this.element.style.height = pixelSize * this.element.height + "px";
+        }
     }
 }
 
@@ -148,7 +162,10 @@ class Draw extends Module {
         this.screenWidthInArtPixels = screenWidthInArtPixels;
         this.screenHeightInArtPixels = screenHeightInArtPixels;
 
-        this.mainCanvas = new Canvas(this)
+        this.mainCanvas = new Canvas(this);
+        const mainCanvas = this.mainCanvas;
+        const draw = this;
+        window.addEventListener('resize', function() {mainCanvas._calculateSize(draw);}); // TODO adding a listener like this feels super wrong, should probably fix somehow // TODO in the calculation I should probably be able to calculate it manually with calc() so I don't have to keep recalculating it in js.
         this.mainCanvas.ctx.fillStyle = "#000000";
         this.mainCanvas.ctx.fillRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
         document.body.appendChild(this.mainCanvas.element);
