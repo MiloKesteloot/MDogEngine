@@ -14,6 +14,8 @@ class Game {
 
         this.playerStats = new PlayerStats();
         this.gameMode = new GameModeAttack(this, MDog, this.playerStats);
+
+        MDog.Draw.setBackgroundColor("#000000");
     }
 
     _main() {
@@ -83,4 +85,3 @@ class FoodItem extends Item {
 
 let game = new Game();
 MDog.setActiveFunction(game._main.bind(game));
-MDog.Draw.setBackgroundColor("#000000");
