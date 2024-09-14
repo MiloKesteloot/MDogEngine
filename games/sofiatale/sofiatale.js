@@ -18,6 +18,9 @@ class Game {
 
     _main() {
         this.gameMode._main();
+        if (MDog.Input.Keyboard.isClicked("Escape")) {
+            this.newGame();
+        }
     }
 
     newGame() {
