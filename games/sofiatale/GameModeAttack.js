@@ -460,7 +460,7 @@ class MercyMode extends Mode {
                     this.message = "* Sbot won't let\n  you escape!";
                 }
             } else {
-                this.message = "Fleeing is for nerds.\nI'm taking away 1 hp for that.";
+                this.message = "Fleeing is for nerds.\nI'm taking away\n1 hp for that.";
                 this.gameModeAttack.playerStats.health -= 1;
             }
             return;

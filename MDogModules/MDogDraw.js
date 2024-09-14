@@ -547,7 +547,7 @@ class Draw extends Module {
         const size = settings.size ?? 1;
         const textAlign = settings.textAlign ?? "left";
 
-        const alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*";
+        const alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*'\"><";
 
         const lines = text.split("\n");
 
