@@ -1,13 +1,13 @@
 import Module from "./MDogModule.js";
 // import Player from "../games/side/Player/Player.js";
-import SquareHitbox from "./MDogBasics/Hitbox/SquareHitbox.js";
+import SquareKickbox from "./MDogBasics/Kickbox/SquareKickbox.js";
 
 class Basics extends Module {
     constructor(MDogInput) {
         super();
 
         // this.Player = Player;
-        this.SquareHitbox = SquareHitbox;
+        this.SquareKickbox = SquareKickbox;
     }
 }
 

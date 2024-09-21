@@ -1,6 +1,6 @@
-import Hitbox from "/MDogEngine/MDogModules/MDogBasics/Hitbox/Hitbox.js";
+import Kickbox from "/MDogEngine/MDogModules/MDogBasics/Kickbox/Kickbox.js";
 
-class SquareHitbox extends Hitbox {
+class SquareKickbox extends Kickbox {
     constructor(vector, x1, y1, x2, y2) {
         super(vector);
         this.x1 = x1;
@@ -70,16 +70,16 @@ class SquareHitbox extends Hitbox {
         return Math.floor(this.vector.getY()) + this.y2 - 1;
     }
 
-    colliding(otherHitbox) {
-        const test1 = this.getRightX() < otherHitbox.getLeftX();
-        const test2 = this.getLeftX() > otherHitbox.getRightX();
-        const test3 = this.getTopY() > otherHitbox.getBottomY();
-        const test4 = this.getBottomY() < otherHitbox.getTopY();
+    colliding(otherKickbox) {
+        const test1 = this.getRightX() < otherKickbox.getLeftX();
+        const test2 = this.getLeftX() > otherKickbox.getRightX();
+        const test3 = this.getTopY() > otherKickbox.getBottomY();
+        const test4 = this.getBottomY() < otherKickbox.getTopY();
 
-        if (test1 || // this hitbox is to the left of the other
-            test2 || // this hitbox is to the right of the other
-            test3 || // this hitbox is above the other
-            test4)   // this hitbox is below the other
+        if (test1 || // this Kickbox is to the left of the other
+            test2 || // this Kickbox is to the right of the other
+            test3 || // this Kickbox is above the other
+            test4)   // this Kickbox is below the other
         {
             return false;
         } else {
@@ -88,4 +88,4 @@ class SquareHitbox extends Hitbox {
     }
 }
 
-export default SquareHitbox;
+export default SquareKickbox;

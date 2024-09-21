@@ -1,4 +1,4 @@
-class Hitbox {
+class Kickbox {
     constructor(vector) {
         this.vector = vector;
     }
@@ -10,9 +10,9 @@ class Hitbox {
         return this.vector.getY();
     }
 
-    colliding(otherHitbox) {
+    colliding(otherKickbox) {
         return false;
     }
 }
 
-export default Hitbox;
+export default Kickbox;

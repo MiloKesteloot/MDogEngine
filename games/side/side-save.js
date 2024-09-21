@@ -34,7 +34,7 @@ class Coin {
     constructor(game, x, y) {
         this.game = game;
         this.position = new Vector(x, y);
-        this.hitbox = new MDog.Basics.SquareHitbox(
+        this.kickbox = new MDog.Basics.SquareKickbox(
             this.position,
             0, 0, 13, 13
         )
@@ -56,8 +56,8 @@ class Coin {
         for (let i = 0; i < 80; i++) {
             this.game.globalParticleSystem.addParticle(
                 new MDog.FX.ChunkParticle(
-                    this.hitbox.getLeftX() + Math.floor(rnd(0, this.game.player.hitbox.getWidth())),
-                    this.hitbox.getTopY() + Math.floor(rnd(0, this.game.player.hitbox.getHeight())),
+                    this.kickbox.getLeftX() + Math.floor(rnd(0, this.game.player.kickbox.getWidth())),
+                    this.kickbox.getTopY() + Math.floor(rnd(0, this.game.player.kickbox.getHeight())),
                     Math.floor(rnd(10, 40)),
                     "#fabc20",
                     rnd(-1, 1),
@@ -135,12 +135,12 @@ class Camera {
         // let goalY = -Math.floor(this.follow.getY()) + Math.floor(MDog.Draw.getScreenHeightInArtPixels()/2) - 27;
 
 
-        const hbtm = this.game.tilemaps.hitbox;
+        const kbtm = this.game.tilemaps.kickbox;
 
         goalX = Math.min(goalX, 0);
-        goalX = Math.max(goalX, -(hbtm.width-32)*hbtm.tileSize);
+        goalX = Math.max(goalX, -(kbtm.width-32)*kbtm.tileSize);
         goalY = Math.min(goalY, 0);
-        goalY = Math.max(goalY, -(hbtm.height-25)*hbtm.tileSize);
+        goalY = Math.max(goalY, -(kbtm.height-25)*kbtm.tileSize);
 
         MDog.Draw.translateX(goalX);
         MDog.Draw.translateY(goalY);
@@ -207,7 +207,7 @@ class Game {
         this.screenSpaceParticleSystem = new MDog.FX.ParticleSystem();
 
         this.tilemaps = {
-            hitbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Colors"), 16, "side/city/Colors.png", 4),
+            kickbox: new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Colors"), 16, "side/city/Colors.png", 4),
             back: [
                 new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Colors"), 16, "side/city/Colors.png", 4),
                 new MDog.UI.TilemapInteractable(0, 0, MDog.AssetManager.get("Building1"), 16, "side/city/Buildings.png", 25),
@@ -219,23 +219,23 @@ class Game {
             ]
         }
 
-        const hbtm = this.tilemaps.hitbox;
+        const kbtm = this.tilemaps.kickbox;
 
         const playerPos = new Vector(0, 0);
 
-        for (let x = 0; x < hbtm.width; x++) {
-            for (let y = 0; y < hbtm.height; y++) {
-                const index = hbtm.get(x, y);
+        for (let x = 0; x < kbtm.width; x++) {
+            for (let y = 0; y < kbtm.height; y++) {
+                const index = kbtm.get(x, y);
                 if (index === 1) {
-                    hbtm.set(x, y, -1);
+                    kbtm.set(x, y, -1);
                     this.tilemaps.back[0].set(x, y, -1);
-                    const pos = hbtm.tileToScreen(x, y);
+                    const pos = kbtm.tileToScreen(x, y);
                     this.coins.push(new Coin(this, pos.x, pos.y));
                 }
                 if (index === 3) {
-                    hbtm.set(x, y, -1);
+                    kbtm.set(x, y, -1);
                     this.tilemaps.back[0].set(x, y, -1);
-                    const pos = hbtm.tileToScreen(x, y);
+                    const pos = kbtm.tileToScreen(x, y);
                     playerPos.setX(pos.x-18);
                     playerPos.setY(pos.y-11);
                 }
@@ -260,7 +260,7 @@ class Game {
         }
 
         if (this.tilemaps.back.length === 0 && this.tilemaps.front.length === 0) {
-            MDog.Draw.interactable(this.tilemaps.hitbox);
+            MDog.Draw.interactable(this.tilemaps.kickbox);
         }
 
         for (let i = 0; i < this.coins.length; i++) {
@@ -288,7 +288,7 @@ class Game {
 
     updateCoins() {
         for (let i = 0; i < this.coins.length; i++) {
-            if (this.coins[i].hitbox.colliding(this.player.hitbox)) {
+            if (this.coins[i].kickbox.colliding(this.player.kickbox)) {
                 this.coins[i].pickup();
                 this.coins.splice(i, 1);
                 i--;

@@ -1,6 +1,6 @@
 import Maths from "/MDogModules/MDogMaths.js";
 
-import SquareHitbox from "/MDogModules/MDogBasics/Hitbox/SquareHitbox.js";
+import SquareKickbox from "/MDogModules/MDogBasics/Kickbox/SquareKickbox.js";
 
 import FallState from "./States/FallState.js";
 import JumpState from "./States/JumpState.js";
@@ -92,7 +92,7 @@ class Player {
         this.state = new IdleState(this);
         this.lastState = this.state;
 
-        this.hitbox = new SquareHitbox(this.position, 23, 12, 33, 43);
+        this.kickbox = new SquareKickbox(this.position, 23, 12, 33, 43);
 
     }
 
@@ -219,8 +219,8 @@ class Player {
             if (!this.onGround()) {
                 for (let i = 0; i < this.game.grapples.length; i++) {
                     const grapple = this.game.grapples[i];
-                    const px = this.hitbox.getMiddleX();
-                    const py = this.hitbox.getMiddleY();
+                    const px = this.kickbox.getMiddleX();
+                    const py = this.kickbox.getMiddleY();
                     const dist = new Vector(px, py).distanceTo(grapple.position);
                     if (dist < grapple.range) {
                         this.grapple = grapple;
@@ -277,7 +277,7 @@ class Player {
             return;
         }
 
-        const playerVector = new Vector(this.hitbox.getMiddleX(), this.hitbox.getMiddleY());
+        const playerVector = new Vector(this.kickbox.getMiddleX(), this.kickbox.getMiddleY());
 
         // if player is further than grapple range, bring him in
         const dist = playerVector.distanceTo(this.grapple.position);
@@ -639,8 +639,8 @@ class Player {
 
                     this.particleSystem.addParticle(
                         new MDog.FX.ChunkParticle(
-                            this.hitbox.getLeftX() + Math.floor(Math.floor(rnd(0, this.hitbox.getWidth()))),
-                            this.hitbox.getBottomY() + Math.floor(rnd(-2, 2)) + 2,
+                            this.kickbox.getLeftX() + Math.floor(Math.floor(rnd(0, this.kickbox.getWidth()))),
+                            this.kickbox.getBottomY() + Math.floor(rnd(-2, 2)) + 2,
                             Math.floor(rnd(10, 30)),
                             color,
                             rnd(-1, 1) * 0.5 + (this.facingLeft ? 1 : -1) * 0.5,
@@ -660,8 +660,8 @@ class Player {
 
                     this.particleSystem.addParticle(
                         new MDog.FX.ChunkParticle(
-                            this.hitbox.getLeftX() + Math.floor(Math.floor(rnd(0, this.hitbox.getWidth()))),
-                            this.hitbox.getBottomY() + Math.floor(rnd(-2, 2)) + 2,
+                            this.kickbox.getLeftX() + Math.floor(Math.floor(rnd(0, this.kickbox.getWidth()))),
+                            this.kickbox.getBottomY() + Math.floor(rnd(-2, 2)) + 2,
                             Math.floor(rnd(10, 30)),
                             color,
                             rnd(-1, 1) * 0.5 + (this.facingLeft ? 1 : -1) * 0.5,
@@ -695,7 +695,7 @@ class Player {
             this.setState(WallSlideState);
         } else if (!this.onGround()) {
             if (this.isFalling()) {
-                const check = this.check(1, Math.floor(this.hitbox.getWidth()/2), 3, 20);
+                const check = this.check(1, Math.floor(this.kickbox.getWidth()/2), 3, 20);
                 if (!check) {
                     this.setState(FallState);
                 }
@@ -764,16 +764,16 @@ class Player {
     }
 
     getMaterial(x, y) {
-        const first = this.game.tilemaps.hitbox.screenToTile(x, y);
-        return this.game.tilemaps.hitbox.get(first.x,first.y)
+        const first = this.game.tilemaps.kickbox.screenToTile(x, y);
+        return this.game.tilemaps.kickbox.get(first.x,first.y)
     }
 
     check(x1, xp1, y1, yp1) {
-        return this.getMaterial(this.hitbox.getX(x1) + xp1, this.hitbox.getY(y1) + yp1)  !== -1;
+        return this.getMaterial(this.kickbox.getX(x1) + xp1, this.kickbox.getY(y1) + yp1)  !== -1;
     }
 
     getGroundMaterial() {
-        return this.getMaterial(this.hitbox.getX(1) + Math.floor(this.hitbox.getWidth()/2), this.hitbox.getY(3) + 14)
+        return this.getMaterial(this.kickbox.getX(1) + Math.floor(this.kickbox.getWidth()/2), this.kickbox.getY(3) + 14)
     }
 
     onGround() {
@@ -784,17 +784,17 @@ class Player {
     }
 
     onLeft() {
-        return this.check(0, 0, 1, 0) || this.check(0, 0 , 2, 0) || this.check(0, 0, 1, Math.floor(this.hitbox.getHeight()/2));
+        return this.check(0, 0, 1, 0) || this.check(0, 0 , 2, 0) || this.check(0, 0, 1, Math.floor(this.kickbox.getHeight()/2));
     }
     inLeft() {
-        return this.check(1, 0, 1, 0) || this.check(1, 0, 2, 0) || this.check(1, 0, 1, Math.floor(this.hitbox.getHeight()/2));
+        return this.check(1, 0, 1, 0) || this.check(1, 0, 2, 0) || this.check(1, 0, 1, Math.floor(this.kickbox.getHeight()/2));
     }
 
     onRight() {
-        return this.check(3, 0, 1, 0) || this.check(3, 0, 2, 0) || this.check(3, 0, 1, Math.floor(this.hitbox.getHeight()/2));
+        return this.check(3, 0, 1, 0) || this.check(3, 0, 2, 0) || this.check(3, 0, 1, Math.floor(this.kickbox.getHeight()/2));
     }
     inRight() {
-        return this.check(2, 0, 1, 0) || this.check(2, 0, 2, 0) || this.check(2, 0, 1, Math.floor(this.hitbox.getHeight()/2));
+        return this.check(2, 0, 1, 0) || this.check(2, 0, 2, 0) || this.check(2, 0, 1, Math.floor(this.kickbox.getHeight()/2));
     }
 
     inCeil() {
