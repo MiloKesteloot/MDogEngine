@@ -880,6 +880,9 @@ class FightingMode extends Mode {
         if (gameModeAttack.battleBox.nextAttack === null) {
             attackID += 1;
 
+            if (gameModeAttack.playerStats.health < gameModeAttack.playerStats.maxHealth - 5 && attackID % 3 === 2) {
+
+            }
             if (attackID % 2 === 0) {
                 attackToDo = "cup";
             } else if (attackID % 2 === 1) {

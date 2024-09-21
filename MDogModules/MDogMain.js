@@ -27,6 +27,12 @@ class MDog {
         this.ticksPerSecond = 160;
         this.unsimulatedTicks = 0;
 
+        window.addEventListener("keydown", function(e) {
+            if(["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code) > -1) {
+                e.preventDefault();
+            }
+        }, false);
+
         this._everyFrame();
     }
 
