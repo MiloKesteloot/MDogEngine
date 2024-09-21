@@ -184,11 +184,6 @@ class Draw extends Module {
         this.drawingBoards = {}
 
         this.imageCache = new Map();
-        this.fonts = [];
-        this.loadFont("undertale-hud", "assets/sofiatale/hud.ttf");
-        this.loadFont("rainyhearts", "assets/sofiatale/rainyhearts.ttf");
-        this.loadFont("mars", "/MDogEngine/assets/fonts/mars.ttf");
-        this.loadFont("determination", "/MDogEngine/assets/fonts/determination.ttf");
     }
 
     translate(x, y, settings) {
@@ -219,20 +214,6 @@ class Draw extends Module {
         );
 
         drawingBoard.offset.setY(y);
-    }
-
-    loadFont(fontName, fontURL) {
-        let newStyle = document.createElement('style');
-        newStyle.appendChild(document.createTextNode("\
-        @font-face {\
-          font-family: '" + fontName + "';\
-          src: url('" + fontURL + "') format('truetype');\
-        }\
-      "));
-        document.head.appendChild(newStyle);
-        this.fonts.push(fontName);
-
-        this.text("test", -100, -100, "#000000", {font: fontName});
     }
 
     _getPixelWidth() {
@@ -486,55 +467,7 @@ class Draw extends Module {
         return ctx.measureText(text.split('\n')[0]).width; // TODO this search is a little sus
     }
 
-    // Perams: layer, textAlign (left, center, right), textBaseline (top, middle), size, font, lineHeight
-    text(text, x, y, color, settings) {
-
-        settings = settings ?? {};
-
-        const layer = settings.layer ?? this.layer;
-        const drawingBoard = this._getDrawingBoard(layer);
-
-        const font = settings.font ?? "Arial";
-
-        const size = (settings.size ?? "5") + "px";
-        const lineHeight = settings.lineHeight ?? 20;
-
-        const ctx = drawingBoard.ctx;
-
-        ctx.font = size + " " + font;
-        // ctx.letterSpacing = 100;
-        ctx.fillStyle = color;
-        const textAlign = settings.textAlign ?? 'left'
-        ctx.textAlign = textAlign;
-        ctx.textBaseline = settings.textBaseline ?? 'top';
-
-        // let fullWidth = 0;
-        // for (let i = 0; i < text.length; i++) {
-        //     const width = Math.ceil(0) + (ctx.measureText(text[i]).width);
-        //     ctx.fillText(text[i], x + fullWidth, y);
-        //     fullWidth += width;
-        // }
-
-        const split = text.split('\n');
-
-        for (let i = 0; i < split.length; i++) {
-            const line = split[i];
-            ctx.fillText(line, x, y + lineHeight*i);
-        }
-
-        // ctx.fillText(text, x, y);
-
-        // for (let i = 0; i < 10; i++) {
-        //     drawingBoard.ctx.fillText(text, x, y + 10);
-        // }
-        //
-        // drawingBoard.ctx.fillText(text, x, y+ 20);
-
-        //
-        // console.log(drawingBoard.ctx.measureText("lotsof").width);
-    }
-
-    // Settings - layer, MORE // TODO, add all settings, probably just replace text() function with this one
+    // Settings: layer, alignX (left, center, right), alignY (top, center, bottom), size, font, lineHeight, letterSpacing
     // Return - bool, if the draw was successful
     textImage(text, x, y, color, font, settings) {
 
@@ -554,7 +487,10 @@ class Draw extends Module {
         settings = settings ?? {};
 
         const size = settings.size ?? 1;
-        const textAlign = settings.textAlign ?? "left";
+        const alignX = settings.alignX ?? "left";
+        const alignY = settings.alignY ?? "top";
+        const lineHeight = settings.lineHeight ?? 1;
+        const letterSpacing = settings.letterSpacing ?? 1;
 
         const pathName = "generated/" + text + color + font;
 
@@ -562,8 +498,8 @@ class Draw extends Module {
 
         const lines = text.split("\n");
         const longestStringLength = lines.reduce((max, str) => Math.max(max, str.length), 0);
-        const width = longestStringLength * (fontWidth) - 1;
-        const height = lines.length * (fontHeight + 1) - 1;
+        const width = longestStringLength * (fontWidth + letterSpacing - 1) - letterSpacing;
+        const height = lines.length * (fontHeight + lineHeight) - lineHeight;
 
         if (!textCanvas) {
             const alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*'\"><";
@@ -578,11 +514,11 @@ class Draw extends Module {
 
             for (const line of lines) {
                 let xPos = 0;
-                if (textAlign === "center") {
-                    xPos += Math.floor((longestStringLength - line.length) * fontWidth / 2);
+                if (alignX === "center") {
+                    xPos += Math.floor((longestStringLength - line.length) * (fontWidth + letterSpacing - 1) / 2);
                 }
-                if (textAlign === "right") {
-                    xPos -= (longestStringLength - line.length) * fontWidth;
+                if (alignX === "right") {
+                    xPos += (longestStringLength - line.length) * (fontWidth + letterSpacing - 1);
                 }
                 for (let i = 0; i < line.length; i++) {
                     const char = line[i];
@@ -594,27 +530,33 @@ class Draw extends Module {
                         if (!success) return false;
                     }
 
-                    // TODO do tint as one final pass
+                    // TODO do tint as one final pass // I'm worried it won't be faster and I'm not even sure how to check
 
-                    xPos += fontWidth;
+                    xPos += fontWidth + letterSpacing - 1;
                 }
                 xPos = 0;
-                yPos += fontHeight + 1;
+                yPos += fontHeight + lineHeight;
             }
             textCanvas = tempDrawingBoard.element;
             this.imageCache.set(pathName, textCanvas);
         }
 
         let xShift = 0;
-        if (textAlign === "center") {
+        if (alignX === "center") {
             xShift += Math.floor(width/2) * size;
         }
-        if (textAlign === "right") {
+        if (alignX === "right") {
             xShift += (width - 1) * size;
         }
+        let yShift = 0;
+        if (alignY === "center") {
+            yShift += Math.floor(height/2) * size;
+        }
+        if (alignY === "bottom") {
+            yShift += (height - 1) * size;
+        }
 
-        this._rawImage(textCanvas, x - xShift, y, width, height, {layer: settings.layer, scale: size});
-        // this.rectangle(x, y, 3, 3, "#ff0000");
+        this._rawImage(textCanvas, x - xShift, y - yShift, width, height, {layer: settings.layer, scale: size});
 
         return true;
     }

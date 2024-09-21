@@ -169,7 +169,7 @@ class Mode {
                 y + 11,
                 color,
                 "fonts/marsfont.png",
-                {size: 2, textAlign: "right"}
+                {size: 2, alignX: "right"}
             );
 
             const image = settings.options[i].image;
@@ -208,18 +208,16 @@ class IntroMode extends Mode {
     _draw() {
         MDog.Draw.clear();
 
-        MDog.Draw.image("sofiatale/logo.png", 120, 90, {scale: 4});
+        // MDog.Draw.image("sofiatale/logo.png", 120, 90, {scale: 4});
         MDog.Draw.textImage(
             "A game by:", 512/2, 180, "#FFFFFF",
-            "fonts/marsfont.png", {size: 3, textAlign: "center"});
-        MDog.Draw.textImage(this.names[0], 512/2, 220, "#FFFFFF", "fonts/marsfont.png", {size: 3, textAlign: "center"});
-        MDog.Draw.textImage(this.names[1], 512/2, 240, "#FFFFFF", "fonts/marsfont.png", {size: 3, textAlign: "center"});
+            "fonts/marsfont.png", {size: 3, alignX: "center"});
+        MDog.Draw.textImage(this.names[0], 512/2, 220, "#FFFFFF", "fonts/marsfont.png", {size: 3, alignX: "center"});
+        MDog.Draw.textImage(this.names[1], 512/2, 240, "#FFFFFF", "fonts/marsfont.png", {size: 3, alignX: "center"});
 
         if ((this.time % (this.blinkSpeed*2)) < this.blinkSpeed) {
-            MDog.Draw.textImage("[PRESS ANY BUTTON]", 512/2, 310, "#6e6e6e", "fonts/marsfont.png", {size: 2, textAlign: "center"});
+            MDog.Draw.textImage("[PRESS ANY BUTTON]", 512/2, 310, "#6e6e6e", "fonts/marsfont.png", {size: 2, alignX: "center"});
         }
-
-        // MDog.Draw.textImage("hello", 10, 10, "#ffffff", "fonts/marsfont.png", {size: 2});
     }
 }
 
@@ -297,12 +295,12 @@ class DeadMode extends Mode {
         }
 
         if (this.timer > this.textTime) {
-            MDog.Draw.textImage("Stay determined!", 512/2, 200, "#ffffff", "fonts/determinationfont.png", {size: 2, textAlign: "center"}); // penis
-            MDog.Draw.textImage("Play again?", 512/2, 240, "#ffffff", "fonts/determinationfont.png", {size: 2, textAlign: "center"}); // penis
+            MDog.Draw.textImage("Stay determined!", 512/2, 200, "#ffffff", "fonts/determinationfont.png", {size: 2, alignX: "center"}); // penis
+            MDog.Draw.textImage("Play again?", 512/2, 240, "#ffffff", "fonts/determinationfont.png", {size: 2, alignX: "center"}); // penis
             let options = ["Yes", "No"];
             for (let i = 0; i < options.length; i++) {
                 const text = options[i];
-                const sets = {size: 2, font: "determination", textAlign: "center"};
+                const sets = {size: 2, font: "determination", alignX: "center"};
                 const width = text.length * sets.size * 8;
                 const x = 512/2 + (i*2-1)*50;
                 const y = 280;
@@ -1320,7 +1318,7 @@ class Cat {
                     "#ffffff");
             }
 
-            MDog.Draw.textImage(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y-5, "#000000", "fonts/determinationfont.png", {size: 4, textAlign: "center"});
+            MDog.Draw.textImage(battleBox.dialogueText, x+Math.floor((x1+x2)/2), y-5, "#000000", "fonts/determinationfont.png", {size: 4, alignX: "center"});
         }
 
         if (this.mood === CatMood.Yarn) {
