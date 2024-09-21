@@ -69,7 +69,7 @@ class Mouse {
         this.clicked = false;
         this.onScreen = false;
         this.newStyle = "default";
-        this.element = Draw.mainCanvas.element;
+        this.element = Draw.mainDrawingBoard.element;
 
         this.element.addEventListener("mousemove", e => {
             this.x = e.offsetX; //Math.floor(e.offsetX/this.scale);

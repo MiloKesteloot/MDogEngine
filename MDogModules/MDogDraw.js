@@ -109,12 +109,21 @@ class SpriteSheetAnimation extends Animation {
     }
 }
 
-class Canvas {
-    constructor(draw) {
+class DrawingBoard {
+    // Settings - [width, height] IMPORANT. If width or height are set, the DrawingBoard will not generate it's real size. TODO make it so that it only generates it's real size for the first one anyway.
+    constructor(draw, settings) {
+
+        settings = settings ?? {};
+        const width = settings.width ?? draw.screenWidthInArtPixels;
+        const height = settings.height ?? draw.screenHeightInArtPixels;
+
         this.element = document.createElement("canvas");
-        this.element.width = draw.screenWidthInArtPixels;
-        this.element.height = draw.screenHeightInArtPixels;
-        this._calculateSize(draw);
+        this.element.width = width;
+        this.element.height = height;
+
+        if (settings.width === undefined && settings.height === undefined) {
+            this._calculateSize(draw);
+        }
 
         this.element.style.imageRendering = "pixelated";
 
@@ -162,17 +171,17 @@ class Draw extends Module {
         this.screenWidthInArtPixels = screenWidthInArtPixels;
         this.screenHeightInArtPixels = screenHeightInArtPixels;
 
-        this.mainCanvas = new Canvas(this);
-        const mainCanvas = this.mainCanvas;
+        this.mainDrawingBoard = new DrawingBoard(this);
+        const mainDrawingBoard = this.mainDrawingBoard;
         const draw = this;
-        window.addEventListener('resize', function() {mainCanvas._calculateSize(draw);}); // TODO adding a listener like this feels super wrong, should probably fix somehow // TODO in the calculation I should probably be able to calculate it manually with calc() so I don't have to keep recalculating it in js.
-        this.mainCanvas.ctx.fillStyle = "#000000";
-        this.mainCanvas.ctx.fillRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
-        document.body.appendChild(this.mainCanvas.element);
+        window.addEventListener('resize', function() {mainDrawingBoard._calculateSize(draw);}); // TODO adding a listener like this feels super wrong, should probably fix somehow // TODO in the calculation I should probably be able to calculate it manually with calc() so I don't have to keep recalculating it in js.
+        this.mainDrawingBoard.ctx.fillStyle = "#000000";
+        this.mainDrawingBoard.ctx.fillRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
+        document.body.appendChild(this.mainDrawingBoard.element);
 
         this.setBackgroundColor("#000000");
 
-        this.canvi = {}
+        this.drawingBoards = {}
 
         this.imageCache = new Map();
         this.fonts = [];
@@ -190,26 +199,26 @@ class Draw extends Module {
     translateX(x, settings) {
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
-        const canvas = this._getCanvas(layer);
+        const drawingBoard = this._getDrawingBoard(layer);
 
-        canvas.ctx.translate(
-            x - canvas.offset.getX(),
+        drawingBoard.ctx.translate(
+            x - drawingBoard.offset.getX(),
             0
         );
 
-        canvas.offset.setX(x);
+        drawingBoard.offset.setX(x);
     }
     translateY(y, settings) {
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
-        const canvas = this._getCanvas(layer);
+        const drawingBoard = this._getDrawingBoard(layer);
 
-        canvas.ctx.translate(
+        drawingBoard.ctx.translate(
             0,
-            y - canvas.offset.getY()
+            y - drawingBoard.offset.getY()
         );
 
-        canvas.offset.setY(y);
+        drawingBoard.offset.setY(y);
     }
 
     loadFont(fontName, fontURL) {
@@ -242,17 +251,15 @@ class Draw extends Module {
         return pixelDimension
     }
 
+    _getDrawingBoard(layer) {
+        let drawingBoard = this.drawingBoards["" + layer];
 
-
-    _getCanvas(layer) {
-        let canvas = this.canvi["" + layer];
-
-        if (canvas === undefined) {
-            canvas = new Canvas(this);
-            this.canvi["" + layer] = canvas;
+        if (drawingBoard === undefined) {
+            drawingBoard = new DrawingBoard(this);
+            this.drawingBoards["" + layer] = drawingBoard;
         }
 
-        return canvas;
+        return drawingBoard;
     }
 
     _postOutUpdate() {
@@ -260,11 +267,11 @@ class Draw extends Module {
     }
 
     _drawLayers() {
-        const layerArray = Object.entries(this.canvi).map(([layer, canvas]) => ({layer: parseInt(layer), canvas}));
+        const layerArray = Object.entries(this.drawingBoards).map(([layer, drawingBoard]) => ({layer: parseInt(layer), drawingBoard}));
         layerArray.sort((a, b) => a.layer - b.layer);
 
         for (let i = 0; i < layerArray.length; i++) {
-            this.mainCanvas.ctx.drawImage(layerArray[i].canvas.element, 0, 0);
+            this.mainDrawingBoard.ctx.drawImage(layerArray[i].drawingBoard.element, 0, 0);
         }
     }
 
@@ -287,7 +294,7 @@ class Draw extends Module {
         return Math.floor(this.screenHeightInArtPixels/2);
     }
 
-    // Set color of screen around canvas
+    // Set color of screen around game
     setBackgroundColor(color) {
         document.body.style.backgroundColor = color;
     }
@@ -297,9 +304,9 @@ class Draw extends Module {
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
 
-        const canvas = this._getCanvas(layer);
-        canvas.ctx.fillStyle = color;
-        canvas.ctx.fillRect(x, y, 1, 1)
+        const drawingBoard = this._getDrawingBoard(layer);
+        drawingBoard.ctx.fillStyle = color;
+        drawingBoard.ctx.fillRect(x, y, 1, 1)
     }
 
     // Settings - color, layer
@@ -308,24 +315,24 @@ class Draw extends Module {
         const color = settings.color ?? "#000000";
         const layer = settings.layer ?? null;
         if (layer === null) {
-            const localCanvi = Object.entries(this.canvi);
-            for (let i = 0; i < localCanvi.length ; i++) {
-                const canvasIndex = localCanvi[i];
-                const canvas = canvasIndex[1];
-                canvas.ctx.clearRect(-canvas.offset.getX(), -canvas.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
+            const localDrawingBoards = Object.entries(this.drawingBoards);
+            for (let i = 0; i < localDrawingBoards.length ; i++) {
+                const drawingBoardIndex = localDrawingBoards[i];
+                const drawingBoard = drawingBoardIndex[1];
+                drawingBoard.ctx.clearRect(-drawingBoard.offset.getX(), -drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
             }
-            this.mainCanvas.ctx.fillStyle = color;
-            this.mainCanvas.ctx.fillRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
+            this.mainDrawingBoard.ctx.fillStyle = color;
+            this.mainDrawingBoard.ctx.fillRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
             return;
         }
-        const canvas = this._getCanvas(layer);
+        const drawingBoard = this._getDrawingBoard(layer);
 
-        canvas.ctx.fillStyle = color;
-        canvas.ctx.fillRect(canvas.offset.getX(), canvas.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
+        drawingBoard.ctx.fillStyle = color;
+        drawingBoard.ctx.fillRect(drawingBoard.offset.getX(), drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
 
         // TODO test running clear with a layer specified
 
-        // this.rectangleFill(-canvas.offset.getX(), -canvas.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels, color, {layer: layer});
+        // this.rectangleFill(-drawingBoard.offset.getX(), -drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels, color, {layer: layer});
     }
 
     findIntersections(points, y) { // TODO what is this function?
@@ -349,8 +356,8 @@ class Draw extends Module {
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
 
-        const canvas = this._getCanvas(layer);
-        canvas.ctx.fillStyle = color;
+        const drawingBoard = this._getDrawingBoard(layer);
+        drawingBoard.ctx.fillStyle = color;
 
         // Find the min and max Y values
         let minY = points[0].y;
@@ -364,7 +371,7 @@ class Draw extends Module {
         for (let y = minY; y <= maxY; y++) {
             const intersections = this.findIntersections(points, y);
             for (let i = 0; i < intersections.length; i += 2) {
-                canvas.ctx.fillRect(intersections[i], y, intersections[i + 1] - intersections[i], 1)
+                drawingBoard.ctx.fillRect(intersections[i], y, intersections[i + 1] - intersections[i], 1)
             }
         }
 
@@ -386,19 +393,19 @@ class Draw extends Module {
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
 
-        const canvas = this._getCanvas(layer);
-        canvas.ctx.fillStyle = color;
+        const drawingBoard = this._getDrawingBoard(layer);
+        drawingBoard.ctx.fillStyle = color;
 
         if (width <= 2 || height <= 2) {
-            canvas.ctx.fillRect(x, y, width, height);
+            drawingBoard.ctx.fillRect(x, y, width, height);
             return;
         }
 
-        canvas.ctx.fillRect(x, y, width, 1);
-        canvas.ctx.fillRect(x, y+height-1, width, 1);
+        drawingBoard.ctx.fillRect(x, y, width, 1);
+        drawingBoard.ctx.fillRect(x, y+height-1, width, 1);
 
-        canvas.ctx.fillRect(x, y+1, 1, height-2);
-        canvas.ctx.fillRect(x+width-1, y+1, 1, height-2);
+        drawingBoard.ctx.fillRect(x, y+1, 1, height-2);
+        drawingBoard.ctx.fillRect(x+width-1, y+1, 1, height-2);
     }
 
     // Settings - layer
@@ -406,36 +413,36 @@ class Draw extends Module {
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
 
-        const canvas = this._getCanvas(layer);
-        canvas.ctx.fillStyle = color;
+        const drawingBoard = this._getDrawingBoard(layer);
+        drawingBoard.ctx.fillStyle = color;
 
-        canvas.ctx.beginPath();
-        canvas.ctx.arc(x, y, radius, 0, 2 * Math.PI);
-        canvas.ctx.fill();
+        drawingBoard.ctx.beginPath();
+        drawingBoard.ctx.arc(x, y, radius, 0, 2 * Math.PI);
+        drawingBoard.ctx.fill();
     }
     //
     // hexagon(x, y, radius, color, settings) {
     //     settings = settings ?? {};
     //     const layer = settings.layer ?? this.layer;
     //
-    //     const canvas = this._getCanvas(layer);
-    //     canvas.ctx.fillStyle = color;
+    //     const drawingBoard = this._getDrawingBoard(layer);
+    //     drawingBoard.ctx.fillStyle = color;
     //
-    //     canvas.ctx.beginPath();
-    //     canvas.ctx.moveTo(x + radius, y);
+    //     drawingBoard.ctx.beginPath();
+    //     drawingBoard.ctx.moveTo(x + radius, y);
     //     for (let i = 1; i < 6; i++) {
-    //         canvas.ctx.lineTo(x + radius * Math.cos(i * 2 * Math.PI / 6), y + radius * Math.sin(i * 2 * Math.PI / 6));
+    //         drawingBoard.ctx.lineTo(x + radius * Math.cos(i * 2 * Math.PI / 6), y + radius * Math.sin(i * 2 * Math.PI / 6));
     //     }
-    //     canvas.ctx.fill();
+    //     drawingBoard.ctx.fill();
     // }
 
     rectangleFill(x, y, width, height, color, settings) {
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
 
-        const canvas = this._getCanvas(layer);
-        canvas.ctx.fillStyle = color;
-        canvas.ctx.fillRect(x, y, width, height);
+        const drawingBoard = this._getDrawingBoard(layer);
+        drawingBoard.ctx.fillStyle = color;
+        drawingBoard.ctx.fillRect(x, y, width, height);
     }
 
     // Settings - layer, scale
@@ -474,7 +481,7 @@ class Draw extends Module {
         settings = settings ?? {};
         const size = (settings.size ?? "5") + "px";
         const font = settings.font ?? "Arial";
-        const ctx = this.mainCanvas.ctx;
+        const ctx = this.mainDrawingBoard.ctx;
         ctx.font = size + " " + font;
         return ctx.measureText(text.split('\n')[0]).width; // TODO this search is a little sus
     }
@@ -485,14 +492,14 @@ class Draw extends Module {
         settings = settings ?? {};
 
         const layer = settings.layer ?? this.layer;
-        const canvas = this._getCanvas(layer);
+        const drawingBoard = this._getDrawingBoard(layer);
 
         const font = settings.font ?? "Arial";
 
         const size = (settings.size ?? "5") + "px";
         const lineHeight = settings.lineHeight ?? 20;
 
-        const ctx = canvas.ctx;
+        const ctx = drawingBoard.ctx;
 
         ctx.font = size + " " + font;
         // ctx.letterSpacing = 100;
@@ -518,15 +525,17 @@ class Draw extends Module {
         // ctx.fillText(text, x, y);
 
         // for (let i = 0; i < 10; i++) {
-        //     canvas.ctx.fillText(text, x, y + 10);
+        //     drawingBoard.ctx.fillText(text, x, y + 10);
         // }
         //
-        // canvas.ctx.fillText(text, x, y+ 20);
+        // drawingBoard.ctx.fillText(text, x, y+ 20);
 
         //
-        // console.log(canvas.ctx.measureText("lotsof").width);
+        // console.log(drawingBoard.ctx.measureText("lotsof").width);
     }
 
+    // Settings - layer, MORE // TODO, add all settings, probably just replace text() function with this one
+    // Return - bool, if the draw was successful
     textImage(text, x, y, color, font, settings) {
 
         let fontWidth = undefined;
@@ -547,34 +556,67 @@ class Draw extends Module {
         const size = settings.size ?? 1;
         const textAlign = settings.textAlign ?? "left";
 
-        const alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*'\"><";
+        const pathName = "generated/" + text + color + font;
+
+        let textCanvas = this.imageCache.get(pathName);
 
         const lines = text.split("\n");
+        const longestStringLength = lines.reduce((max, str) => Math.max(max, str.length), 0);
+        const width = longestStringLength * (fontWidth) - 1;
+        const height = lines.length * (fontHeight + 1) - 1;
 
-        let yPos = 0;
+        if (!textCanvas) {
+            const alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*'\"><";
 
-        for (const line of lines) {
-            let xPos = 0;
-            if (textAlign === "center") {
-                xPos -= Math.floor(line.length * fontWidth * size / 2);
-            }
-            if (textAlign === "right") {
-                xPos -= line.length * fontWidth * size;
-            }
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i];
+            const tempDrawingBoard = new DrawingBoard(this,
+                {
+                    width: width,
+                    height: height
+                });
 
-                const index = alph.indexOf(char);
+            let yPos = 0;
 
-                if (index !== -1) {
-                    this.image(font, x + xPos, y + yPos, {width: fontWidth, offsetX: index * fontWidth, scale: size, tint: color});
+            for (const line of lines) {
+                let xPos = 0;
+                if (textAlign === "center") {
+                    xPos += Math.floor((longestStringLength - line.length) * fontWidth / 2);
                 }
+                if (textAlign === "right") {
+                    xPos -= (longestStringLength - line.length) * fontWidth;
+                }
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
 
-                xPos += fontWidth * size;
+                    const index = alph.indexOf(char);
+
+                    if (index !== -1) {
+                        const success = this.image(font, xPos, yPos, {width: fontWidth, offsetX: index * fontWidth, tint: color, drawingBoard: tempDrawingBoard});
+                        if (!success) return false;
+                    }
+
+                    // TODO do tint as one final pass
+
+                    xPos += fontWidth;
+                }
+                xPos = 0;
+                yPos += fontHeight + 1;
             }
-            xPos = 0;
-            yPos += fontHeight * size;
+            textCanvas = tempDrawingBoard.element;
+            this.imageCache.set(pathName, textCanvas);
         }
+
+        let xShift = 0;
+        if (textAlign === "center") {
+            xShift += Math.floor(width/2) * size;
+        }
+        if (textAlign === "right") {
+            xShift += (width - 1) * size;
+        }
+
+        this._rawImage(textCanvas, x - xShift, y, width, height, {layer: settings.layer, scale: size});
+        // this.rectangle(x, y, 3, 3, "#ff0000");
+
+        return true;
     }
 
     // TODO move this to the right place
@@ -591,63 +633,82 @@ class Draw extends Module {
         return [r, g, b];
     }
 
-    // Perams: layer, scale, scaleX, scaleY, offsetX, offsetY, width, height, flipX, flipY, tint
-    image(fileName, x, y, settings) {
-
+    _doesImageExist(fileName) {
         const pathName = "assets/" + fileName;
+        let image = this.imageCache.get(pathName);
+        return image !== undefined;
+    }
 
+    _getImageByPath(pathName) {
         let image = this.imageCache.get(pathName);
         if (!image) {
             image = new Image();
             image.src = pathName;
             this.imageCache.set(pathName, image);
         }
+        return image;
+    }
 
+    _getImageByName(fileName) {
+        return this._getImageByPath("assets/" + fileName)
+    }
+
+    // Perams: layer, scale, scaleX, scaleY, offsetX, offsetY, width, height, flipX, flipY, tint, (private) drawingBoard
+    // Returns: bool - if the draw was successful or not.
+    image(fileName, x, y, settings) {
+        let image = this._getImageByName(fileName);
         if (!image.complete) {
-            return;
+            return false;
         }
-
         settings = settings ?? {};
+        const offsetX = settings.offsetX ?? 0;
+        const offsetY = settings.offsetY ?? 0;
+        const maxWidth = image.width - offsetX;
+        const maxHeight = image.height - offsetY;
+        const preferredWidth = settings.width ?? image.width;
+        const preferredHeight = settings.height ?? image.height;
+        const width = Math.min(preferredWidth, maxWidth);
+        const height = Math.min(preferredHeight, maxHeight);
+        settings.height = undefined;
+        settings.width = undefined;
+        this._rawImage(image, x, y, width, height, settings);
+        return true;
+    }
 
-        const scale = settings.scale ?? 1;
-        const scaleX = settings.scaleX ?? scale;
-        const scaleY = settings.scaleY ?? scale;
+    // Perams: layer, scale, scaleX, scaleY, offsetX, offsetY, flipX, flipY, tint, drawingBoard
+    _rawImage(image, x, y, width, height, settings) {
+        settings = settings ?? {};
 
         const offsetX = settings.offsetX ?? 0;
         const offsetY = settings.offsetY ?? 0;
 
-        const maxWidth = image.width - offsetX;
-        const maxHeight = image.height - offsetY;
-
-        const preferredWidth = settings.width ?? image.width;
-        const preferredHeight = settings.height ?? image.height;
-
-        const width = Math.min(preferredWidth, maxWidth);
-        const height = Math.min(preferredHeight, maxHeight);
-
-        const layer = settings.layer ?? this.layer;
-        const canvas = this._getCanvas(layer);
+        const scale = settings.scale ?? 1;
+        const scaleX = settings.scaleX ?? scale;
+        const scaleY = settings.scaleY ?? scale;
 
         const flipX = settings.flipX ?? false;
         const flipY = settings.flipY ?? false;
 
         const tint = settings.tint ?? undefined;
 
-        canvas.ctx.save();
+        const layer = settings.layer ?? this.layer;
+        const drawingBoard = settings.drawingBoard ?? this._getDrawingBoard(layer);
+
+        drawingBoard.ctx.save();
 
         let xShift = 0;
         if (flipX) {
-            canvas.ctx.scale(-1, 1);
+            drawingBoard.ctx.scale(-1, 1);
             xShift = -x*2 - width;
         }
         let yShift = 0;
         if (flipY) {
-            canvas.ctx.scale(1, -1);
+            drawingBoard.ctx.scale(1, -1);
             yShift = -y*2 - height;
         }
 
         if (tint === undefined) {
-            canvas.ctx.drawImage(
+            drawingBoard.ctx.drawImage(
                 image,
                 offsetX,
                 offsetY,
@@ -661,15 +722,9 @@ class Draw extends Module {
 
             // Image tinting code from ChatGPT
 
-            const tempCanvas = document.createElement('canvas');
-
-            tempCanvas.width = width * scaleX;
-            tempCanvas.height = height * scaleY;
-
-            tempCanvas.style.imageRendering = "pixelated";
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.imageSmoothingEnabled = false;
-            tempCanvas.webkitF = "never";
+            const tempDrawingBoard = new DrawingBoard(this, {width: width * scaleX, height: height * scaleY});
+            const tempCanvas = tempDrawingBoard.element;
+            const tempCtx = tempDrawingBoard.ctx;
 
             tempCtx.drawImage(
                 image,
@@ -688,19 +743,7 @@ class Draw extends Module {
             tempCtx.fillStyle = tint;
             tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-            // const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-            // const data = imageData.data;
-            //
-            // // Apply tint color to each pixel
-            // for (let i = 0; i < data.length; i += 4) {
-            //     data[i] = data[i] * (1 - tint[3]) + tint[0] * tint[3];     // Red
-            //     data[i + 1] = data[i + 1] * (1 - tint[3]) + tint[1] * tint[3]; // Green
-            //     data[i + 2] = data[i + 2] * (1 - tint[3]) + tint[2] * tint[3]; // Blue
-            // }
-            //
-            // tempCtx.putImageData(imageData, 0, 0);
-
-            canvas.ctx.drawImage(
+            drawingBoard.ctx.drawImage(
                 tempCanvas,
                 0,
                 0,
@@ -713,7 +756,7 @@ class Draw extends Module {
             );
         }
 
-        canvas.ctx.restore();
+        drawingBoard.ctx.restore();
     }
 
     animation(animation, x, y, settings) {
