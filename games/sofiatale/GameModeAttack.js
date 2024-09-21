@@ -208,7 +208,7 @@ class IntroMode extends Mode {
     _draw() {
         MDog.Draw.clear();
 
-        // MDog.Draw.image("sofiatale/logo.png", 120, 90, {scale: 4});
+        MDog.Draw.image("sofiatale/logo.png", 120, 90, {scale: 4});
         MDog.Draw.textImage(
             "A game by:", 512/2, 180, "#FFFFFF",
             "fonts/marsfont.png", {size: 3, alignX: "center"});
