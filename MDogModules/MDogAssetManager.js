@@ -33,3 +33,5 @@ class AssetManager extends Module {
 }
 
 export default AssetManager;
+
+// 7:25
