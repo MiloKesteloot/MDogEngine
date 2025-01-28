@@ -135,15 +135,15 @@ class DrawingBoard {
         this.offset = new Vector();
     }
 
-    _calculateSize(draw) {
-        const pixelWidth = draw._getPixelWidth();
-        const pixelHeight = draw._getPixelHeight();
+    _calculateSize(Draw) {
+        const pixelWidth = Draw._getPixelWidth();
+        const pixelHeight = Draw._getPixelHeight();
         const pixelSize = Math.min(pixelWidth, pixelHeight);
 
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('fullscreen') === "true") { // TODO this feels weird that I'm checking every time, should probably store it somewhere.
             const aspectOfScreen = document.body.offsetWidth / document.body.offsetHeight;
-            const aspectOfGame = draw.screenWidthInArtPixels / draw.screenHeightInArtPixels;
+            const aspectOfGame = Draw.screenWidthInArtPixels / Draw.screenHeightInArtPixels;
 
             if (aspectOfScreen > aspectOfGame) {
                 this.element.style.height = document.body.offsetHeight + "px";
@@ -190,7 +190,6 @@ class Draw extends Module {
         this.translateX(x, settings);
         this.translateY(y, settings);
     }
-
     translateX(x, settings) {
         settings = settings ?? {};
         const layer = settings.layer ?? this.layer;
@@ -219,7 +218,6 @@ class Draw extends Module {
     _getPixelWidth() {
         return this._getPixelDimension(window.innerWidth, this.screenWidthInArtPixels);
     }
-
     _getPixelHeight() {
         return this._getPixelDimension(window.innerHeight, this.screenHeightInArtPixels);
     }
@@ -263,14 +261,12 @@ class Draw extends Module {
     getScreenWidthInArtPixels() {
         return this.screenWidthInArtPixels;
     }
-
     getHalfScreenWidthInArtPixels() {
         return Math.floor(this.screenWidthInArtPixels/2);
     }
     getScreenHeightInArtPixels() {
         return this.screenHeightInArtPixels;
     }
-
     getHalfScreenHeightInArtPixels() {
         return Math.floor(this.screenHeightInArtPixels/2);
     }
@@ -280,6 +276,7 @@ class Draw extends Module {
         document.body.style.backgroundColor = color;
     }
 
+    // Settings - layer
     point(x, y, color, settings) {
 
         settings = settings ?? {};

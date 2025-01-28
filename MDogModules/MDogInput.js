@@ -65,22 +65,33 @@ class Mouse {
     constructor(Draw) {
         this.x = 0;
         this.y = 0;
-        this.down = false;
-        this.clicked = false;
+        this.down = [false, false, false];
+        this.clicked = [false, false, false];
         this.onScreen = false;
         this.newStyle = "default";
         this.element = Draw.mainDrawingBoard.element;
 
         this.element.addEventListener("mousemove", e => {
-            this.x = e.offsetX; //Math.floor(e.offsetX/this.scale);
-            this.y = e.offsetY; //Math.floor(e.offsetY/this.scale);
+
+            const canvas =  Draw.mainDrawingBoard.element; // TODO this might be a little scuffed. I'm not sure I should access mainDrawingBoard like this.
+            const rect = canvas.getBoundingClientRect();
+
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const pixelX = Math.floor(x / rect.width * canvas.width);
+            const pixelY = Math.floor(y / rect.height * canvas.height);
+
+            this.x = pixelX;
+            this.y = pixelY;
         });
         this.element.addEventListener("mousedown", e => {
-            this.down = true;
-            this.clicked = true;
+            console.log(e);
+            this.down[e.button] = true;
+            this.clicked[e.button] = true;
         });
         this.element.addEventListener("mouseup", e => {
-            this.down = false;
+            this.down[e.button] = false;
         });
         this.element.addEventListener("mouseout", e => {
             this.onScreen = false;
@@ -90,12 +101,14 @@ class Mouse {
         });
     }
 
-    getDown() {
-        return this.down;
+    // 0 is left, 1 is middle, 2 is right
+    getDown(button) {
+        return this.down[button ?? 0];
     }
 
-    getClick() {
-        return this.clicked;
+    // 0 is left, 1 is middle, 2 is right
+    getClick(button) {
+        return this.clicked[button ?? 0];
     }
 
     getOnScreen() {
@@ -131,8 +144,17 @@ class Mouse {
     }
 
     update() {
-        this.clicked = false;
+        for (let i = 0; i < this.clicked.length; i++) {
+            this.clicked[i] = false;
+        }
         this.style(this.newStyle);
+    }
+
+    // TODO add ability to enable right click menu
+    disableContextMenu() {
+        this.element.addEventListener("contextmenu", e => {
+            e.preventDefault();
+        });
     }
 }
 

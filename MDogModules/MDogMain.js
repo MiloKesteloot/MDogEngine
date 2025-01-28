@@ -16,7 +16,7 @@ class MDog {
         this.Draw = new Draw(128*4, 384); // 384
         this.Input = new Input(this.Draw);
         this.Math = new Maths();
-        this.UI = new UI(this.Draw);
+        this.UI = new UI(this.Input);
         this.FX = new FX();
         this.AssetManager = new AssetManager();
         this.Basics = new Basics(this);

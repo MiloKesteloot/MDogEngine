@@ -4,7 +4,8 @@ import Maths from "./MDogMaths.js";
 const Vector = (new Maths()).Vector;
 
 class Page {
-    constructor() {
+    constructor(Draw) {
+        this.Draw = Draw;
         this.interactables = [];
     }
 
@@ -12,9 +13,15 @@ class Page {
         this.interactables.push(interactable);
     }
 
-    _draw(Draw) {
+    update() {
         for (let i = 0; i < this.interactables.length; i++) {
-            this.interactables[i].draw();
+            this.interactables[i]._update();
+        }
+    }
+
+    draw() {
+        for (let i = 0; i < this.interactables.length; i++) {
+            this.interactables[i]._draw(this.Draw);
         }
     }
 }
@@ -40,6 +47,12 @@ class Interactable {
     setY(y) {
         this.y = y;
     }
+
+    getMouseOver() {
+        return false;
+    }
+
+    _update() {}
 
     _draw(Draw) {}
 }
@@ -107,8 +120,12 @@ class VectorGridInteractable extends RectangleGridInteractable {
 }
 
 class TilemapInteractable extends Interactable {
-    constructor(x, y, tilemap, tileSize, spriteSheet, spriteSheetWidth) {
+    // Settings - scale
+    constructor(x, y, tilemap, tileSize, spriteSheet, spriteSheetWidth, settings) {
         super(x, y);
+
+        settings = settings ?? {};
+        this.scale = settings.scale ?? 1;
 
         this.tileSize = tileSize;
         this.spriteSheet = spriteSheet;
@@ -117,6 +134,9 @@ class TilemapInteractable extends Interactable {
         let rows = tilemap.replaceAll(" ", "").split("\n");
 
         this.height = rows.length;
+        if (rows[rows.length - 1] === "") {
+            this.height--;
+        }
         this.width = rows[0].split(",").length;
 
         this.grid = [];
@@ -138,16 +158,37 @@ class TilemapInteractable extends Interactable {
         }
     }
 
+    getMouseOver() {
+        let mouse = UI.Input.Mouse;
+        return mouse.x >= this.x &&
+            mouse.x < this.x + this.width*this.tileSize*this.scale &&
+            mouse.y >= this.y &&
+            mouse.y < this.y + this.height*this.tileSize*this.scale;
+    }
+
     screenToTile(x, y) {
-        let tx = Math.floor((x-this.x)/this.tileSize);
-        let ty = Math.floor((y-this.y)/this.tileSize);
+        let tx = Math.floor((x-this.x)/this.tileSize/this.scale);
+        let ty = Math.floor((y-this.y)/this.tileSize/this.scale);
         return new Vector(tx, ty);
     }
 
     tileToScreen(x, y) {
-        let sx = this.x + x*this.tileSize;
-        let sy = this.y + y*this.tileSize;
+        let sx = this.x + x*this.tileSize*this.scale;
+        let sy = this.y + y*this.tileSize*this.scale;
         return new Vector(sx, sy);
+    }
+
+    getHoveredOverTile() {
+        let mouse = UI.Input.Mouse;
+        return this.screenToTile(mouse.x, mouse.y);
+    }
+
+    getWidth() {
+        return this.width * this.tileSize * this.scale;
+    }
+
+    getHeight() {
+        return this.height * this.tileSize * this.scale;
     }
 
     _draw(Draw) {
@@ -162,24 +203,21 @@ class TilemapInteractable extends Interactable {
 
                 const x = index % this.spriteSheetWidth;
                 const y = Math.floor(index / this.spriteSheetWidth);
-                const offsetX = x*this.tileSize;
-                const offsetY = y*this.tileSize;
 
                 Draw.image(
                     this.spriteSheet,
-                    this.x + i*this.tileSize,
-                    this.y + j*this.tileSize,
+                    this.x + i*this.tileSize*this.scale,
+                    this.y + j*this.tileSize*this.scale,
                     {
                         width: this.tileSize,
                         height: this.tileSize,
                         offsetX: x*this.tileSize,
                         offsetY: y*this.tileSize,
+                        scale: this.scale,
                     })
             }
         }
     }
-
-
 
     get(x, y) {
         if (x < 0 || y < 0) {
@@ -210,6 +248,8 @@ class UI extends Module {
         super();
         UI.Input = Input;
 
+        this.Page = Page;
+        this.Interactable = Interactable;
         this.RectangleGridInteractable = RectangleGridInteractable;
         this.VectorGridInteractable = VectorGridInteractable;
         this.TilemapInteractable = TilemapInteractable;

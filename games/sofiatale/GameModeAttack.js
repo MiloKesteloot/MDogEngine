@@ -295,8 +295,8 @@ class DeadMode extends Mode {
         }
 
         if (this.timer > this.textTime) {
-            MDog.Draw.textImage("Stay determined!", 512/2, 200, "#ffffff", "fonts/determinationfont.png", {size: 2, alignX: "center"}); // penis
-            MDog.Draw.textImage("Play again?", 512/2, 240, "#ffffff", "fonts/determinationfont.png", {size: 2, alignX: "center"}); // penis
+            MDog.Draw.textImage("Stay determined!", 512/2, 200, "#ffffff", "fonts/determinationfont.png", {size: 2, alignX: "center"});
+            MDog.Draw.textImage("Play again?", 512/2, 240, "#ffffff", "fonts/determinationfont.png", {size: 2, alignX: "center"});
             let options = ["Yes", "No"];
             for (let i = 0; i < options.length; i++) {
                 const text = options[i];
@@ -307,7 +307,7 @@ class DeadMode extends Mode {
                 if (this.selector === i) {
                     MDog.Draw.image("sofiatale/heart.png", x - width / 2 - 20, y + 3);
                 }
-                MDog.Draw.textImage(text, x, y, "#ffffff", "fonts/determinationfont.png", sets); // penis
+                MDog.Draw.textImage(text, x, y, "#ffffff", "fonts/determinationfont.png", sets);
             }
         }
     }
@@ -893,7 +893,7 @@ class FightingMode extends Mode {
             gameModeAttack.battleBox.nextAttack = null;
         }
 
-        // attackToDo = "cheese"; // penis
+        // attackToDo = "cheese";
 
         if (attackToDo === "cup") {
             this.attack = "cup";
