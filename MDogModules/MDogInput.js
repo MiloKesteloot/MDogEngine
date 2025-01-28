@@ -17,6 +17,7 @@ class Keyboard {
     constructor() {
         this.downKeys = [];
         this.clickedKeys = [];
+        this.typedKeys = [];
 
         window.addEventListener("keydown", e => {
 
@@ -32,6 +33,10 @@ class Keyboard {
             const clickedIndex = this.clickedKeys.indexOf(key);
             if (downIndex === -1 && clickedIndex === -1) {
                 this.clickedKeys.push(key);
+            }
+            const typedIndex = this.typedKeys.indexOf(e.key);
+            if (downIndex === -1 && typedIndex === -1) {
+                this.typedKeys.push(e.key);
             }
         });
 
@@ -50,6 +55,7 @@ class Keyboard {
 
     update() {
         this.clickedKeys = []
+        this.typedKeys = []
     }
 
     isDown(key) {
@@ -86,7 +92,6 @@ class Mouse {
             this.y = pixelY;
         });
         this.element.addEventListener("mousedown", e => {
-            console.log(e);
             this.down[e.button] = true;
             this.clicked[e.button] = true;
         });

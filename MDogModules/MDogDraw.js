@@ -499,7 +499,7 @@ class Draw extends Module {
         const height = lines.length * (fontHeight + lineHeight) - lineHeight;
 
         if (!textCanvas) {
-            const alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*'\"><";
+            const alph = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*'\"><_";
 
             const tempDrawingBoard = new DrawingBoard(this,
                 {

@@ -54,7 +54,43 @@ class Interactable {
 
     _update() {}
 
-    _draw(Draw) {}
+    _draw() {}
+}
+
+class TextInteractable extends Interactable {
+    constructor(x, y, text, color, font, textSettings) {
+        super(x, y);
+        this.text = text;
+        this.color = color;
+        this.font = font;
+        this.textSettings = textSettings ?? {};
+    }
+
+    getX() {
+        return this.x;
+    }
+
+    getY() {
+        return this.y;
+    }
+
+    setX(x) {
+        this.x = x;
+    }
+
+    setY(y) {
+        this.y = y;
+    }
+
+    getMouseOver() {
+        return false;
+    }
+
+    _update() {}
+
+    _draw() {
+        UI.Draw.textImage(this.text, this.x, this.y, this.color, this.font, this.textSettings);
+    }
 }
 
 class RectangleGridInteractable extends Interactable {
@@ -77,12 +113,12 @@ class RectangleGridInteractable extends Interactable {
         return new Vector(sx, sy);
     }
 
-    _draw(Draw) {
+    _draw() {
         for (let i = 0; i < this.width; i++) {
             for (let j = 0; j < this.height; j++) {
                 const p00 = this.getPoint(i, j);
 
-                Draw.point(p00.x, p00.y, "#ff0000");
+                UI.Draw.point(p00.x, p00.y, "#ff0000");
             }
         }
     }
@@ -191,7 +227,7 @@ class TilemapInteractable extends Interactable {
         return this.height * this.tileSize * this.scale;
     }
 
-    _draw(Draw) {
+    _draw() {
         for (let i = 0; i < this.width; i++) {
             for (let j = 0; j < this.height; j++) {
 
@@ -204,7 +240,7 @@ class TilemapInteractable extends Interactable {
                 const x = index % this.spriteSheetWidth;
                 const y = Math.floor(index / this.spriteSheetWidth);
 
-                Draw.image(
+                UI.Draw.image(
                     this.spriteSheet,
                     this.x + i*this.tileSize*this.scale,
                     this.y + j*this.tileSize*this.scale,
@@ -242,10 +278,12 @@ class TilemapInteractable extends Interactable {
 
 class UI extends Module {
 
+    static Draw= null;
     static Input = null;
 
-    constructor(Input) {
+    constructor(Draw, Input) {
         super();
+        UI.Draw = Draw;
         UI.Input = Input;
 
         this.Page = Page;
