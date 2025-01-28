@@ -54,11 +54,16 @@ class TextBoxInteractable extends RectangleInteractable {
         let color = "#969696"
         if (this.getMouseOver()) color = "#6c6c6c";
         if (this.focused) color = "#545454";
-        MDog.Draw.rectangleFill(this.x+1, this.y+1, this.width-2, this.height-2, color);
-        MDog.Draw.line(this.x+1, this.y, this.x + this.width - 2, this.y, "#FFFFFF");
-        MDog.Draw.line(this.x+1, this.y+this.height - 1, this.x + this.width - 2, this.y+this.height - 1, "#FFFFFF");
-        MDog.Draw.line(this.x, this.y+1, this.x, this.y+this.height-2, "#FFFFFF");
-        MDog.Draw.line(this.x+this.width-1, this.y+1, this.x+this.width-1, this.y+this.height-2, "#FFFFFF");
+        MDog.Draw.rectangleFill(this.x+2, this.y+2, this.width-4, this.height-4, color);
+
+        MDog.Draw.rectangleFill(this.x + 2, this.y, this.width - 4, 2, "#FFFFFF");
+        MDog.Draw.rectangleFill(this.x + 2, this.y + this.height - 2, this.width - 4, 2, "#FFFFFF");
+
+        MDog.Draw.rectangleFill(this.x, this.y + 2, 2, this.height - 4, "#FFFFFF");
+        MDog.Draw.rectangleFill(this.x + this.width - 2, this.y + 2, 2, this.height - 4, "#FFFFFF");
+
+        // MDog.Draw.rectangleFill(this.x, this.y+1, this.x, this.y+this.height-2, "#FFFFFF");
+        // MDog.Draw.rectangleFill(this.x+this.width-1, this.y+1, this.x+this.width-1, this.y+this.height-2, "#FFFFFF");
         let text = this.text;
         let textColor = "#FFFFFF";
         if (this.focused) {
@@ -82,14 +87,22 @@ class NumberBoxInteractable extends TextBoxInteractable {
         this.min = min;
         this.max = max;
         this.text = defaultValue.toString();
+        this.numberValue = parseInt(this.text);
+    }
+
+    getNumberValue() {
+        return this.numberValue;
     }
 
     _update() {
+        if (!this.focused) {
+            if (this.text === "") this.text = this.min.toString();
+            if (parseInt(this.text) < this.min) this.text = this.min.toString();
+            if (parseInt(this.text) > this.max) this.text = this.max.toString();
+            this.numberValue = parseInt(this.text);
+        }
         super._update();
         this.text = this.text.replace(/[^0-9]/g, '');
-        if (!this.focused && this.text === "") {
-            this.text = this.min.toString();
-        }
     }
 }
 class TilePickerInteractable extends MDog.UI.TilemapInteractable {
@@ -199,13 +212,25 @@ function main() {
         page.addInteractable(tileMap)
         nameTextBox = new TextBoxInteractable(350, 16, 120, "Level Name", "Level Name");
         page.addInteractable(nameTextBox);
-        widthTextBox = new NumberBoxInteractable(350, 50, 55, "Width", 1, 10, 9);
+        widthTextBox = new NumberBoxInteractable(350, 50, 55, "Width", 1, 10, 8);
         page.addInteractable(widthTextBox);
-        heightTextBox = new NumberBoxInteractable(415, 50, 55, "Height", 1, 10, 9);
+        heightTextBox = new NumberBoxInteractable(415, 50, 55, "Height", 1, 10, 8);
         page.addInteractable(heightTextBox);
     }
 
+    // Update phase
     page.update();
+
+    if (!widthTextBox.focused) {
+        tileMap.width = widthTextBox.getNumberValue();
+        tileMap.x = (MDog.Draw.screenHeightInArtPixels / 2 - 16) - tileMap.getWidth() / 2;
+    }
+    if (!heightTextBox.focused) {
+        tileMap.height = heightTextBox.getNumberValue();
+        tileMap.y = MDog.Draw.screenHeightInArtPixels / 2 - tileMap.getHeight() / 2;
+    }
+
+    // Draw phase
     MDog.Draw.clear({color: "#83769C"});
     page.draw();
 }
