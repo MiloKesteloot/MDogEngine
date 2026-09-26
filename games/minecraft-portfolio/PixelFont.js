@@ -1,112 +1,20 @@
-// A small blocky bitmap font, drawn in code so no font files are needed.
-// Every glyph is 8 rows tall: rows 0-6 sit on the baseline and row 7 is for descenders (g, j, p, q, y, and ,).
-// A glyph's width is the length of its rows, and letters are spaced 1 pixel apart.
+// Minecraft's font, read from its font sheet (ascii.png): a 16x16 grid of 8x8 characters in ASCII order.
+// Like Minecraft, each character's width is measured from its pixels, and characters are spaced 1 pixel apart.
+// Row 7 of each character is below the baseline, for descenders (g, j, p, q, y, and ,).
 
-const GLYPH_HEIGHT = 8;
+const CELL_SIZE = 8;
+const SPACE_ADVANCE = 4; // From Minecraft's font/include/space.json
 
-const GLYPHS = {};
+let sheet = null;
+const glyphWidths = new Map(); // char code -> width in pixels
 
-// rows is a space separated list of rows, starting at row `top`. "#" is a filled pixel.
-function glyph(char, top, rows) {
-    const lines = rows.split(" ");
-    const width = lines[0].length;
-    const fullRows = [];
-    for (let i = 0; i < GLYPH_HEIGHT; i++) {
-        fullRows.push(lines[i - top] ?? ".".repeat(width));
-    }
-    GLYPHS[char] = fullRows;
+function glyphCode(char) {
+    const code = char.charCodeAt(0);
+    return glyphWidths.has(code) ? code : "?".charCodeAt(0);
 }
 
-glyph(" ", 0, "...");
-
-glyph("A", 0, ".###. #...# #...# ##### #...# #...# #...#");
-glyph("B", 0, "####. #...# ####. #...# #...# #...# ####.");
-glyph("C", 0, ".###. #...# #.... #.... #.... #...# .###.");
-glyph("D", 0, "####. #...# #...# #...# #...# #...# ####.");
-glyph("E", 0, "##### #.... ###.. #.... #.... #.... #####");
-glyph("F", 0, "##### #.... ###.. #.... #.... #.... #....");
-glyph("G", 0, ".#### #.... #..## #...# #...# #...# .###.");
-glyph("H", 0, "#...# #...# ##### #...# #...# #...# #...#");
-glyph("I", 0, "### .#. .#. .#. .#. .#. ###");
-glyph("J", 0, "....# ....# ....# ....# ....# #...# .###.");
-glyph("K", 0, "#...# #..#. ###.. #..#. #...# #...# #...#");
-glyph("L", 0, "#.... #.... #.... #.... #.... #.... #####");
-glyph("M", 0, "#...# ##.## #.#.# #...# #...# #...# #...#");
-glyph("N", 0, "#...# ##..# #.#.# #..## #...# #...# #...#");
-glyph("O", 0, ".###. #...# #...# #...# #...# #...# .###.");
-glyph("P", 0, "####. #...# ####. #.... #.... #.... #....");
-glyph("Q", 0, ".###. #...# #...# #...# #...# #..#. .##.#");
-glyph("R", 0, "####. #...# ####. #...# #...# #...# #...#");
-glyph("S", 0, ".#### #.... .###. ....# ....# #...# .###.");
-glyph("T", 0, "##### ..#.. ..#.. ..#.. ..#.. ..#.. ..#..");
-glyph("U", 0, "#...# #...# #...# #...# #...# #...# .###.");
-glyph("V", 0, "#...# #...# #...# #...# .#.#. .#.#. ..#..");
-glyph("W", 0, "#...# #...# #...# #...# #.#.# ##.## #...#");
-glyph("X", 0, "#...# .#.#. ..#.. .#.#. #...# #...# #...#");
-glyph("Y", 0, "#...# .#.#. ..#.. ..#.. ..#.. ..#.. ..#..");
-glyph("Z", 0, "##### ....# ...#. ..#.. .#... #.... #####");
-
-glyph("a", 2, ".###. ....# .#### #...# .####");
-glyph("b", 0, "#.... #.... #.##. ##..# #...# #...# ####.");
-glyph("c", 2, ".###. #...# #.... #...# .###.");
-glyph("d", 0, "....# ....# .##.# #..## #...# #...# .####");
-glyph("e", 2, ".###. #...# ##### #.... .####");
-glyph("f", 0, "..## .#.. #### .#.. .#.. .#.. .#..");
-glyph("g", 2, ".#### #...# #...# .#### ....# ####.");
-glyph("h", 0, "#.... #.... #.##. ##..# #...# #...# #...#");
-glyph("i", 0, "# . # # # # #");
-glyph("j", 0, "....# ..... ....# ....# ....# ....# #...# .###.");
-glyph("k", 0, "#... #... #..# #.#. ##.. #.#. #..#");
-glyph("l", 0, "#. #. #. #. #. #. .#");
-glyph("m", 2, "##.#. #.#.# #.#.# #...# #...#");
-glyph("n", 2, "####. #...# #...# #...# #...#");
-glyph("o", 2, ".###. #...# #...# #...# .###.");
-glyph("p", 2, "#.##. ##..# #...# ####. #.... #....");
-glyph("q", 2, ".##.# #..## #...# .#### ....# ....#");
-glyph("r", 2, "#.##. ##..# #.... #.... #....");
-glyph("s", 2, ".#### #.... .###. ....# ####.");
-glyph("t", 1, ".#. ### .#. .#. .#. ..#");
-glyph("u", 2, "#...# #...# #...# #...# .####");
-glyph("v", 2, "#...# #...# #...# .#.#. ..#..");
-glyph("w", 2, "#...# #...# #.#.# #.#.# .####");
-glyph("x", 2, "#...# .#.#. ..#.. .#.#. #...#");
-glyph("y", 2, "#...# #...# #...# .#### ....# ####.");
-glyph("z", 2, "##### ...#. ..#.. .#... #####");
-
-glyph("0", 0, ".###. #...# #..## #.#.# ##..# #...# .###.");
-glyph("1", 0, "..#.. .##.. ..#.. ..#.. ..#.. ..#.. #####");
-glyph("2", 0, ".###. #...# ....# ..##. .#... #...# #####");
-glyph("3", 0, ".###. #...# ....# ..##. ....# #...# .###.");
-glyph("4", 0, "...## ..#.# .#..# #...# ##### ....# ....#");
-glyph("5", 0, "##### #.... ####. ....# ....# #...# .###.");
-glyph("6", 0, "..##. .#... #.... ####. #...# #...# .###.");
-glyph("7", 0, "##### #...# ....# ...#. ..#.. ..#.. ..#..");
-glyph("8", 0, ".###. #...# #...# .###. #...# #...# .###.");
-glyph("9", 0, ".###. #...# #...# .#### ....# ...#. .##..");
-
-glyph(".", 6, "#");
-glyph(",", 6, "# #");
-glyph("!", 0, "# # # # # . #");
-glyph("?", 0, ".###. #...# ....# ...#. ..#.. ..... ..#..");
-glyph(":", 2, "# . . . #");
-glyph(";", 2, "# . . . # #");
-glyph("'", 0, "# #");
-glyph("\"", 0, "#.# #.#");
-glyph("-", 4, "#####");
-glyph("_", 7, "#####");
-glyph("+", 2, "..#.. ..#.. ##### ..#.. ..#..");
-glyph("=", 3, "##### ..... #####");
-glyph("/", 0, "....# ...#. ...#. ..#.. .#... .#... #....");
-glyph("(", 0, "..# .#. #.. #.. #.. .#. ..#");
-glyph(")", 0, "#.. .#. ..# ..# ..# .#. #..");
-glyph("[", 0, "### #.. #.. #.. #.. #.. ###");
-glyph("]", 0, "### ..# ..# ..# ..# ..# ###");
-glyph("<", 0, "...# ..#. .#.. #... .#.. ..#. ...#");
-glyph(">", 0, "#... .#.. ..#. ...# ..#. .#.. #...");
-glyph("%", 0, "#...# #..#. ...#. ..#.. .#... .#..# #...#");
-
-function getGlyph(char) {
-    return GLYPHS[char] ?? GLYPHS["?"];
+function advance(char) {
+    return char === " " ? SPACE_ADVANCE : glyphWidths.get(glyphCode(char)) + 1;
 }
 
 // Minecraft style drop shadow: the same color at a quarter of the brightness. Color must be "#rrggbb".
@@ -118,51 +26,94 @@ function shadowColor(color) {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-function drawGlyphs(ctx, text, x, y, color) {
-    ctx.fillStyle = color;
+function makeCanvas(width, height) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, width);
+    canvas.height = Math.max(1, height);
+    canvas.getContext("2d").imageSmoothingEnabled = false;
+    return canvas;
+}
+
+// The text in one solid color
+function renderColored(text, color) {
+    const canvas = makeCanvas(PixelFont.measure(text), CELL_SIZE);
+    const ctx = canvas.getContext("2d");
+
+    let x = 0;
     for (const char of text) {
-        const rows = getGlyph(char);
-        for (let row = 0; row < rows.length; row++) {
-            for (let column = 0; column < rows[row].length; column++) {
-                if (rows[row][column] === "#") {
-                    ctx.fillRect(x + column, y + row, 1, 1);
-                }
-            }
+        if (char !== " ") {
+            const code = glyphCode(char);
+            ctx.drawImage(sheet, (code % 16) * CELL_SIZE, Math.floor(code / 16) * CELL_SIZE, CELL_SIZE, CELL_SIZE, x, 0, CELL_SIZE, CELL_SIZE);
         }
-        x += rows[0].length + 1;
+        x += advance(char);
     }
+
+    ctx.globalCompositeOperation = "source-in";
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    return canvas;
 }
 
 class PixelFont {
-    static height = GLYPH_HEIGHT;
+    static height = CELL_SIZE;
 
-    static glyphs = GLYPHS;
+    // Must finish before measure() or render() are used
+    static load(path) {
+        return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => {
+                const reader = makeCanvas(image.width, image.height).getContext("2d");
+                reader.drawImage(image, 0, 0);
+                const data = reader.getImageData(0, 0, image.width, image.height).data;
+
+                // Printable ASCII only. Width is the rightmost column with any pixels in it.
+                for (let code = 33; code < 127; code++) {
+                    const cellX = (code % 16) * CELL_SIZE;
+                    const cellY = Math.floor(code / 16) * CELL_SIZE;
+                    let width = 0;
+                    for (let y = 0; y < CELL_SIZE; y++) {
+                        for (let x = 0; x < CELL_SIZE; x++) {
+                            if (data[((cellY + y) * image.width + cellX + x) * 4 + 3] > 0) {
+                                width = Math.max(width, x + 1);
+                            }
+                        }
+                    }
+                    if (width > 0) {
+                        glyphWidths.set(code, width);
+                    }
+                }
+
+                sheet = image;
+                resolve();
+            };
+            image.onerror = () => reject(new Error("Failed to load font " + path));
+            image.src = path;
+        });
+    }
 
     // Width of the text in pixels, not counting the shadow
     static measure(text) {
         let width = 0;
         for (const char of text) {
-            width += getGlyph(char)[0].length + 1;
+            width += advance(char);
         }
         return Math.max(0, width - 1);
     }
 
     // Settings - shadow (default true)
-    // Returns - a canvas with the text drawn on it, which can be drawn with MDog.Draw._rawImage
+    // Returns - a canvas with the text drawn on it
     static render(text, color, settings) {
         settings = settings ?? {};
         const shadow = settings.shadow ?? true;
 
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, PixelFont.measure(text) + (shadow ? 1 : 0));
-        canvas.height = GLYPH_HEIGHT + (shadow ? 1 : 0);
-        const ctx = canvas.getContext("2d");
-
-        if (shadow) {
-            drawGlyphs(ctx, text, 1, 1, shadowColor(color));
+        if (!shadow) {
+            return renderColored(text, color);
         }
-        drawGlyphs(ctx, text, 0, 0, color);
 
+        const canvas = makeCanvas(PixelFont.measure(text) + 1, CELL_SIZE + 1);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(renderColored(text, shadowColor(color)), 1, 1);
+        ctx.drawImage(renderColored(text, color), 0, 0);
         return canvas;
     }
 }

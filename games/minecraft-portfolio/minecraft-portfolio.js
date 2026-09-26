@@ -1,6 +1,9 @@
 import MDog from "../../MDogModules/MDogMain.js"
 import PixelFont from "./PixelFont.js";
-import {makeDirtBackground, makeButton, makeLogo, makeSplash} from "./textures.js";
+import {loadImage, makeDirtBackground, makeButton, makeLogo, makeSplash} from "./textures.js";
+
+// Textures copied from Minecraft (version 26.2). Relative to the page, like the engine's other assets.
+const ASSET_FOLDER = "assets/minecraft-portfolio/";
 
 const TITLE = "MILO KESTELOOT";
 const SPLASHES = [
@@ -19,6 +22,14 @@ const Mouse = MDog.Input.Mouse;
 const screenWidth = Draw.getScreenWidthInArtPixels();
 const screenHeight = Draw.getScreenHeightInArtPixels();
 
+const [dirtImage, stoneImage, buttonImage, buttonHighlightedImage] = await Promise.all([
+    loadImage(ASSET_FOLDER + "dirt.png"),
+    loadImage(ASSET_FOLDER + "stone.png"),
+    loadImage(ASSET_FOLDER + "button.png"),
+    loadImage(ASSET_FOLDER + "button_highlighted.png"),
+    PixelFont.load(ASSET_FOLDER + "ascii.png"),
+]);
+
 // Draws a canvas made in textures.js. Draw.image() only loads files from assets/, so this uses the engine's raw image drawer.
 function drawCanvas(canvas, x, y, scale) {
     Draw._rawImage(canvas, Math.floor(x), Math.floor(y), canvas.width, canvas.height, {scale: scale ?? 1});
@@ -33,8 +44,8 @@ class MenuButton {
         this.onClick = onClick;
         this.hovered = false;
 
-        this.normalImage = makeButton(label, this.width, this.height, "normal");
-        this.hoverImage = makeButton(label, this.width, this.height, "hover");
+        this.normalImage = makeButton(label, this.width, this.height, buttonImage, "#ffffff");
+        this.hoverImage = makeButton(label, this.width, this.height, buttonHighlightedImage, "#ffffff");
     }
 
     update() {
@@ -61,9 +72,9 @@ const buttons = [
     new MenuButton("Minecraft Realms", buttonX, buttonY + 48, 200, () => console.log("Minecraft Realms clicked")),
 ];
 
-const background = makeDirtBackground(screenWidth, screenHeight, 2, 0.4);
+const background = makeDirtBackground(dirtImage, screenWidth, screenHeight, 2, 0.4);
 
-const logo = makeLogo(TITLE, 4, 4);
+const logo = makeLogo(TITLE, 4, 4, stoneImage);
 const logoX = Math.floor((screenWidth - logo.width) / 2);
 const logoY = 30;
 

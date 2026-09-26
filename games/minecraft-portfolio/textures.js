@@ -1,7 +1,7 @@
 import PixelFont from "./PixelFont.js";
 
-// Everything here is generated in code and drawn once into a canvas at startup,
-// so the menu only has to copy finished images each tick.
+// Builds the menu's images from Minecraft's textures (in assets/minecraft-portfolio/).
+// Everything is drawn once into a canvas at startup, so the menu only has to copy finished images each tick.
 
 export function makeCanvas(width, height) {
     const canvas = document.createElement("canvas");
@@ -11,15 +11,13 @@ export function makeCanvas(width, height) {
     return canvas;
 }
 
-// Seeded random so the textures look the same every time the page loads (mulberry32)
-function seededRandom(seed) {
-    return function() {
-        seed = (seed + 0x6D2B79F5) | 0;
-        let t = seed;
-        t = Math.imul(t ^ (t >>> 15), t | 1);
-        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
+export function loadImage(path) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("Failed to load image " + path));
+        image.src = path;
+    });
 }
 
 function rgb(color, brightnessShift) {
@@ -30,50 +28,21 @@ function rgb(color, brightnessShift) {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-// [color, weight]
-const DIRT_PALETTE = [
-    ["#866043", 40],
-    ["#79553a", 25],
-    ["#9b7653", 15],
-    ["#593d29", 12],
-    ["#b9855c", 5],
-    ["#747474", 3],
-];
-
-function makeDirtTile() {
-    const random = seededRandom(1);
-    const totalWeight = DIRT_PALETTE.reduce((sum, entry) => sum + entry[1], 0);
-
-    const tile = makeCanvas(16, 16);
-    const ctx = tile.getContext("2d");
-    for (let y = 0; y < 16; y++) {
-        for (let x = 0; x < 16; x++) {
-            let pick = random() * totalWeight;
-            let color = DIRT_PALETTE[0][0];
-            for (const [paletteColor, weight] of DIRT_PALETTE) {
-                pick -= weight;
-                if (pick < 0) {
-                    color = paletteColor;
-                    break;
-                }
-            }
-            ctx.fillStyle = color;
-            ctx.fillRect(x, y, 1, 1);
-        }
-    }
-    return tile;
+function getPixels(image) {
+    const ctx = makeCanvas(image.width, image.height).getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    return ctx.getImageData(0, 0, image.width, image.height).data;
 }
 
-// Tiled dirt, darkened like Minecraft's menu backgrounds. brightness is 0 to 1.
-export function makeDirtBackground(width, height, tileScale, brightness) {
-    const tile = makeDirtTile();
-    const tileSize = 16 * tileScale;
+// Tiled dirt blocks, darkened like Minecraft's menu backgrounds. brightness is 0 to 1.
+export function makeDirtBackground(dirtImage, width, height, tileScale, brightness) {
+    const tileSize = dirtImage.width * tileScale;
 
     const canvas = makeCanvas(width, height);
     const ctx = canvas.getContext("2d");
     for (let y = 0; y < height; y += tileSize) {
         for (let x = 0; x < width; x += tileSize) {
-            ctx.drawImage(tile, x, y, tileSize, tileSize);
+            ctx.drawImage(dirtImage, x, y, tileSize, tileSize);
         }
     }
     ctx.fillStyle = `rgba(0, 0, 0, ${1 - brightness})`;
@@ -81,38 +50,49 @@ export function makeDirtBackground(width, height, tileScale, brightness) {
     return canvas;
 }
 
-const BUTTON_STYLES = {
-    normal:   {base: [111, 111, 111], light: [170, 170, 170], dark: [86, 86, 86],  text: "#e0e0e0"},
-    hover:    {base: [126, 136, 191], light: [188, 196, 248], dark: [87, 95, 137], text: "#ffffa0"},
-    disabled: {base: [44, 44, 44],    light: [58, 58, 58],    dark: [36, 36, 36],  text: "#a0a0a0"},
-};
+// Repeats part of an image to fill an area, cutting off the last copy if it doesn't fit
+function tileRegion(ctx, image, sx, sy, sw, sh, dx, dy, dw, dh) {
+    for (let y = 0; y < dh; y += sh) {
+        for (let x = 0; x < dw; x += sw) {
+            const w = Math.min(sw, dw - x);
+            const h = Math.min(sh, dh - y);
+            ctx.drawImage(image, sx, sy, w, h, dx + x, dy + y, w, h);
+        }
+    }
+}
 
-// state is "normal", "hover", or "disabled"
-export function makeButton(label, width, height, state) {
-    const style = BUTTON_STYLES[state];
-    const random = seededRandom(7); // Same seed for every state, so hovering only changes the color
+// Minecraft's "nine slice" scaling: corners stay the same, edges and middle repeat to fill the new size
+function drawNineSlice(ctx, image, border, width, height) {
+    const b = border;
+    const innerSourceWidth = image.width - b * 2;
+    const innerSourceHeight = image.height - b * 2;
+    const innerWidth = width - b * 2;
+    const innerHeight = height - b * 2;
 
+    // Corners
+    ctx.drawImage(image, 0, 0, b, b, 0, 0, b, b);
+    ctx.drawImage(image, image.width - b, 0, b, b, width - b, 0, b, b);
+    ctx.drawImage(image, 0, image.height - b, b, b, 0, height - b, b, b);
+    ctx.drawImage(image, image.width - b, image.height - b, b, b, width - b, height - b, b, b);
+
+    // Edges
+    tileRegion(ctx, image, b, 0, innerSourceWidth, b, b, 0, innerWidth, b);
+    tileRegion(ctx, image, b, image.height - b, innerSourceWidth, b, b, height - b, innerWidth, b);
+    tileRegion(ctx, image, 0, b, b, innerSourceHeight, 0, b, b, innerHeight);
+    tileRegion(ctx, image, image.width - b, b, b, innerSourceHeight, width - b, b, b, innerHeight);
+
+    // Middle
+    tileRegion(ctx, image, b, b, innerSourceWidth, innerSourceHeight, b, b, innerWidth, innerHeight);
+}
+
+// sprite is one of Minecraft's button textures (button.png, button_highlighted.png, button_disabled.png)
+export function makeButton(label, width, height, sprite, textColor) {
     const canvas = makeCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const noise = (random() - 0.5) * 12;
+    drawNineSlice(ctx, sprite, 3, width, height); // Border of 3 is from the sprite's .mcmeta file
 
-            if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
-                ctx.fillStyle = "#000000";
-            } else if (x === 1 || y === 1) {
-                ctx.fillStyle = rgb(style.light, noise / 2);
-            } else if (x === width - 2 || y >= height - 3) {
-                ctx.fillStyle = rgb(style.dark, noise / 2);
-            } else {
-                ctx.fillStyle = rgb(style.base, noise);
-            }
-            ctx.fillRect(x, y, 1, 1);
-        }
-    }
-
-    const text = PixelFont.render(label, style.text);
+    const text = PixelFont.render(label, textColor);
     const textX = Math.floor((width - PixelFont.measure(label)) / 2);
     const textY = Math.floor((height - PixelFont.height) / 2);
     ctx.drawImage(text, textX, textY);
@@ -120,12 +100,15 @@ export function makeButton(label, width, height, state) {
     return canvas;
 }
 
-// Big blocky stone letters with a 3D side and a black outline, in the style of the Minecraft logo.
+// Big blocky letters with a stone face, a 3D side, and a black outline, in the style of the Minecraft logo.
 // blockSize is how many pixels each font pixel becomes, depth is how far the 3D side sticks out.
-export function makeLogo(text, blockSize, depth) {
+export function makeLogo(text, blockSize, depth, stoneImage) {
     const mask = PixelFont.render(text, "#ffffff", {shadow: false});
     const maskData = mask.getContext("2d").getImageData(0, 0, mask.width, mask.height).data;
     const isOn = (x, y) => x >= 0 && y >= 0 && x < mask.width && y < mask.height && maskData[(y * mask.width + x) * 4 + 3] > 0;
+
+    const stone = getPixels(stoneImage);
+    const stoneShade = (x, y) => stone[((y % stoneImage.height) * stoneImage.width + (x % stoneImage.width)) * 4];
 
     // Skip empty descender rows so the logo is not padded at the bottom
     let rowCount = 0;
@@ -138,7 +121,6 @@ export function makeLogo(text, blockSize, depth) {
     const padding = 1; // Room for the outline
     const canvas = makeCanvas(mask.width * blockSize + depth + padding * 2, rowCount * blockSize + depth + padding * 2);
     const ctx = canvas.getContext("2d");
-    const random = seededRandom(3);
 
     // 3D side: stacked copies moving down and right, darker the further back they are
     for (let d = depth; d >= 1; d--) {
@@ -153,19 +135,22 @@ export function makeLogo(text, blockSize, depth) {
         }
     }
 
-    // Front face: noisy stone with lighter top/left edges and darker bottom/right edges
+    // Front face: stone texture, with lighter top/left edges and darker bottom/right edges
     for (let y = 0; y < rowCount; y++) {
         for (let x = 0; x < mask.width; x++) {
             if (!isOn(x, y)) continue;
             for (let j = 0; j < blockSize; j++) {
                 for (let i = 0; i < blockSize; i++) {
-                    let shade = 150 + (random() - 0.5) * 36;
-                    if (j === 0 && !isOn(x, y - 1)) shade = 215;
-                    else if (i === 0 && !isOn(x - 1, y)) shade = 190;
-                    else if (j === blockSize - 1 && !isOn(x, y + 1)) shade = 115;
-                    else if (i === blockSize - 1 && !isOn(x + 1, y)) shade = 125;
-                    ctx.fillStyle = rgb([shade, shade, shade]);
-                    ctx.fillRect(padding + x * blockSize + i, padding + y * blockSize + j, 1, 1);
+                    const pixelX = x * blockSize + i;
+                    const pixelY = y * blockSize + j;
+                    let shift = 20;
+                    if (j === 0 && !isOn(x, y - 1)) shift = 80;
+                    else if (i === 0 && !isOn(x - 1, y)) shift = 55;
+                    else if (j === blockSize - 1 && !isOn(x, y + 1)) shift = -20;
+                    else if (i === blockSize - 1 && !isOn(x + 1, y)) shift = -10;
+                    const shade = stoneShade(pixelX, pixelY);
+                    ctx.fillStyle = rgb([shade, shade, shade], shift);
+                    ctx.fillRect(padding + pixelX, padding + pixelY, 1, 1);
                 }
             }
         }
