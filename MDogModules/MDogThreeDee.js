@@ -19,7 +19,6 @@ class ThreeDee extends Module {
 class ThreeDeeScene {
 
     camera;
-
     objects;
 
     constructor(camera) {

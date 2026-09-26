@@ -45,7 +45,7 @@ class Coin {
     }
 
     draw() {
-        MDog.Draw.animation(this.animation,this.getX(), this.getY());
+        MDog.Draw.animation(this.animation, this.getX(), this.getY());
     }
 
     pickup() {

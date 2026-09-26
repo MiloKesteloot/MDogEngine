@@ -6,7 +6,7 @@ function urlSetup() {
 
     const games = ["hard-to-convey-level-editor", "snack-man", "wavefunctioncollapse", "joust", "sofiatale", "side", "publicfaith", "cards", "glory"];
 
-    if (playingValue == null || !games.includes(playingValue)) {
+    if (playingValue == null) { //  || !games.includes(playingValue)
         document.body.innerHTML += "<h1>No game cart inserted.<br>Please put '?game=gamename' after the url.</h1>"
 
         games.forEach(game => {
