@@ -1,4 +1,4 @@
-import MDog from "/MDogEngine/MDogModules/MDogMain.js"
+import MDog from "../../MDogModules/MDogMain.js"
 
 function update() {
     MDog.Draw.clear({color: "blue"});

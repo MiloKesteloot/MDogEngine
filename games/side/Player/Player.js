@@ -1,6 +1,6 @@
-import Maths from "/MDogModules/MDogMaths.js";
+import Maths from "../../../MDogModules/MDogMaths.js";
 
-import SquareKickbox from "/MDogModules/MDogBasics/Kickbox/SquareKickbox.js";
+import SquareKickbox from "../../../MDogModules/MDogBasics/Kickbox/SquareKickbox.js";
 
 import FallState from "./States/FallState.js";
 import JumpState from "./States/JumpState.js";

@@ -1,4 +1,4 @@
-import MDog from "/MDogEngine/MDogModules/MDogMain.js"
+import MDog from "../../MDogModules/MDogMain.js"
 
 class TileOption {
     constructor(url, up, right, down, left) {

@@ -1,4 +1,4 @@
-import Kickbox from "/MDogEngine/MDogModules/MDogBasics/Kickbox/Kickbox.js";
+import Kickbox from "./Kickbox.js";
 
 class SquareKickbox extends Kickbox {
     constructor(vector, x1, y1, x2, y2) {

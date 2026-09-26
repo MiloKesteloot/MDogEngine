@@ -1,12 +1,12 @@
-import Module from "/MDogEngine/MDogModules/MDogModule.js"; // TODO Why do I need this here for this to work?
-import Draw from "/MDogEngine/MDogModules/MDogDraw.js";
-import Maths from "/MDogEngine/MDogModules/MDogMaths.js";
-import Input from "/MDogEngine/MDogModules/MDogInput.js";
-import UI from "/MDogEngine/MDogModules/MDogUI.js";
-import FX from "/MDogEngine/MDogModules/MDogFX.js";
-import AssetManager from "/MDogEngine/MDogModules/MDogAssetManager.js";
-import Basics from "/MDogEngine/MDogModules/MDogBasics.js";
-import ThreeDee from "/MDogEngine/MDogModules/MDogThreeDee.js";
+import Module from "./MDogModule.js"; // TODO Why do I need this here for this to work?
+import Draw from "./MDogDraw.js";
+import Maths from "./MDogMaths.js";
+import Input from "./MDogInput.js";
+import UI from "./MDogUI.js";
+import FX from "./MDogFX.js";
+import AssetManager from "./MDogAssetManager.js";
+import Basics from "./MDogBasics.js";
+import ThreeDee from "./MDogThreeDee.js";
 
 class MDog {
     constructor() {

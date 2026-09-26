@@ -1,4 +1,4 @@
-import MDog from "/MDogEngine/MDogModules/MDogMain.js"
+import MDog from "../../MDogModules/MDogMain.js"
 const Vector = MDog.Math.Vector;
 
 const keys = {

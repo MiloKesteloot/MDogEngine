@@ -1,4 +1,4 @@
-import MDog from "/MDogEngine/MDogModules/MDogMain.js"
+import MDog from "../../MDogModules/MDogMain.js"
 
 class RectangleInteractable extends MDog.UI.Interactable {
     constructor(x, y, width, height) {
