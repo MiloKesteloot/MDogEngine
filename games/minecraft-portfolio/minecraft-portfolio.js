@@ -1,5 +1,6 @@
 import MDog from "../../MDogModules/MDogMain.js"
 import PixelFont from "./PixelFont.js";
+import Panorama from "./Panorama.js";
 import {loadImage, makeDirtBackground, makeButton, makeLogo, makeSplash} from "./textures.js";
 
 // Textures copied from Minecraft (version 26.2). Relative to the page, like the engine's other assets.
@@ -15,6 +16,7 @@ const SPLASHES = [
 ];
 const BOTTOM_LEFT_TEXT = "MDog Engine";
 const BOTTOM_RIGHT_TEXT = "Milo Kesteloot " + new Date().getFullYear();
+const PANORAMA_DEGREES_PER_SECOND = 2; // Minecraft's speed, about 3 minutes per full turn
 
 const Draw = MDog.Draw;
 const Mouse = MDog.Input.Mouse;
@@ -22,13 +24,15 @@ const Mouse = MDog.Input.Mouse;
 const screenWidth = Draw.getScreenWidthInArtPixels();
 const screenHeight = Draw.getScreenHeightInArtPixels();
 
-const [dirtImage, stoneImage, buttonImage, buttonHighlightedImage] = await Promise.all([
+const [dirtImage, stoneImage, buttonImage, buttonHighlightedImage, ...panoramaFaces] = await Promise.all([
     loadImage(ASSET_FOLDER + "dirt.png"),
     loadImage(ASSET_FOLDER + "stone.png"),
     loadImage(ASSET_FOLDER + "button.png"),
     loadImage(ASSET_FOLDER + "button_highlighted.png"),
-    PixelFont.load(ASSET_FOLDER + "ascii.png"),
+    ...[0, 1, 2, 3, 4, 5].map(i => loadImage(ASSET_FOLDER + "panorama_" + i + ".png")),
+    PixelFont.load(ASSET_FOLDER + "ascii.png"), // Last, so it doesn't end up in panoramaFaces
 ]);
+panoramaFaces.pop(); // PixelFont.load's result
 
 // Draws a canvas made in textures.js. Draw.image() only loads files from assets/, so this uses the engine's raw image drawer.
 function drawCanvas(canvas, x, y, scale) {
@@ -72,7 +76,15 @@ const buttons = [
     new MenuButton("Minecraft Realms", buttonX, buttonY + 48, 200, () => console.log("Minecraft Realms clicked")),
 ];
 
-const background = makeDirtBackground(dirtImage, screenWidth, screenHeight, 2, 0.4);
+// The spinning panorama, or tiled dirt if the browser can't do WebGL
+let panorama = null;
+let dirtBackground = null;
+try {
+    panorama = new Panorama(screenWidth, screenHeight, panoramaFaces);
+} catch (error) {
+    console.warn("Using the dirt background instead of the panorama:", error);
+    dirtBackground = makeDirtBackground(dirtImage, screenWidth, screenHeight, 2, 0.4);
+}
 
 const logo = makeLogo(TITLE, 4, 4, stoneImage);
 const logoX = Math.floor((screenWidth - logo.width) / 2);
@@ -93,7 +105,12 @@ function update() {
     }
     Mouse.requestStyle(anyHovered ? "pointer" : "default");
 
-    drawCanvas(background, 0, 0);
+    if (panorama) {
+        panorama.render(performance.now() / 1000 * PANORAMA_DEGREES_PER_SECOND);
+        drawCanvas(panorama.image, 0, 0);
+    } else {
+        drawCanvas(dirtBackground, 0, 0);
+    }
     drawCanvas(logo, logoX, logoY);
 
     // Pulses twice a second, like Minecraft's splash text
