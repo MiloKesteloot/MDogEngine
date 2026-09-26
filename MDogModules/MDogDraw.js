@@ -152,9 +152,25 @@ class DrawingBoard {
                 this.element.style.width = document.body.offsetWidth + "px";
                 this.element.style.height = (document.body.offsetWidth / aspectOfGame) + "px";
             }
+            this.element.style.position = "";
+            this.element.style.left = "";
+            this.element.style.top = "";
         } else {
-            this.element.style.width = pixelSize * this.element.width + "px";
-            this.element.style.height = pixelSize * this.element.height + "px";
+            // Everything is worked out in device pixels, then converted back to CSS pixels.
+            // The canvas is centered by hand instead of with CSS, because CSS centering can put its corner
+            // between two screen pixels, which also makes pixels uneven.
+            const devicePixelRatio = window.devicePixelRatio || 1;
+            const viewport = Draw._getViewportSizeInDevicePixels();
+            const deviceWidth = pixelSize * this.element.width;
+            const deviceHeight = pixelSize * this.element.height;
+            const deviceLeft = Math.max(0, Math.floor((viewport.width - deviceWidth) / 2));
+            const deviceTop = Math.max(0, Math.floor((viewport.height - deviceHeight) / 2));
+
+            this.element.style.position = "fixed";
+            this.element.style.left = deviceLeft / devicePixelRatio + "px";
+            this.element.style.top = deviceTop / devicePixelRatio + "px";
+            this.element.style.width = deviceWidth / devicePixelRatio + "px";
+            this.element.style.height = deviceHeight / devicePixelRatio + "px";
         }
     }
 }
@@ -178,6 +194,16 @@ class Draw extends Module {
         this.mainDrawingBoard.ctx.fillStyle = "#000000";
         this.mainDrawingBoard.ctx.fillRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
         document.body.appendChild(this.mainDrawingBoard.element);
+
+        // Zooming or moving the window to a monitor with different scaling changes devicePixelRatio,
+        // which doesn't always fire a resize event
+        const watchPixelRatio = () => {
+            matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener("change", () => {
+                mainDrawingBoard._calculateSize(draw);
+                watchPixelRatio();
+            }, {once: true});
+        };
+        watchPixelRatio();
 
         this.setBackgroundColor("#000000");
 
@@ -215,15 +241,27 @@ class Draw extends Module {
         drawingBoard.offset.setY(y);
     }
 
+    // Measured in device pixels (real screen pixels), not CSS pixels. With display scaling or browser zoom
+    // (devicePixelRatio of 1.25, 1.5, ...) a whole number of CSS pixels is not a whole number of screen pixels,
+    // which makes art pixels come out as uneven sizes.
     _getPixelWidth() {
-        return this._getPixelDimension(window.innerWidth, this.screenWidthInArtPixels);
+        return this._getPixelDimension(this._getViewportSizeInDevicePixels().width, this.screenWidthInArtPixels);
     }
     _getPixelHeight() {
-        return this._getPixelDimension(window.innerHeight, this.screenHeightInArtPixels);
+        return this._getPixelDimension(this._getViewportSizeInDevicePixels().height, this.screenHeightInArtPixels);
+    }
+
+    // visualViewport is used because innerWidth/innerHeight are rounded, and can be bigger than the real window.
+    _getViewportSizeInDevicePixels() {
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        const viewport = window.visualViewport;
+        const width = viewport ? viewport.width * viewport.scale : window.innerWidth;
+        const height = viewport ? viewport.height * viewport.scale : window.innerHeight;
+        return {width: width * devicePixelRatio, height: height * devicePixelRatio};
     }
 
     _getPixelDimension(innerDimension, artDimensionInPixels) {
-        let pixelDimension = Math.floor(innerDimension/artDimensionInPixels);
+        let pixelDimension = Math.floor((innerDimension + 0.01)/artDimensionInPixels); // + 0.01 so float error like 767.9999 still counts as 768
         if (pixelDimension <= 0) {
             pixelDimension = 1;
         }
