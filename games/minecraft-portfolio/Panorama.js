@@ -1,6 +1,6 @@
 // Minecraft's spinning title screen background: 6 pictures on the inside of a cube,
 // with the camera in the middle slowly turning around.
-// Rendered with WebGL into a canvas at the game's resolution, then drawn like any other image.
+// It's its own full window WebGL canvas at the screen's real resolution, meant to sit behind the game's canvas.
 
 const VERTEX_SHADER = `
 attribute vec2 position;
@@ -47,27 +47,27 @@ function compileShader(gl, type, source) {
 
 class Panorama {
     // faces - the 6 images panorama_0 to panorama_5: front, right, back, left, top, bottom
-    // Settings - fov (vertical field of view in degrees, default 85 like Minecraft), pitch (degrees looking down, default 10)
+    // Settings - fov (vertical field of view in degrees, default 85 like Minecraft),
+    //            pitch (degrees looking down, default 10), degreesPerSecond (turning speed, default 2 like Minecraft)
+    // Add this.element to the page before the game's canvas so it's behind it.
     // Throws if the browser doesn't support WebGL
-    constructor(width, height, faces, settings) {
+    constructor(faces, settings) {
         settings = settings ?? {};
-        const fov = settings.fov ?? 85;
-        this.pitch = (settings.pitch ?? 10) * Math.PI / 180;
+        this.fov = settings.fov ?? 85;
+        this.degreesPerSecond = settings.degreesPerSecond ?? 2;
 
-        this.glCanvas = document.createElement("canvas");
-        this.glCanvas.width = width;
-        this.glCanvas.height = height;
-        const gl = this.glCanvas.getContext("webgl");
+        this.element = document.createElement("canvas");
+        this.element.style.position = "fixed";
+        this.element.style.left = "0";
+        this.element.style.top = "0";
+        this.element.style.width = "100%";
+        this.element.style.height = "100%";
+
+        const gl = this.element.getContext("webgl");
         if (!gl) {
             throw new Error("WebGL is not supported");
         }
         this.gl = gl;
-
-        // The finished frame gets copied here, because copying out of a WebGL canvas is slow and the engine draws the background every tick
-        this.image = document.createElement("canvas");
-        this.image.width = width;
-        this.image.height = height;
-        this.imageCtx = this.image.getContext("2d");
 
         const program = gl.createProgram();
         gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER));
@@ -99,40 +99,45 @@ class Panorama {
         for (let i = 0; i < 6; i++) {
             gl.texImage2D(targets[i], 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, faces[i]);
         }
-        gl.generateMipmap(gl.TEXTURE_CUBE_MAP); // The pictures are bigger than the screen, so this keeps them from shimmering
+        gl.generateMipmap(gl.TEXTURE_CUBE_MAP); // Keeps the pictures from shimmering on small windows
         gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
         gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-        const halfHeight = Math.tan(fov / 2 * Math.PI / 180);
-        gl.uniform2f(gl.getUniformLocation(program, "viewSize"), halfHeight * width / height, halfHeight);
+        this.viewSizeLocation = gl.getUniformLocation(program, "viewSize");
         this.yawLocation = gl.getUniformLocation(program, "yaw");
-        gl.uniform1f(gl.getUniformLocation(program, "pitch"), this.pitch);
+        gl.uniform1f(gl.getUniformLocation(program, "pitch"), (settings.pitch ?? 10) * Math.PI / 180);
 
-        gl.viewport(0, 0, width, height);
-
-        // The engine ticks many times per frame, but the panorama only needs rendering once per frame
-        this.newFrame = true;
         const onFrame = () => {
-            this.newFrame = true;
+            this._render();
             requestAnimationFrame(onFrame);
         };
         requestAnimationFrame(onFrame);
     }
 
-    // Updates this.image, at most once per animation frame. yawDegrees is how far the camera has turned right.
-    render(yawDegrees) {
-        if (!this.newFrame) {
+    // Matches the canvas to the window in real screen pixels, so it's never blurry or pixelated.
+    // Checked every frame, which also catches zooming and moving to a monitor with different scaling.
+    _resizeIfNeeded() {
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        const width = Math.max(1, Math.round(this.element.clientWidth * devicePixelRatio));
+        const height = Math.max(1, Math.round(this.element.clientHeight * devicePixelRatio));
+        if (width === this.element.width && height === this.element.height) {
             return;
         }
-        this.newFrame = false;
+        this.element.width = width;
+        this.element.height = height;
+        this.gl.viewport(0, 0, width, height);
 
-        const gl = this.gl;
-        gl.uniform1f(this.yawLocation, yawDegrees * Math.PI / 180);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        const halfHeight = Math.tan(this.fov / 2 * Math.PI / 180);
+        this.gl.uniform2f(this.viewSizeLocation, halfHeight * width / height, halfHeight);
+    }
 
-        this.imageCtx.drawImage(this.glCanvas, 0, 0);
+    _render() {
+        this._resizeIfNeeded();
+        const yaw = performance.now() / 1000 * this.degreesPerSecond;
+        this.gl.uniform1f(this.yawLocation, yaw * Math.PI / 180);
+        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
     }
 }
 

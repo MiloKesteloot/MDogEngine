@@ -326,6 +326,7 @@ class Draw extends Module {
     }
 
     // Settings - color, layer
+    // Color can be "transparent" (or partly transparent) to see what's behind the canvas on the page
     clear(settings) {
         settings = settings ?? {};
         const color = settings.color ?? "#000000";
@@ -337,6 +338,7 @@ class Draw extends Module {
                 const drawingBoard = drawingBoardIndex[1];
                 drawingBoard.ctx.clearRect(-drawingBoard.offset.getX(), -drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
             }
+            this.mainDrawingBoard.ctx.clearRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
             this.mainDrawingBoard.ctx.fillStyle = color;
             this.mainDrawingBoard.ctx.fillRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
             return;

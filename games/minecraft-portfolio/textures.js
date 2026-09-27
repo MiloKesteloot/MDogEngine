@@ -175,25 +175,3 @@ export function makeLogo(text, blockSize, depth, stoneImage) {
 
     return canvas;
 }
-
-// Yellow tilted splash text. Drawn at 2x, then rotated with smoothing so the tilted letters stay readable.
-// Like Minecraft, long splashes are shrunk, here so they are at most maxWidth pixels wide before rotating.
-export function makeSplash(text, color, angleDegrees, maxWidth) {
-    const scale = 2;
-    const small = PixelFont.render(text, color);
-    const big = makeCanvas(small.width * scale, small.height * scale);
-    big.getContext("2d").drawImage(small, 0, 0, big.width, big.height);
-
-    const fit = Math.min(1, maxWidth / big.width);
-    const width = big.width * fit;
-    const height = big.height * fit;
-
-    const size = Math.ceil(Math.hypot(width, height)) + 2;
-    const canvas = makeCanvas(size, size);
-    const ctx = canvas.getContext("2d");
-    ctx.imageSmoothingEnabled = true;
-    ctx.translate(size / 2, size / 2);
-    ctx.rotate(angleDegrees * Math.PI / 180);
-    ctx.drawImage(big, -width / 2, -height / 2, width, height);
-    return canvas;
-}
