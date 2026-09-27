@@ -20,20 +20,6 @@ export function loadImage(path) {
     });
 }
 
-function rgb(color, brightnessShift) {
-    const shift = brightnessShift ?? 0;
-    const r = Math.max(0, Math.min(255, Math.round(color[0] + shift)));
-    const g = Math.max(0, Math.min(255, Math.round(color[1] + shift)));
-    const b = Math.max(0, Math.min(255, Math.round(color[2] + shift)));
-    return `rgb(${r}, ${g}, ${b})`;
-}
-
-function getPixels(image) {
-    const ctx = makeCanvas(image.width, image.height).getContext("2d");
-    ctx.drawImage(image, 0, 0);
-    return ctx.getImageData(0, 0, image.width, image.height).data;
-}
-
 // Tiled dirt blocks, darkened like Minecraft's menu backgrounds. brightness is 0 to 1.
 export function makeDirtBackground(dirtImage, width, height, tileScale, brightness) {
     const tileSize = dirtImage.width * tileScale;
@@ -96,82 +82,6 @@ export function makeButton(label, width, height, sprite, textColor) {
     const textX = Math.floor((width - PixelFont.measure(label)) / 2);
     const textY = Math.floor((height - PixelFont.height) / 2);
     ctx.drawImage(text, textX, textY);
-
-    return canvas;
-}
-
-// Big blocky letters with a stone face, a 3D side, and a black outline, in the style of the Minecraft logo.
-// blockSize is how many pixels each font pixel becomes, depth is how far the 3D side sticks out.
-export function makeLogo(text, blockSize, depth, stoneImage) {
-    const mask = PixelFont.render(text, "#ffffff", {shadow: false});
-    const maskData = mask.getContext("2d").getImageData(0, 0, mask.width, mask.height).data;
-    const isOn = (x, y) => x >= 0 && y >= 0 && x < mask.width && y < mask.height && maskData[(y * mask.width + x) * 4 + 3] > 0;
-
-    const stone = getPixels(stoneImage);
-    const stoneShade = (x, y) => stone[((y % stoneImage.height) * stoneImage.width + (x % stoneImage.width)) * 4];
-
-    // Skip empty descender rows so the logo is not padded at the bottom
-    let rowCount = 0;
-    for (let y = 0; y < mask.height; y++) {
-        for (let x = 0; x < mask.width; x++) {
-            if (isOn(x, y)) rowCount = y + 1;
-        }
-    }
-
-    const padding = 1; // Room for the outline
-    const canvas = makeCanvas(mask.width * blockSize + depth + padding * 2, rowCount * blockSize + depth + padding * 2);
-    const ctx = canvas.getContext("2d");
-
-    // 3D side: stacked copies moving down and right, darker the further back they are
-    for (let d = depth; d >= 1; d--) {
-        const shade = 40 + Math.round(40 * (1 - d / depth));
-        ctx.fillStyle = rgb([shade, shade, shade]);
-        for (let y = 0; y < rowCount; y++) {
-            for (let x = 0; x < mask.width; x++) {
-                if (isOn(x, y)) {
-                    ctx.fillRect(padding + x * blockSize + d, padding + y * blockSize + d, blockSize, blockSize);
-                }
-            }
-        }
-    }
-
-    // Front face: stone texture, with lighter top/left edges and darker bottom/right edges
-    for (let y = 0; y < rowCount; y++) {
-        for (let x = 0; x < mask.width; x++) {
-            if (!isOn(x, y)) continue;
-            for (let j = 0; j < blockSize; j++) {
-                for (let i = 0; i < blockSize; i++) {
-                    const pixelX = x * blockSize + i;
-                    const pixelY = y * blockSize + j;
-                    let shift = 20;
-                    if (j === 0 && !isOn(x, y - 1)) shift = 80;
-                    else if (i === 0 && !isOn(x - 1, y)) shift = 55;
-                    else if (j === blockSize - 1 && !isOn(x, y + 1)) shift = -20;
-                    else if (i === blockSize - 1 && !isOn(x + 1, y)) shift = -10;
-                    const shade = stoneShade(pixelX, pixelY);
-                    ctx.fillStyle = rgb([shade, shade, shade], shift);
-                    ctx.fillRect(padding + pixelX, padding + pixelY, 1, 1);
-                }
-            }
-        }
-    }
-
-    // Black outline around everything
-    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = image.data;
-    const isFilled = (x, y) => x >= 0 && y >= 0 && x < canvas.width && y < canvas.height && data[(y * canvas.width + x) * 4 + 3] === 255;
-    const outline = [];
-    for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-            if (!isFilled(x, y) && (isFilled(x - 1, y) || isFilled(x + 1, y) || isFilled(x, y - 1) || isFilled(x, y + 1))) {
-                outline.push([x, y]);
-            }
-        }
-    }
-    ctx.fillStyle = "#000000";
-    for (const [x, y] of outline) {
-        ctx.fillRect(x, y, 1, 1);
-    }
 
     return canvas;
 }

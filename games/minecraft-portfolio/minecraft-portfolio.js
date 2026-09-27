@@ -2,62 +2,52 @@ import MDog from "../../MDogModules/MDogMain.js"
 import PixelFont from "./PixelFont.js";
 import Panorama from "./Panorama.js";
 import SplashText from "./SplashText.js";
-import {loadImage, makeDirtBackground, makeButton, makeLogo} from "./textures.js";
+import {loadImage, makeDirtBackground, makeButton} from "./textures.js";
 
 // Textures copied from Minecraft (version 26.2). Relative to the page, like the engine's other assets.
 const ASSET_FOLDER = "assets/minecraft-portfolio/";
 
 // Title screen panoramas from different Minecraft versions, in assets/minecraft-portfolio/panoramas/<version>/.
 // One is picked at random each time the page loads. Add "&panorama=1.20.6" to the URL to pick one.
+// Press "i" on the page to see which one is showing, then the left and right arrow keys to flip through them.
 const PANORAMAS = [
-    "1.12.2",  // The classic one
-    "1.13.2",  // Update Aquatic
-    "1.14.4",  // Village & Pillage
-    "1.15.2",  // Buzzy Bees
-    "1.16.5",  // Nether Update
-    "1.17.1",  // Caves & Cliffs part 1
-    "1.18.2",  // Caves & Cliffs part 2
-    "1.19.4",  // The Wild Update
-    "1.20.6",  // Trails & Tales, cherry blossoms
-    "1.21.3",  // Tricky Trials
-    "1.21.4",  // The Garden Awakens
-    "1.21.5",  // Spring to Life
-    "1.21.8",  // Chase the Skies
-    "1.21.10", // The Copper Age
-    "1.21.11",
-    "26.1.2",  // Cherry blossoms
-    "26.2",
-    "26.3",
+    {version: "1.13.2", name: "Update Aquatic"},
+    {version: "1.16.5", name: "Nether Update"},
+    {version: "1.17.1", name: "Caves & Cliffs part 1"},
+    {version: "1.19.4", name: "The Wild Update"},
+    {version: "1.20.6", name: "Trails & Tales, cherry blossoms"},
+    {version: "26.1.2", name: "Cherry blossoms"},
 ];
 const requestedPanorama = new URLSearchParams(window.location.search).get("panorama");
-const panoramaVersion = PANORAMAS.includes(requestedPanorama) ? requestedPanorama : PANORAMAS[Math.floor(Math.random() * PANORAMAS.length)];
+const requestedIndex = PANORAMAS.findIndex(panorama => panorama.version === requestedPanorama);
+let panoramaIndex = requestedIndex !== -1 ? requestedIndex : Math.floor(Math.random() * PANORAMAS.length);
 
-const TITLE = "MILO KESTELOOT";
+function loadPanoramaFaces(index) {
+    return Promise.all([0, 1, 2, 3, 4, 5].map(i => loadImage(ASSET_FOLDER + "panoramas/" + PANORAMAS[index].version + "/panorama_" + i + ".png")));
+}
+
 const SPLASHES = [
-    "Now with more portfolio!",
-    "Made with MDog Engine!",
-    "100% hand placed pixels!",
-    "Also try the other games!",
-    "Now in pixelated 2D!",
+    "Also play Hard to Convey!",
+    "Shoutout Minecraft!",
 ];
 const BOTTOM_LEFT_TEXT = "MDog Engine";
 const BOTTOM_RIGHT_TEXT = "Milo Kesteloot " + new Date().getFullYear();
 
 const Draw = MDog.Draw;
 const Mouse = MDog.Input.Mouse;
+const Keyboard = MDog.Input.Keyboard;
 
 const screenWidth = Draw.getScreenWidthInArtPixels();
 const screenHeight = Draw.getScreenHeightInArtPixels();
 
-const [dirtImage, stoneImage, buttonImage, buttonHighlightedImage, ...panoramaFaces] = await Promise.all([
+const [dirtImage, logoImage, buttonImage, buttonHighlightedImage, panoramaFaces] = await Promise.all([
     loadImage(ASSET_FOLDER + "dirt.png"),
-    loadImage(ASSET_FOLDER + "stone.png"),
+    loadImage(ASSET_FOLDER + "logo.png"),
     loadImage(ASSET_FOLDER + "button.png"),
     loadImage(ASSET_FOLDER + "button_highlighted.png"),
-    ...[0, 1, 2, 3, 4, 5].map(i => loadImage(ASSET_FOLDER + "panoramas/" + panoramaVersion + "/panorama_" + i + ".png")),
-    PixelFont.load(ASSET_FOLDER + "ascii.png"), // Last, so it doesn't end up in panoramaFaces
+    loadPanoramaFaces(panoramaIndex),
+    PixelFont.load(ASSET_FOLDER + "ascii.png"),
 ]);
-panoramaFaces.pop(); // PixelFont.load's result
 
 // Draws a canvas made in textures.js. Draw.image() only loads files from assets/, so this uses the engine's raw image drawer.
 function drawCanvas(canvas, x, y, scale) {
@@ -103,26 +93,81 @@ const buttons = [
 
 // The spinning panorama fills the window behind the game's canvas, which is see-through where nothing is drawn.
 // If the browser can't do WebGL, the game draws tiled dirt instead.
+let panorama = null;
 let dirtBackground = null;
 try {
-    const panorama = new Panorama(panoramaFaces);
+    panorama = new Panorama(panoramaFaces);
     document.body.prepend(panorama.element); // First on the page, so it's underneath
 } catch (error) {
     console.warn("Using the dirt background instead of the panorama:", error);
     dirtBackground = makeDirtBackground(dirtImage, screenWidth, screenHeight, 2, 0.4);
 }
 
-const logo = makeLogo(TITLE, 4, 4, stoneImage);
-const logoX = Math.floor((screenWidth - logo.width) / 2);
-const logoY = 30;
+// The logo image is high resolution, so like the splash it's an HTML element on top of the game instead of being
+// squashed into the game's pixels. Placed like Minecraft's logo (256 game pixels wide, centered, 30 from the top), but LOGO_SCALE times bigger.
+const LOGO_SCALE = 2;
+const LOGO_WIDTH = 256 * LOGO_SCALE;
+const LOGO_Y = 30;
+const gameCanvas = Draw.mainDrawingBoard.element;
+logoImage.style.position = "fixed";
+logoImage.style.pointerEvents = "none";
+document.body.appendChild(logoImage);
+function positionLogo() {
+    // Follows the game canvas, since it moves and changes size with the window
+    const rect = gameCanvas.getBoundingClientRect();
+    const gamePixelSize = rect.width / gameCanvas.width;
+    logoImage.style.left = rect.left + (screenWidth - LOGO_WIDTH) / 2 * gamePixelSize + "px";
+    logoImage.style.top = rect.top + LOGO_Y * gamePixelSize + "px";
+    logoImage.style.width = LOGO_WIDTH * gamePixelSize + "px";
+    requestAnimationFrame(positionLogo);
+}
+positionLogo();
 
-// Minecraft puts the splash 5 pixels in from the logo's right edge and 5 pixels up from its bottom
-new SplashText(SPLASHES[Math.floor(Math.random() * SPLASHES.length)], Draw.mainDrawingBoard.element, logoX + logo.width - 5, logoY + logo.height - 5);
+// Where Minecraft puts its splash relative to its logo (123 right of center, 39 below the logo's top), scaled with the logo.
+// Made after the logo so it's on top of it.
+new SplashText(SPLASHES[Math.floor(Math.random() * SPLASHES.length)], gameCanvas, screenWidth / 2 + 123 * LOGO_SCALE, LOGO_Y + 39 * LOGO_SCALE);
+
+// Debug text, shown by pressing "i", naming the panorama so unwanted ones can be found and removed from PANORAMAS
+let showDebugText = false;
+let debugText = null;
+let latestPanoramaLoad = 0;
+
+function makeDebugText(loading) {
+    const panoramaInfo = PANORAMAS[panoramaIndex];
+    let text = "Panorama " + (panoramaIndex + 1) + "/" + PANORAMAS.length + ": " + panoramaInfo.version;
+    if (panoramaInfo.name) text += " " + panoramaInfo.name;
+    if (loading) text += " (loading...)";
+    debugText = PixelFont.render(text, "#ffffff");
+}
+makeDebugText(false);
+
+// step is -1 for the previous panorama, 1 for the next
+async function switchPanorama(step) {
+    panoramaIndex = (panoramaIndex + step + PANORAMAS.length) % PANORAMAS.length;
+    const thisLoad = ++latestPanoramaLoad;
+    makeDebugText(true);
+    try {
+        const faces = await loadPanoramaFaces(panoramaIndex);
+        if (thisLoad !== latestPanoramaLoad) return; // An arrow key was pressed again while this was loading
+        panorama.setFaces(faces);
+        makeDebugText(false);
+    } catch (error) {
+        console.error(error);
+    }
+}
 
 const bottomLeftText = PixelFont.render(BOTTOM_LEFT_TEXT, "#ffffff");
 const bottomRightText = PixelFont.render(BOTTOM_RIGHT_TEXT, "#ffffff");
 
 function update() {
+    if (Keyboard.isClicked("i")) {
+        showDebugText = !showDebugText;
+    }
+    if (showDebugText && panorama) {
+        if (Keyboard.isClicked("ArrowLeft")) switchPanorama(-1);
+        if (Keyboard.isClicked("ArrowRight")) switchPanorama(1);
+    }
+
     let anyHovered = false;
     for (const button of buttons) {
         button.update();
@@ -135,7 +180,6 @@ function update() {
     } else {
         Draw.clear({color: "transparent"});
     }
-    drawCanvas(logo, logoX, logoY);
 
     for (const button of buttons) {
         button.draw();
@@ -143,6 +187,9 @@ function update() {
 
     drawCanvas(bottomLeftText, 2, screenHeight - 10);
     drawCanvas(bottomRightText, screenWidth - bottomRightText.width - 1, screenHeight - 10);
+    if (showDebugText) {
+        drawCanvas(debugText, (screenWidth - debugText.width) / 2, screenHeight - 10);
+    }
 }
 
 MDog.setActiveFunction(update);

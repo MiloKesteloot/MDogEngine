@@ -85,9 +85,25 @@ class Panorama {
         gl.enableVertexAttribArray(positionLocation);
         gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
+        gl.bindTexture(gl.TEXTURE_CUBE_MAP, gl.createTexture());
+        this.setFaces(faces);
+
+        this.viewSizeLocation = gl.getUniformLocation(program, "viewSize");
+        this.yawLocation = gl.getUniformLocation(program, "yaw");
+        gl.uniform1f(gl.getUniformLocation(program, "pitch"), (settings.pitch ?? 10) * Math.PI / 180);
+
+        const onFrame = () => {
+            this._render();
+            requestAnimationFrame(onFrame);
+        };
+        requestAnimationFrame(onFrame);
+    }
+
+    // Swaps in a different panorama. faces are the 6 images panorama_0 to panorama_5, like in the constructor.
+    setFaces(faces) {
+        const gl = this.gl;
+
         // Minecraft's faces happen to line up exactly with WebGL's cube map layout when z is forward
-        const texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_CUBE_MAP, texture);
         const targets = [
             gl.TEXTURE_CUBE_MAP_POSITIVE_Z, // panorama_0, front
             gl.TEXTURE_CUBE_MAP_POSITIVE_X, // panorama_1, right
@@ -104,16 +120,6 @@ class Panorama {
         gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        this.viewSizeLocation = gl.getUniformLocation(program, "viewSize");
-        this.yawLocation = gl.getUniformLocation(program, "yaw");
-        gl.uniform1f(gl.getUniformLocation(program, "pitch"), (settings.pitch ?? 10) * Math.PI / 180);
-
-        const onFrame = () => {
-            this._render();
-            requestAnimationFrame(onFrame);
-        };
-        requestAnimationFrame(onFrame);
     }
 
     // Matches the canvas to the window in real screen pixels, so it's never blurry or pixelated.
