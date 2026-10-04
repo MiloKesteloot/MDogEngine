@@ -86,7 +86,8 @@ function death(frames) {
         result.push(...sweep(1, volume, start, -0x100, 6), ...sweep(1, volume, start - 0x400, 0x100, 6));
     }
     result.length = frames;
-    const pop = sweep(1, 8, 0x800, 0x800, 11);
+    // The pops are a quarter higher than the arcade recording, which sounded a little low next to the original
+    const pop = sweep(1, 8, 0xA00, 0xA00, 11);
     return result.concat(pop, [{frequency: 0, waveform: 0, volume: 0}], pop);
 }
 
@@ -308,7 +309,7 @@ class Sound {
 
     // A bitten-off segment popping
     pop() {
-        this.tone("square", 1100, 500, 0.035, 0.08);
+        this.tone("square", 1100, 500, 0.035, 0.4);
     }
 
     // Pac-Man's death. seconds is how long the wee-oos go on before the two pops.
