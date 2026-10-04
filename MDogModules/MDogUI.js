@@ -113,6 +113,7 @@ class RectangleGridInteractable extends Interactable {
         return new Vector(sx, sy);
     }
 
+    // Bug: RectangleGridInteractable doesn't have a getPoint() (only VectorGridInteractable does), so drawing one throws a TypeError. -CAI
     _draw() {
         for (let i = 0; i < this.width; i++) {
             for (let j = 0; j < this.height; j++) {
@@ -139,6 +140,8 @@ class VectorGridInteractable extends RectangleGridInteractable {
                 const p10 = this.getPoint(i+1, j);
                 const p01 = this.getPoint(i, j+1);
 
+                // Bug?: this draws a line from p00 to p00, which is just a dot, and p10/p01 are never used. It might have been
+                // meant to draw grid lines to p10 and p01. Also, the inherited screenToTile/tileToScreen ignore xv and yv. -CAI
                 Draw.line(p00.x, p00.y, p00.x, p00.y, "#ff0000");
             }
         }
@@ -286,6 +289,7 @@ class UI extends Module {
         UI.Draw = Draw;
         UI.Input = Input;
 
+        // Bug: TextInteractable isn't added here, so games can't make one through MDog.UI. -CAI
         this.Page = Page;
         this.Interactable = Interactable;
         this.RectangleGridInteractable = RectangleGridInteractable;

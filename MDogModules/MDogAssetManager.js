@@ -24,6 +24,7 @@ class AssetManager extends Module {
                 this.assets[fileName] = data;
                 this.awaiting -= 1;
             })
+            // Bug: awaiting isn't lowered when a file fails to load, so doneLoading() never returns true after an error. -CAI
             .catch(error => console.error(error));
     }
 

@@ -18,6 +18,8 @@ class SquareKickbox extends Kickbox {
     //         "#ff0000");
     // }
 
+    // Bug?: index 2 and 3 here are one pixel further right than getY's are further down. getY(2) is the bottom edge
+    // (y2-y1-1), but getX(2) is just outside the right edge (x2-x1). It probably should be x2-x1-1 and x2-x1. -CAI
     getX(index) {
         return Math.floor(this.vector.getX()) + this.x1 + [
             -1,

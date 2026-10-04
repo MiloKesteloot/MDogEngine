@@ -16,6 +16,8 @@ class Animation {
                     largestFrame = frames[i];
                 }
             }
+            // Bug: largestFrame is the biggest frame index, so the frame count is one too low. MultipleFileAnimation._loadFrames also
+            // looks frames up through this.order, so with a custom order like [0, 1, 2, 1] only order[0] and order[1] get preloaded. -CAI
             this.frames = largestFrame;
             this.order = frames;
         } else {
@@ -59,6 +61,7 @@ class MultipleFileAnimation extends Animation {
         const flipY = settings.flipY ?? false;
 
         const scale = settings.scale ?? 1;
+        // Bug: settings.layer isn't passed on, so animations always draw to the active layer (AnimationParticle's layer setting does nothing). Same in SpriteSheetAnimation._draw. -CAI
         Draw.image(this.getImage(), x, y, {flipX: flipX, flipY: flipY, scale: scale});
         if (update) {
             this.time += 1;
@@ -91,6 +94,7 @@ class SpriteSheetAnimation extends Animation {
         const flipX = settings.flipX ?? false;
         const flipY = settings.flipY ?? false;
         const scale = settings.scale ?? 1;
+        // Bug: settings.layer isn't passed on, so animations always draw to the active layer. -CAI
         Draw.image(this.fileName, x, y,
             {
                 flipX: flipX, flipY: flipY,
@@ -346,6 +350,8 @@ class Draw extends Module {
         const drawingBoard = this._getDrawingBoard(layer);
 
         drawingBoard.ctx.fillStyle = color;
+        // Bug: the layer's context is already translated by its offset, so this should be -offset (like the clearRect above).
+        // With a translated layer, part of the layer doesn't get cleared. -CAI
         drawingBoard.ctx.fillRect(drawingBoard.offset.getX(), drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
 
         // TODO test running clear with a layer specified
@@ -353,6 +359,8 @@ class Draw extends Module {
         // this.rectangleFill(-drawingBoard.offset.getX(), -drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels, color, {layer: layer});
     }
 
+    // Not a bug, answering the TODO: this is the scanline helper for polygonFill. It returns the sorted x positions where the
+    // horizontal line at y crosses the polygon's edges, so polygonFill can fill between each pair of them. -CAI
     findIntersections(points, y) { // TODO what is this function?
         let xValues = [];
         for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
@@ -529,6 +537,8 @@ class Draw extends Module {
         const lineHeight = settings.lineHeight ?? 1;
         const letterSpacing = settings.letterSpacing ?? 1;
 
+        // Bug: the cache key doesn't include alignX, lineHeight, or letterSpacing, so drawing the same text with different
+        // values for those reuses whichever version was drawn first. -CAI
         const pathName = "generated/" + text + color + font;
 
         let textCanvas = this.imageCache.get(pathName);
@@ -675,6 +685,8 @@ class Draw extends Module {
 
         drawingBoard.ctx.save();
 
+        // Bug: the shifts use width/height, but the drawn size is width*scaleX and height*scaleY, so flipped images with a
+        // scale other than 1 are drawn in the wrong place. -CAI
         let xShift = 0;
         if (flipX) {
             drawingBoard.ctx.scale(-1, 1);

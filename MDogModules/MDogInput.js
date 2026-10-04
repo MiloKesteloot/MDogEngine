@@ -95,6 +95,7 @@ class Mouse {
             this.down[e.button] = true;
             this.clicked[e.button] = true;
         });
+        // Bug: mouseup is only listened for on the canvas, so if a button is released outside the game it stays "down". -CAI
         this.element.addEventListener("mouseup", e => {
             this.down[e.button] = false;
         });
@@ -144,6 +145,8 @@ class Mouse {
         return this.newStyle;
     }
 
+    // Bug: show() and hide() pass a style in, but style() ignores it and uses newStyle, so they don't do anything.
+    // update() also sets the cursor back to newStyle every tick. -CAI
     style() {
         this.element.style.cursor = this.getNewStyle();
     }

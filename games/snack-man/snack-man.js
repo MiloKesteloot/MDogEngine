@@ -54,7 +54,9 @@ const DIRS = {
 // ---------- Tuning ----------
 
 const TICKS_PER_SECOND = 160; // MDog runs the active function at a fixed 160 ticks per second
-const SPEED = 7.5 / TICKS_PER_SECOND; // tiles per tick
+const SPEED = 7.5 / TICKS_PER_SECOND; // tiles per tick, on level 1
+const SPEED_PER_LEVEL = 0.08; // each level after the first is this much faster...
+const MAX_SPEED_MULTIPLIER = 1.4; // ...up to this
 const TURN_BUFFER_TICKS = 40; // how long a released turn input is remembered (0.25s)
 const LATE_TURN_WINDOW = 0.25; // how far past a tile center (in tiles) you can still turn
 const BLOCKED_GRACE_TICKS = 24; // time to turn away when your face is up against your body (0.15s)
@@ -80,6 +82,10 @@ const PIECE_POP_MIN_TICKS = 3; // fastest a long piece pops, per segment
 const PIECE_POP_MAX_TICKS = 10; // slowest a short piece pops, per segment
 const PIECE_POP_TOTAL_TICKS = 140; // roughly how long popping a whole piece takes
 const LOSS_TEXT_TICKS = 50; // how long a "-10" floats up from a popped segment
+const CLEAR_PAUSE_TICKS = 60; // after the last pellet, everything freezes for a moment...
+const CLEAR_FLASH_TICKS = 24; // ...then the maze flashes white, this long per flash...
+const CLEAR_FLASHES = 8; // ...this many times, and the next level starts
+const BEST_SCORE_KEY = "snack-man-best";
 
 // ---------- Maze ----------
 
@@ -136,6 +142,10 @@ const START_TILE = {x: 14, y: 23};
 const START_DIR = DIRS.left;
 const START_PROGRESS = 0.5;
 
+// Where READY! and the other messages go (the open row under the middle box, like Pac-Man)
+const MESSAGE_X = 14 * 8;
+const MESSAGE_Y = 17 * 8 + 4;
+
 const COLORS = {
     background: "#000000",
     pellet: "#ffb9af",
@@ -144,6 +154,8 @@ const COLORS = {
     flash: "#ffffff",
     text: "#ffffff",
     scoreDrain: "#ff5a5a",
+    label: "#dedeff",
+    dim: "#5a5a8c",
     loss: "#ff2a2a"
 }
 
@@ -691,12 +703,14 @@ class SnackMan {
         this.progress = 1 - this.progress;
     }
 
-    update() {
+    updatePieces() {
         for (const piece of this.pieces) {
             piece.update();
         }
         this.pieces = this.pieces.filter(piece => !piece.isDone());
+    }
 
+    update() {
         if (this.biteTimer > 0) this.biteTimer -= 1;
         if (this.blue) this.blueTimer += 1;
 
@@ -723,8 +737,9 @@ class SnackMan {
             this.tryLateTurn();
         }
 
-        this.progress += SPEED;
-        this.chompDistance += SPEED * TILE;
+        const speed = game.speed();
+        this.progress += speed;
+        this.chompDistance += speed * TILE;
 
         while (this.progress >= 1) {
             this.progress -= 1;
@@ -738,6 +753,7 @@ class SnackMan {
     // ----- Death -----
 
     die() {
+        game.endRound();
         this.dead = true;
         this.deathTimer = 0;
         this.target = null;
@@ -961,29 +977,79 @@ class SnackMan {
 
 // ---------- Game ----------
 
+function loadBest() {
+    try {
+        return parseInt(localStorage.getItem(BEST_SCORE_KEY) ?? "0") || 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
+function saveBest(best) {
+    try {
+        localStorage.setItem(BEST_SCORE_KEY, "" + best);
+    } catch (e) {
+        // No storage (private window, etc.): the best score just won't stick around
+    }
+}
+
 const game = {
     tick: 0,
+    level: 1,
     board: new Board(),
     snackMan: null,
     clearTimer: 0,
     particles: [],
     lossTexts: [],
     shakeTimer: 0,
+    best: loadBest(),
+    finalScore: null, // set when the round is over, so the score stops changing
+    newBest: false,
 
+    // Back to level 1 with a fresh board (after dying, or pressing R)
     restart() {
+        this.level = 1;
+        this.startLevel();
+    },
+
+    startLevel() {
         this.clearTimer = 0;
         this.particles = [];
         this.lossTexts = [];
         this.shakeTimer = 0;
+        this.finalScore = null;
+        this.newBest = false;
         this.board.reset();
         this.snackMan.reset();
+    },
+
+    speed() {
+        return SPEED * Math.min(MAX_SPEED_MULTIPLIER, 1 + SPEED_PER_LEVEL * (this.level - 1));
     },
 
     // Your score is just how long you are: every segment is a pellet you ate. Bitten-off
     // segments still count until they pop, so the score drains away as they do.
     getScore() {
+        if (this.finalScore !== null) {
+            return this.finalScore;
+        }
         const bitten = this.snackMan.pieces.reduce((sum, piece) => sum + piece.tiles.length, 0);
         return (this.snackMan.body.length - 1 + bitten) * PELLET_POINTS;
+    },
+
+    // The round is over (he died, or cleared the board). Your score is how long you are right
+    // now; anything you bit off is already lost, even if it hasn't finished popping.
+    endRound() {
+        this.finalScore = (this.snackMan.body.length - 1) * PELLET_POINTS;
+        if (this.finalScore > this.best) {
+            this.best = this.finalScore;
+            this.newBest = true;
+            saveBest(this.best);
+        }
+    },
+
+    isClearing() {
+        return this.board.pelletsLeft === 0;
     },
 
     getMaxScore() {
@@ -1012,15 +1078,36 @@ const game = {
         this.lossTexts = this.lossTexts.filter(text => text.life > 0);
         if (this.shakeTimer > 0) this.shakeTimer -= 1;
 
-        if (this.board.pelletsLeft === 0) {
-            // TODO (chunk 3): level clear celebration and next level
-            this.clearTimer += 1;
-            if (this.clearTimer > TICKS_PER_SECOND) {
-                this.restart();
-            }
+        this.snackMan.updatePieces();
+
+        if (this.isClearing()) {
+            this.updateClear();
         } else {
             this.snackMan.update();
         }
+    },
+
+    // Board cleared: freeze, flash the maze like Pac-Man, then on to the next (faster) level
+    updateClear() {
+        // Let any bitten-off piece finish popping first, so the final score is settled
+        if (this.finalScore === null) {
+            if (this.snackMan.pieces.length > 0) {
+                return;
+            }
+            this.endRound();
+        }
+        this.clearTimer += 1;
+        if (this.clearTimer >= CLEAR_PAUSE_TICKS + CLEAR_FLASH_TICKS * CLEAR_FLASHES) {
+            this.level += 1;
+            this.startLevel();
+        }
+    },
+
+    mazeFlashing() {
+        if (!this.isClearing() || this.clearTimer < CLEAR_PAUSE_TICKS) {
+            return false;
+        }
+        return Math.floor((this.clearTimer - CLEAR_PAUSE_TICKS) / CLEAR_FLASH_TICKS) % 2 === 0;
     },
 
     draw() {
@@ -1034,7 +1121,12 @@ const game = {
         MDog.Draw.translate(MAZE_X + shakeX, MAZE_Y + shakeY);
 
         MDog.Draw.clear({color: COLORS.background});
-        MDog.Draw.image("snack-man/map.png", 0, 0);
+        const whiteMaze = this.mazeFlashing() ? tintedSprite("snack-man/map.png", COLORS.flash) : null;
+        if (whiteMaze !== null) {
+            MDog.Draw._rawImage(whiteMaze, 0, 0, whiteMaze.width, whiteMaze.height);
+        } else {
+            MDog.Draw.image("snack-man/map.png", 0, 0);
+        }
 
         this.snackMan.drawUnderPellets(this.tick);
         this.board.drawPellets(this.tick);
@@ -1055,11 +1147,42 @@ const game = {
         this.drawHud();
     },
 
-    // TODO (chunk 3): best score and the rest of the HUD
     drawHud() {
-        const draining = this.snackMan.pieces.length > 0;
-        const text = this.getScore() + "/" + this.getMaxScore();
-        MDog.Draw.textImage(text, 0, -6, draining ? COLORS.scoreDrain : COLORS.text, "fonts/marsfont.png", {size: 2, alignY: "bottom"});
+        const font = "fonts/marsfont.png";
+        const top = -30;
+
+        // Score (out of the most you could get on this board) on the left, best on the right
+        const draining = this.snackMan.pieces.length > 0 && this.finalScore === null;
+        MDog.Draw.textImage("SCORE", 0, top, COLORS.label, font);
+        MDog.Draw.textImage(this.getScore() + "/" + this.getMaxScore(), 0, top + 9, draining ? COLORS.scoreDrain : COLORS.text, font, {size: 2});
+
+        const bestFlashing = this.newBest && Math.floor(this.tick / 12) % 2 === 0;
+        MDog.Draw.textImage("BEST", MAZE_WIDTH, top, COLORS.label, font, {alignX: "right"});
+        MDog.Draw.textImage("" + this.best, MAZE_WIDTH, top + 9, bestFlashing ? COLORS.snack : COLORS.text, font, {size: 2, alignX: "right"});
+
+        MDog.Draw.textImage("LEVEL " + this.level, 0, MAZE_HEIGHT + 8, COLORS.label, font);
+        MDog.Draw.textImage("R TO RESTART", MAZE_WIDTH, MAZE_HEIGHT + 8, COLORS.dim, font, {alignX: "right"});
+
+        this.drawMessage();
+    },
+
+    // Pac-Man style messages, in the open row under the middle box
+    drawMessage() {
+        let text = null;
+        let color = COLORS.snack;
+        if (this.isClearing() && this.finalScore !== null) {
+            text = "LEVEL CLEAR!";
+            color = Math.floor(this.tick / 12) % 2 === 0 ? COLORS.snack : COLORS.text;
+        } else if (this.snackMan.dead && this.newBest) {
+            text = "NEW BEST!";
+            color = Math.floor(this.tick / 12) % 2 === 0 ? COLORS.snack : COLORS.text;
+        } else if (!this.snackMan.started && !this.snackMan.dead) {
+            text = this.level > 1 ? "LEVEL " + this.level : "READY!";
+        }
+        if (text === null) {
+            return;
+        }
+        MDog.Draw.textImage(text, MESSAGE_X, MESSAGE_Y, color, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
     }
 }
 game.snackMan = new SnackMan(game.board);

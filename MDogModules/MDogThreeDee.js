@@ -192,6 +192,7 @@ class ThreeDeeFloor extends ThreeDeeObject {
             Draw.getScreenWidthInArtPixels(),
             bottom.getY() + 1, // TODO the +1 is totally arbitrary to get it to line up with the shape
             this.color);
+        // Bug: bottom.y was turned into a height above, so using it as the y here puts the outline in the wrong place. -CAI
         Draw.rectangle(
             -1,
             bottom.getY(),
