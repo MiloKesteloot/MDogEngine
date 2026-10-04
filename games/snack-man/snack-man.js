@@ -1354,7 +1354,7 @@ const HINTS = {
 };
 
 // On touch screens, the "how to play" hint on the title screen is a button (in maze pixels)
-const HELP_BUTTON = {x: 32, y: 203, width: 160, height: 17};
+const HELP_BUTTON = {x: 32, y: 217, width: 160, height: 17};
 
 // "1ST", "2ND", "3RD", "4TH"...
 function ordinal(n) {
@@ -1415,7 +1415,6 @@ const game = {
 
     // Back to level 1 with a fresh board and no score (after dying, or pressing R)
     restart() {
-        this.sound.stopAll();
         this.level = 1;
         this.bankedScore = 0;
         this.debugRun = false;
@@ -1600,7 +1599,7 @@ const game = {
     goToTitle() {
         this.state = "title";
         this.scoreboard.refresh();
-        this.sound.setBackground(null);
+        this.sound.stopAll();
         this.sound.setPaused(false);
     },
 
@@ -1753,6 +1752,7 @@ const game = {
             return;
         }
         if (this.controls.restartPressed()) {
+            this.sound.stopAll(); // cuts off a death sound if you restart partway through one
             this.restart();
             return;
         }
@@ -1822,6 +1822,7 @@ const game = {
                 this.resume();
             } else if (choice === "RESTART") {
                 this.resume();
+                this.sound.stopAll();
                 this.restart();
             } else if (choice === "MUTE") {
                 this.sound.toggleMute();
@@ -1913,17 +1914,18 @@ const game = {
         MDog.Draw.clear({color: COLORS.background});
 
         drawLogo("SNACK MAN", middle, -30);
-        this.drawScoreboard(middle, 4);
+        MDog.Draw.textImage("BY MILO KESTELOOT", middle, 8, COLORS.label, font, {alignX: "center", alignY: "center"});
+        this.drawScoreboard(middle, 18);
 
-        MDog.Draw.textImage("YOUR BEST: " + this.best, middle, 164, COLORS.label, font, {alignX: "center", alignY: "center"});
+        MDog.Draw.textImage("YOUR BEST: " + this.best, middle, 178, COLORS.label, font, {alignX: "center", alignY: "center"});
 
         const hints = this.hints();
-        MDog.Draw.textImage(hints.help, middle, 212, COLORS.dim, font, {alignX: "center", alignY: "center"});
+        MDog.Draw.textImage(hints.help, middle, 226, COLORS.dim, font, {alignX: "center", alignY: "center"});
         if (this.controls.isTouch()) {
             this.drawHelpButton();
         }
         if (Math.floor(this.tick / 40) % 2 === 0) {
-            MDog.Draw.textImage(hints.start, middle, 256, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+            MDog.Draw.textImage(hints.start, middle, 270, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
         }
     },
 
@@ -1959,7 +1961,8 @@ const game = {
             }
             MDog.Draw.textImage((i + 1) + ".", x + 28, y, COLORS.label, font, {alignX: "right", alignY: "center"});
             MDog.Draw.textImage(entry.name, x + 34, y, color, font, {alignY: "center"});
-            MDog.Draw.textImage("" + entry.score, x + width - 12, y, color, font, {alignX: "right", alignY: "center"});
+            // Same gap from the right wall as "1." has from the left wall
+            MDog.Draw.textImage("" + entry.score, x + width - 21, y, color, font, {alignX: "right", alignY: "center"});
         });
     },
 
@@ -2159,6 +2162,7 @@ game.snackMan = new SnackMan(game.board, game.effects, {
     onBonus: (points, x, y) => game.showBonus(points, x, y),
     onPiecePop: () => game.sound.pop(),
     onDie: () => {
+        game.sound.bite(); // the crash itself, before the slow death
         game.endRound();
         game.vibrate(VIBRATIONS.death);
     },
