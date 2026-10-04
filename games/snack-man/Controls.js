@@ -18,7 +18,8 @@ const KEYS = {
     confirm: ["Enter", " ", "z"],
     pause: ["p", "Escape"],
     restart: ["r"],
-    mute: ["m"]
+    mute: ["m"],
+    debugSkip: ["l"] // double tap to skip the level (for testing)
 }
 
 const DIRECTION_NAMES = ["up", "down", "left", "right"];
@@ -26,6 +27,7 @@ const DIRECTION_NAMES = ["up", "down", "left", "right"];
 const SWIPE_DISTANCE = 24; // CSS pixels a finger has to move to count as a swipe
 const KEY_BUFFER_TICKS = 40; // a released turn key is remembered this long (0.25s)
 const SWIPE_BUFFER_TICKS = 80; // a swipe has no "held", so it's remembered longer (0.5s)
+const DOUBLE_TAP_TICKS = 64; // two presses closer together than this (0.4s) count as a double tap
 
 // hold - true (the default) checks if a key is held down, false checks if it was pressed this tick
 function keyDown(keySet, hold) {
@@ -41,11 +43,14 @@ function keyDown(keySet, hold) {
 class Controls {
     constructor() {
         this.swipes = []; // direction names swiped since the last update
-        this.taps = 0;
+        this.taps = []; // where taps landed since the last update, in game pixels
         this.direction = null; // direction pressed this tick
         this.directionBuffer = 0;
-        this.tapped = false;
+        this.tap = null; // where the screen was tapped this tick, or null
         this.touch = null; // where the current swipe started
+        this.ticks = 0;
+        this.lastSkipPress = -Infinity;
+        this.skipLevel = false;
 
         // Whether the player is on a touch screen, so hints can say "tap" or "press enter". It starts as a
         // guess from the device (a finger is a "coarse" pointer), then follows whatever they actually use.
@@ -83,7 +88,7 @@ class Controls {
 
         window.addEventListener("touchend", () => {
             if (this.touch !== null && !this.touch.swiped) {
-                this.taps += 1;
+                this.taps.push(this.toGamePixels(this.touch.x, this.touch.y));
             }
             this.touch = null;
         });
@@ -102,8 +107,28 @@ class Controls {
             this.directionBuffer = SWIPE_BUFFER_TICKS;
         }
 
-        this.tapped = this.taps > 0;
-        this.taps = 0;
+        this.tap = this.taps.length > 0 ? this.taps[this.taps.length - 1] : null;
+        this.taps = [];
+
+        this.ticks += 1;
+        this.skipLevel = false;
+        if (keyDown(KEYS.debugSkip, false)) {
+            this.skipLevel = this.ticks - this.lastSkipPress <= DOUBLE_TAP_TICKS;
+            this.lastSkipPress = this.skipLevel ? -Infinity : this.ticks;
+        }
+    }
+
+    // Turns a point on the page into a point on the game's screen (in its art pixels)
+    toGamePixels(clientX, clientY) {
+        const canvas = document.querySelector("canvas");
+        if (canvas === null) {
+            return {x: -1, y: -1};
+        }
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (clientX - rect.left) / rect.width * MDog.Draw.getScreenWidthInArtPixels(),
+            y: (clientY - rect.top) / rect.height * MDog.Draw.getScreenHeightInArtPixels()
+        };
     }
 
     // ----- What Snack Man reads -----
@@ -126,7 +151,7 @@ class Controls {
     // ----- What the game reads -----
 
     confirmPressed() {
-        return keyDown(KEYS.confirm, false) || this.tapped;
+        return keyDown(KEYS.confirm, false);
     }
 
     pausePressed() {
@@ -137,12 +162,18 @@ class Controls {
         return keyDown(KEYS.restart, false);
     }
 
+    // Double tapped L
+    skipLevelPressed() {
+        return this.skipLevel;
+    }
+
     mutePressed() {
         return keyDown(KEYS.mute, false);
     }
 
-    tappedScreen() {
-        return this.tapped;
+    // Where the screen was tapped this tick (in the game's art pixels, from its top left), or null
+    tapPosition() {
+        return this.tap;
     }
 
     isTouch() {

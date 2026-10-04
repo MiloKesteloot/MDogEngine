@@ -600,6 +600,12 @@ class Board {
         return t === PELLET || t === POWER;
     }
 
+    // For testing: removes every pellet without anyone eating them, so the level is cleared
+    clearAll() {
+        this.tiles = this.tiles.map(t => (t === PELLET || t === POWER) ? EMPTY : t);
+        this.pelletsLeft = 0;
+    }
+
     // Returns what was eaten (PELLET, POWER or EMPTY)
     eat(tile) {
         const t = this.get(tile);
@@ -1255,11 +1261,23 @@ const HINTS = {
     },
     touch: {
         move: "SWIPE TO MOVE",
-        pause: "TAP TO PAUSE",
+        pause: "PAUSE BUTTON IS AT THE TOP",
         start: "TAP TO START",
-        hud: "TAP TO PAUSE",
-        menu: "SWIPE TO PICK, TAP TO CHOOSE"
+        hud: "", // the pause button speaks for itself
+        menu: "TAP AN OPTION"
     }
+};
+
+// The pause button shown at the top of the screen on touch screens (in maze pixels)
+const PAUSE_BUTTON = {x: MAZE_WIDTH / 2 - 8, y: -31, size: 15};
+const PAUSE_BUTTON_REACH = 12; // taps this far outside the button still count, since fingers are big
+
+// Phone vibration patterns, in milliseconds (vibrate, pause, vibrate, ...)
+const VIBRATIONS = {
+    bite: [35],
+    bonus: [25, 40, 25],
+    death: [60, 50, 60, 50, 180],
+    levelClear: [40, 60, 40, 60, 40]
 };
 
 const PAUSE_OPTIONS = ["RESUME", "RESTART", "MUTE", "TITLE SCREEN"];
@@ -1281,11 +1299,13 @@ const game = {
     bankedScore: 0, // score from levels already cleared this run
     finalScore: null, // set when a level is over, so the score stops changing
     newBest: false,
+    debugRun: false, // a level was skipped this run, so it can't set a best score
 
     // Back to level 1 with a fresh board and no score (after dying, or pressing R)
     restart() {
         this.level = 1;
         this.bankedScore = 0;
+        this.debugRun = false;
         this.startLevel();
     },
 
@@ -1346,7 +1366,7 @@ const game = {
     // even if it hasn't finished popping.
     endRound() {
         this.finalScore = this.bankedScore + this.snackMan.bonusPoints + (this.snackMan.body.length - 1) * PELLET_POINTS;
-        if (this.finalScore > this.best) {
+        if (this.finalScore > this.best && !this.debugRun) {
             this.best = this.finalScore;
             this.newBest = true;
             saveBest(this.best);
@@ -1357,11 +1377,45 @@ const game = {
         return this.board.pelletsLeft === 0;
     },
 
+    // Buzzes the phone. Only on touch screens, and only where the browser can (iPhones can't).
+    vibrate(pattern) {
+        if (this.controls.isTouch() && navigator.vibrate !== undefined) {
+            navigator.vibrate(pattern);
+        }
+    },
+
+    // Where the pause menu and its options are, for drawing it and for tapping options
+    pauseMenuLayout() {
+        const width = 170;
+        const height = 87;
+        // Whole pixels only: text drawn at a half pixel comes out blurry
+        const x = Math.floor(MAZE_WIDTH / 2 - width / 2);
+        const y = Math.floor(MAZE_HEIGHT / 2 - height / 2);
+        return {x, y, width, height, optionY: i => y + 32 + i * 11, optionHeight: 11};
+    },
+
+    // A tap from the controls, moved into maze pixels
+    tapInMaze() {
+        const tap = this.controls.tapPosition();
+        return tap === null ? null : {x: tap.x - MAZE_X, y: tap.y - MAZE_Y};
+    },
+
+    tappedPauseButton() {
+        const tap = this.tapInMaze();
+        if (tap === null) {
+            return false;
+        }
+        const b = PAUSE_BUTTON;
+        const reach = PAUSE_BUTTON_REACH;
+        return tap.x >= b.x - reach && tap.x < b.x + b.size + reach && tap.y >= b.y - reach && tap.y < b.y + b.size + reach;
+    },
+
     showBonus(points, x, y) {
         this.freezeTimer = BONUS_FREEZE_TICKS;
         this.bonusPopup = {text: "" + points, x: x, y: y};
         this.snackMan.mouthShut = true;
         this.sound.bonus();
+        this.vibrate(VIBRATIONS.bonus);
     },
 
     update() {
@@ -1373,7 +1427,7 @@ const game = {
         }
 
         if (this.state === "title") {
-            if (this.controls.confirmPressed()) {
+            if (this.controls.confirmPressed() || this.controls.tapPosition() !== null) {
                 this.startGame();
             }
             return;
@@ -1384,13 +1438,20 @@ const game = {
             return;
         }
 
-        if (this.controls.pausePressed() || this.controls.tappedScreen()) {
+        if (this.controls.pausePressed() || this.tappedPauseButton()) {
             this.pause();
             return;
         }
         if (this.controls.restartPressed()) {
             this.restart();
             return;
+        }
+        // For testing: double tap L to skip straight to the next level. Pellets aren't eaten, so your
+        // score doesn't change, and the rest of the run can't set a best score.
+        if (this.controls.skipLevelPressed() && !this.snackMan.dead && !this.isClearing()) {
+            this.debugRun = true;
+            this.snackMan.pieces = []; // bitten-off pieces would otherwise hold the level clear until they pop
+            this.board.clearAll();
         }
 
         this.effects.update();
@@ -1427,7 +1488,22 @@ const game = {
             this.pauseSelection = (this.pauseSelection + 1) % PAUSE_OPTIONS.length;
         }
 
-        if (this.controls.confirmPressed()) {
+        // On a touch screen, tapping an option picks it straight away
+        const tap = this.tapInMaze();
+        let chosen = this.controls.confirmPressed();
+        if (tap !== null) {
+            const menu = this.pauseMenuLayout();
+            const insideX = tap.x >= menu.x && tap.x < menu.x + menu.width;
+            PAUSE_OPTIONS.forEach((option, i) => {
+                const top = menu.optionY(i) - menu.optionHeight / 2;
+                if (insideX && tap.y >= top && tap.y < top + menu.optionHeight) {
+                    this.pauseSelection = i;
+                    chosen = true;
+                }
+            });
+        }
+
+        if (chosen) {
             const choice = PAUSE_OPTIONS[this.pauseSelection];
             if (choice === "RESUME") {
                 this.resume();
@@ -1451,6 +1527,7 @@ const game = {
             }
             this.endRound();
             this.sound.levelClear();
+            this.vibrate(VIBRATIONS.levelClear);
         }
         this.clearTimer += 1;
         if (this.clearTimer >= CLEAR_PAUSE_TICKS + CLEAR_FLASH_TICKS * CLEAR_FLASHES) {
@@ -1535,8 +1612,8 @@ const game = {
         const x = middle - width / 2;
         MDog.Draw.rectangle(x, top, width, height, COLORS.wall);
         MDog.Draw.rectangle(x + 2, top + 2, width - 4, height - 4, COLORS.wall);
-        MDog.Draw.textImage("BEST SCORE", middle, top + 10, COLORS.label, font, {alignX: "center", alignY: "center"});
-        MDog.Draw.textImage("" + this.best, middle, top + 23, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+        MDog.Draw.textImage("BEST SCORE", middle, top + 8, COLORS.label, font, {alignX: "center", alignY: "center"});
+        MDog.Draw.textImage("" + this.best, middle, top + 21, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
     },
 
     drawHud() {
@@ -1552,8 +1629,14 @@ const game = {
         MDog.Draw.textImage("BEST", MAZE_WIDTH, top, COLORS.label, font, {alignX: "right"});
         MDog.Draw.textImage("" + this.best, MAZE_WIDTH, top + 9, bestFlashing ? COLORS.snack : COLORS.text, font, {size: 2, alignX: "right"});
 
-        MDog.Draw.textImage("LEVEL " + this.level, 0, MAZE_HEIGHT + 8, COLORS.label, font);
-        MDog.Draw.textImage((this.sound.muted ? "MUTED - " : "") + this.hints().hud, MAZE_WIDTH, MAZE_HEIGHT + 8, COLORS.dim, font, {alignX: "right"});
+        MDog.Draw.textImage("LEVEL " + this.level + (this.debugRun ? " - DEBUG" : ""), 0, MAZE_HEIGHT + 8, COLORS.label, font);
+        const hint = [this.sound.muted ? "MUTED" : "", this.hints().hud].filter(text => text !== "").join(" - ");
+        if (hint !== "") {
+            MDog.Draw.textImage(hint, MAZE_WIDTH, MAZE_HEIGHT + 8, COLORS.dim, font, {alignX: "right"});
+        }
+        if (this.controls.isTouch() && this.state === "playing") {
+            this.drawPauseButton();
+        }
 
         this.drawMessage();
     },
@@ -1577,14 +1660,19 @@ const game = {
         MDog.Draw.textImage(text, MESSAGE_X, MESSAGE_Y, color, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
     },
 
+    // Two bars in a box, like the maze walls
+    drawPauseButton() {
+        const b = PAUSE_BUTTON;
+        MDog.Draw.rectangle(b.x, b.y, b.size, b.size, COLORS.wall);
+        MDog.Draw.rectangle(b.x + 1, b.y + 1, b.size - 2, b.size - 2, COLORS.wall);
+        MDog.Draw.rectangleFill(b.x + 4, b.y + 4, 2, b.size - 8, COLORS.text);
+        MDog.Draw.rectangleFill(b.x + b.size - 6, b.y + 4, 2, b.size - 8, COLORS.text);
+    },
+
     drawPauseMenu() {
         const font = "fonts/marsfont.png";
         const middle = MAZE_WIDTH / 2;
-        const width = 170;
-        const height = 87;
-        // Whole pixels only: text drawn at a half pixel comes out blurry
-        const x = Math.floor(middle - width / 2);
-        const y = Math.floor(MAZE_HEIGHT / 2 - height / 2);
+        const {x, y, width, height, optionY} = this.pauseMenuLayout();
 
         MDog.Draw.rectangleFill(x, y, width, height, COLORS.background);
         MDog.Draw.rectangle(x, y, width, height, COLORS.wall);
@@ -1595,7 +1683,7 @@ const game = {
             const selected = i === this.pauseSelection;
             const label = option === "MUTE" && this.sound.muted ? "UNMUTE" : option;
             const text = selected ? "> " + label + " <" : label;
-            MDog.Draw.textImage(text, middle, y + 32 + i * 11, selected ? COLORS.snack : COLORS.text, font, {alignX: "center", alignY: "center"});
+            MDog.Draw.textImage(text, middle, optionY(i), selected ? COLORS.snack : COLORS.text, font, {alignX: "center", alignY: "center"});
         });
         MDog.Draw.textImage(this.hints().menu, middle, y + height - 8, COLORS.dim, font, {alignX: "center", alignY: "center"});
     }
@@ -1603,10 +1691,16 @@ const game = {
 
 game.snackMan = new SnackMan(game.board, game.effects, {
     onEat: () => game.sound.chomp(),
-    onBite: () => game.sound.bite(),
+    onBite: () => {
+        game.sound.bite();
+        game.vibrate(VIBRATIONS.bite);
+    },
     onBonus: (points, x, y) => game.showBonus(points, x, y),
     onPiecePop: () => game.sound.pop(),
-    onDie: () => game.endRound(),
+    onDie: () => {
+        game.endRound();
+        game.vibrate(VIBRATIONS.death);
+    },
     onDeathSpin: () => game.sound.death(),
     onDeathOver: () => game.restart()
 }, game.controls);
