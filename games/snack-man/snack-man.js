@@ -617,6 +617,7 @@ class Board {
             this.randomizePowerPellets(powerPelletCount(level));
         }
         this.pelletsLeft = this.tiles.filter(t => t === PELLET || t === POWER).length;
+        this.totalPellets = this.pelletsLeft;
     }
 
     randomizePowerPellets(count) {
@@ -1421,6 +1422,7 @@ const game = {
     goToTitle() {
         this.state = "title";
         this.sound.setSiren(false);
+        this.sound.setDrone(false, 0);
         this.sound.setPaused(false);
     },
 
@@ -1579,6 +1581,8 @@ const game = {
 
         const sirenOn = this.snackMan.blue && !this.snackMan.dead && !this.isClearing() && this.freezeTimer === 0;
         this.sound.setSiren(sirenOn);
+        const droneOn = this.snackMan.started && !this.snackMan.blue && !this.snackMan.dead && !this.isClearing() && this.freezeTimer === 0;
+        this.sound.setDrone(droneOn, 1 - this.board.pelletsLeft / this.board.totalPellets);
     },
 
     updatePauseMenu() {
@@ -1801,7 +1805,7 @@ const game = {
 }
 
 game.snackMan = new SnackMan(game.board, game.effects, {
-    onEat: () => game.sound.chomp(),
+    onEat: () => game.sound.chomp(1 / (game.speed() * TICKS_PER_SECOND)), // the time it takes to reach the next pellet
     onBite: () => {
         game.sound.bite();
         game.vibrate(VIBRATIONS.bite);

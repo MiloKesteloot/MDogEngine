@@ -16,6 +16,7 @@ class Sound {
         this.ctx = null;
         this.master = null;
         this.siren = null;
+        this.drone = null;
         this.paused = false;
         this.waka = false; // alternates the two halves of the "waka" chomp
 
@@ -49,6 +50,11 @@ class Sound {
             for (let i = 0; i < length; i++) {
                 data[i] = Math.random() * 2 - 1;
             }
+
+            // Pac-Man's sound chip played short, low-resolution waveforms, which sound buzzier than a clean
+            // triangle. A handful of falling harmonics gets close to that.
+            const harmonics = [0, 1, 0.6, 0.35, 0.22, 0.12, 0.07];
+            this.arcadeWave = this.ctx.createPeriodicWave(new Float32Array(harmonics.length), new Float32Array(harmonics));
         }
         if (this.ctx.state === "suspended" && !this.paused) {
             this.ctx.resume();
@@ -106,13 +112,83 @@ class Sound {
 
     // ----- Effects -----
 
-    // Pac-Man's "waka waka": each pellet plays one half, sliding down then up
-    chomp() {
+    // Pac-Man's "waka waka": each pellet plays one half, "wa" sliding down and "ka" sliding back up. Each half
+    // lasts as long as it takes to reach the next pellet, so a row of pellets makes one unbroken waka.
+    // The pitch moves in steps 60 times a second, like the arcade's sound chip, which gives it its grit.
+    chomp(duration) {
+        if (!this.ready()) {
+            return;
+        }
         this.waka = !this.waka;
-        if (this.waka) {
-            this.tone("triangle", 520, 220, 0.075, 0.5);
-        } else {
-            this.tone("triangle", 220, 520, 0.075, 0.5);
+        const high = 620;
+        const low = 170;
+        const from = this.waka ? high : low;
+        const to = this.waka ? low : high;
+
+        const start = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.setPeriodicWave(this.arcadeWave);
+        const steps = Math.max(4, Math.round(duration * 60));
+        for (let i = 0; i < steps; i++) {
+            const pitch = from * Math.pow(to / from, i / (steps - 1));
+            osc.frequency.setValueAtTime(pitch, start + duration * i / steps);
+        }
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.3, start + 0.005);
+        gain.gain.setValueAtTime(0.3, start + duration - 0.01);
+        gain.gain.linearRampToValueAtTime(0, start + duration);
+        osc.connect(gain);
+        gain.connect(this.master);
+        osc.start(start);
+        osc.stop(start + duration + 0.02);
+    }
+
+    // Pac-Man's background siren: a "wooo-eeee" that never stops while he's moving around, and goes up a
+    // notch as the board empties. progress is the fraction of pellets eaten, from 0 to 1.
+    setDrone(on, progress) {
+        if (!this.ready()) {
+            return;
+        }
+        if (this.drone === null) {
+            if (!on) {
+                return;
+            }
+            const osc = this.ctx.createOscillator();
+            const lfo = this.ctx.createOscillator();
+            const lfoGain = this.ctx.createGain();
+            const filter = this.ctx.createBiquadFilter();
+            const gain = this.ctx.createGain();
+            osc.setPeriodicWave(this.arcadeWave);
+            lfo.type = "triangle";
+            lfo.frequency.value = 2.3;
+            filter.type = "lowpass";
+            filter.frequency.value = 1800;
+            gain.gain.value = 0;
+            lfo.connect(lfoGain);
+            lfoGain.connect(osc.frequency);
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.master);
+            osc.start();
+            lfo.start();
+            this.drone = {osc, lfo, lfoGain, gain, stage: -1, on: false};
+        }
+
+        // Like the arcade, the pitch steps up in a few stages rather than sliding
+        const stage = Math.min(3, Math.floor(progress * 4));
+        if (stage !== this.drone.stage) {
+            this.drone.stage = stage;
+            const base = 400 * Math.pow(1.12, stage);
+            const now = this.ctx.currentTime;
+            this.drone.osc.frequency.setValueAtTime(base, now);
+            this.drone.lfoGain.gain.setValueAtTime(base * 0.3, now);
+            this.drone.lfo.frequency.setValueAtTime(2.3 + stage * 0.3, now);
+        }
+        if (on !== this.drone.on) {
+            this.drone.on = on;
+            // A quick fade instead of a hard cut, so it doesn't click
+            this.drone.gain.gain.setTargetAtTime(on ? 0.05 : 0, this.ctx.currentTime, 0.02);
         }
     }
 
