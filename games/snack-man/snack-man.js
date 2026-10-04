@@ -25,24 +25,8 @@
  */
 
 import MDog from "../../MDogModules/MDogMain.js"
-
-const keys = {
-    up: ["ArrowUp", "w"],
-    down: ["ArrowDown", "s"],
-    left: ["ArrowLeft", "a"],
-    right: ["ArrowRight", "d"],
-    restart: ["r"]
-}
-
-function keyDown(keySet, hold) {
-    hold = hold ?? true;
-    for (const key of keySet) {
-        if (hold ? MDog.Input.Keyboard.isDown(key) : MDog.Input.Keyboard.isClicked(key)) {
-            return true;
-        }
-    }
-    return false;
-}
+import Controls, {KEY_BUFFER_TICKS} from "./Controls.js";
+import Sound from "./Sound.js";
 
 const DIRS = {
     up: {x: 0, y: -1},
@@ -57,9 +41,8 @@ const TICKS_PER_SECOND = 160; // MDog runs the active function at a fixed 160 ti
 const SPEED = 7.5 / TICKS_PER_SECOND; // tiles per tick, on level 1
 const SPEED_PER_LEVEL = 0.08; // each level after the first is this much faster...
 const MAX_SPEED_MULTIPLIER = 1.4; // ...up to this
-const TURN_BUFFER_TICKS = 40; // how long a released turn input is remembered (0.25s)
 const LATE_TURN_WINDOW = 0.25; // how far past a tile center (in tiles) you can still turn
-const BLOCKED_GRACE_TICKS = 24; // time to turn away when your face is up against your body (0.15s)
+const BLOCKED_GRACE_TICKS = 24; // at a junction, time to take the open way when straight ahead is your body (0.15s)
 const CHOMP_PIXELS = 2.5; // pixels travelled per mouth frame
 const CHOMP_FRAMES = [1, 2, 3, 2];
 const STOPPED_MOUTH_FRAME = 2; // half open when he's stopped, so you can tell which way he's facing
@@ -88,6 +71,8 @@ const CLEAR_FLASHES = 8; // ...this many times, and the next level starts
 const BEST_SCORE_KEY = "snack-man-best";
 const POWER_PELLET_COUNT = 4;
 const POWER_PELLET_MIN_DISTANCE = 4 * 6.5; // pixels between random power pellets: 4 snack man radiuses
+const BONUS_POINTS = 200; // a power pellet eaten while already blue; each one after that is worth double
+const BONUS_FREEZE_TICKS = 100; // like eating a ghost in Pac-Man, everything stops while the points show
 
 // ---------- Maze ----------
 
@@ -157,6 +142,9 @@ const COLORS = {
     text: "#ffffff",
     scoreDrain: "#ff5a5a",
     label: "#dedeff",
+    bonus: "#00ffff", // Pac-Man's ghost-points cyan
+    logoShadow: "#d96b00",
+    wall: "#2121ff",
     dim: "#5a5a8c",
     loss: "#ff2a2a"
 }
@@ -504,9 +492,10 @@ class Effects {
 // The part of his tail he bit off. It flashes, then pops one segment at a time,
 // starting where he bit it, and your score goes down with every pop.
 class SeveredPiece {
-    constructor(tiles, effects) {
+    constructor(tiles, effects, onPop) {
         this.tiles = tiles;
         this.effects = effects;
+        this.onPop = onPop;
         this.points = tilePath(tiles);
         this.timer = 0;
         this.popped = 0;
@@ -527,6 +516,7 @@ class SeveredPiece {
             const popped = this.points.shift();
             const x = wrapPixelX(popped.x);
             this.effects.burst(x, popped.y, 6, [COLORS.loss, COLORS.loss, COLORS.flash]);
+            this.onPop();
             // Only every other segment gets a "-10" so they don't pile up; it's just there to show it's bad
             if (this.popped % 2 === 0) {
                 this.effects.lossText(x, popped.y);
@@ -733,11 +723,18 @@ class DeathAnimation {
 // ---------- Snack Man ----------
 
 class SnackMan {
-    // events: onDie() when he crashes, onDeathOver() once the death animation has finished
-    constructor(board, effects, events) {
+    // events (all optional): onEat(kind), onBite(), onBonus(points, x, y), onPiecePop(),
+    //     onDie(), onDeathSpin() when the classic death starts, onDeathOver() once it's finished
+    // input: where turns come from (pressedDirection(), bufferTicks(), isHeld(name))
+    constructor(board, effects, events, input) {
         this.board = board;
         this.effects = effects;
-        this.events = events;
+        const nothing = () => {};
+        this.events = Object.assign({
+            onEat: nothing, onBite: nothing, onBonus: nothing, onPiecePop: nothing,
+            onDie: nothing, onDeathSpin: nothing, onDeathOver: nothing
+        }, events);
+        this.input = input;
         this.reset();
     }
 
@@ -766,6 +763,9 @@ class SnackMan {
         this.blueTimer = 0; // ticks since he turned blue, for the flash
         this.biteTimer = 0;
         this.pieces = [];
+        this.powerChain = 0; // power pellets eaten while already blue, since he last bit
+        this.bonusPoints = 0; // points from those, this level
+        this.mouthShut = false; // the game shuts his mouth while bonus points are showing, so they're easy to read
     }
 
     get dead() {
@@ -801,25 +801,30 @@ class SnackMan {
     // ----- Input -----
 
     readInput() {
-        for (const name in DIRS) {
-            if (keyDown(keys[name], false)) {
-                this.wantDir = DIRS[name];
-                this.wantName = name;
-                this.wantTimer = TURN_BUFFER_TICKS;
-            }
+        const pressed = this.input.pressedDirection();
+        if (pressed !== null) {
+            this.wantDir = DIRS[pressed];
+            this.wantName = pressed;
+            this.wantTimer = this.input.bufferTicks();
         }
 
         if (this.wantDir !== null) {
-            if (keyDown(keys[this.wantName])) {
-                this.wantTimer = TURN_BUFFER_TICKS;
+            if (this.input.isHeld(this.wantName)) {
+                this.wantTimer = KEY_BUFFER_TICKS;
             } else {
                 this.wantTimer -= 1;
                 if (this.wantTimer <= 0) {
-                    this.wantDir = null;
-                    this.wantName = null;
+                    this.clearInput();
                 }
             }
         }
+    }
+
+    // Forget any remembered turn (after the game was paused, keys may have been let go without us seeing)
+    clearInput() {
+        this.wantDir = null;
+        this.wantName = null;
+        this.wantTimer = 0;
     }
 
     // ----- Movement -----
@@ -840,11 +845,13 @@ class SnackMan {
         for (const t of cut) {
             this.occupied[tileIndex(t)] = false;
         }
-        this.pieces.push(new SeveredPiece(cut, this.effects));
+        this.pieces.push(new SeveredPiece(cut, this.effects, () => this.events.onPiecePop()));
 
         this.blue = false;
+        this.powerChain = 0;
         this.biteTimer = BITE_CHOMP_TICKS;
         this.effects.shake();
+        this.events.onBite();
 
         const c = center(tile);
         this.effects.burst(c.x, c.y, 10, [COLORS.flash, COLORS.blue]);
@@ -869,10 +876,11 @@ class SnackMan {
         this.target = null;
         this.progress = 0;
 
-        // Facing a wall is safe, you just wait. Facing your own body (or being boxed in) gives
-        // you a moment to turn away before it counts as a crash.
-        const headOn = this.isBodyBlocking(step(this.body[0], this.dir));
-        if (headOn || !this.hasSafeMove()) {
+        // Boxed in with no way out is a crash right away. At a junction where straight ahead is your
+        // body but another way is open, you get a moment to take it. Facing a wall is safe, you just wait.
+        if (!this.hasSafeMove()) {
+            this.die();
+        } else if (this.isBodyBlocking(step(this.body[0], this.dir))) {
             this.blockedTimer += 1;
             if (this.blockedTimer > BLOCKED_GRACE_TICKS) {
                 this.die();
@@ -891,12 +899,22 @@ class SnackMan {
         this.body.unshift(this.target);
         this.occupied[tileIndex(this.target)] = true;
 
-        if (this.board.eat(this.target) === POWER) {
-            if (!this.blue) {
+        const eaten = this.board.eat(this.target);
+        if (eaten !== EMPTY) {
+            this.events.onEat(eaten);
+        }
+        if (eaten === POWER) {
+            const c = center(this.target);
+            if (this.blue) {
+                // Already blue: like eating ghosts in Pac-Man, each one is worth double the last
+                const points = BONUS_POINTS * Math.pow(2, this.powerChain);
+                this.powerChain += 1;
+                this.bonusPoints += points;
+                this.events.onBonus(points, c.x, c.y);
+            } else {
+                this.blue = true;
                 this.blueTimer = 0;
             }
-            this.blue = true;
-            const c = center(this.target);
             this.effects.burst(c.x, c.y, 10, [COLORS.blue, COLORS.pellet]);
         }
 
@@ -1000,6 +1018,9 @@ class SnackMan {
 
     updateDying() {
         const removed = this.death.update();
+        if (this.death.finaleFrame() === DEATH_HOLD_TICKS) {
+            this.events.onDeathSpin();
+        }
         for (let i = 0; i < removed; i++) {
             const tail = this.body.pop();
             this.occupied[tileIndex(tail)] = false;
@@ -1061,7 +1082,7 @@ class SnackMan {
     }
 
     mouthFrame() {
-        if (!this.started || this.dead) {
+        if (!this.started || this.dead || this.mouthShut) {
             return 1;
         }
         // Big chomp: wide open, then snapped shut
@@ -1152,6 +1173,47 @@ class SnackMan {
     }
 }
 
+// ---------- Title logo ----------
+
+// "SNACK MAN" in big blocky letters for the title screen (the regular font is only 5 pixels tall)
+const LOGO_LETTERS = {
+    S: [".####", "#....", "#....", ".###.", "....#", "....#", "####."],
+    N: ["#...#", "##..#", "#.#.#", "#..##", "#...#", "#...#", "#...#"],
+    A: [".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+    C: [".####", "#....", "#....", "#....", "#....", "#....", ".####"],
+    K: ["#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"],
+    M: ["#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#", "#...#"],
+    " ": ["...", "...", "...", "...", "...", "...", "..."]
+};
+const LOGO_SCALE = 4; // screen pixels per logo pixel
+const LOGO_GAP = 1; // logo pixels between letters
+
+function logoWidth(text) {
+    let width = 0;
+    for (const letter of text) {
+        width += LOGO_LETTERS[letter][0].length + LOGO_GAP;
+    }
+    return (width - LOGO_GAP) * LOGO_SCALE;
+}
+
+// Draws the logo with its top middle at (x, y), with a drop shadow
+function drawLogo(text, x, y) {
+    for (const [offset, color] of [[LOGO_SCALE / 2, COLORS.logoShadow], [0, COLORS.snack]]) {
+        let left = x - logoWidth(text) / 2 + offset;
+        for (const letter of text) {
+            const rows = LOGO_LETTERS[letter];
+            rows.forEach((row, j) => {
+                for (let i = 0; i < row.length; i++) {
+                    if (row[i] === "#") {
+                        MDog.Draw.rectangleFill(left + i * LOGO_SCALE, y + offset + j * LOGO_SCALE, LOGO_SCALE, LOGO_SCALE, color);
+                    }
+                }
+            });
+            left += (rows[0].length + LOGO_GAP) * LOGO_SCALE;
+        }
+    }
+}
+
 // ---------- Game ----------
 
 function loadBest() {
@@ -1170,13 +1232,51 @@ function saveBest(best) {
     }
 }
 
+const TITLE_LINES = [
+    {y: 52, text: "EAT PELLETS TO GROW LONGER.", color: "text"},
+    {y: 64, text: "YOUR SCORE IS HOW LONG YOU ARE.", color: "text"},
+    {y: 76, text: "DON'T RUN INTO YOURSELF!", color: "text"},
+    {y: 102, text: "POWER PELLETS TURN YOU BLUE.", color: "label"},
+    {y: 114, text: "WHILE YOU'RE BLUE, BITE YOURSELF", color: "label"},
+    {y: 126, text: "TO CUT OFF YOUR TAIL...", color: "label"},
+    {y: 138, text: "BUT YOU LOSE THE POINTS YOU BITE OFF!", color: "loss"},
+    {y: 164, text: "MORE POWER PELLETS WHILE BLUE:", color: "label"},
+    {y: 176, text: "200, 400, 800...", color: "bonus"}
+];
+
+// On-screen hints, for whichever the player is using
+const HINTS = {
+    keyboard: {
+        move: "ARROWS OR WASD TO MOVE",
+        pause: "P OR ESC TO PAUSE - M TO MUTE",
+        start: "PRESS ENTER TO START",
+        hud: "P OR ESC TO PAUSE",
+        menu: "ARROWS TO PICK, ENTER TO CHOOSE"
+    },
+    touch: {
+        move: "SWIPE TO MOVE",
+        pause: "TAP TO PAUSE",
+        start: "TAP TO START",
+        hud: "TAP TO PAUSE",
+        menu: "SWIPE TO PICK, TAP TO CHOOSE"
+    }
+};
+
+const PAUSE_OPTIONS = ["RESUME", "RESTART", "MUTE", "TITLE SCREEN"];
+
 const game = {
+    state: "title", // "title", "playing" or "paused"
     tick: 0,
     level: 1,
     board: new Board(),
     snackMan: null,
     effects: new Effects(),
+    controls: new Controls(),
+    sound: new Sound(),
     clearTimer: 0,
+    freezeTimer: 0, // while bonus points are showing, everything stops
+    bonusPopup: null,
+    pauseSelection: 0,
     best: loadBest(),
     bankedScore: 0, // score from levels already cleared this run
     finalScore: null, // set when a level is over, so the score stops changing
@@ -1191,6 +1291,8 @@ const game = {
 
     startLevel() {
         this.clearTimer = 0;
+        this.freezeTimer = 0;
+        this.bonusPopup = null;
         this.effects.clear();
         this.finalScore = null;
         this.newBest = false;
@@ -1198,24 +1300,52 @@ const game = {
         this.snackMan.reset();
     },
 
+    startGame() {
+        this.state = "playing";
+        this.restart();
+        this.sound.start();
+    },
+
+    pause() {
+        this.state = "paused";
+        this.pauseSelection = 0;
+        this.sound.setPaused(true);
+    },
+
+    resume() {
+        this.state = "playing";
+        this.snackMan.clearInput();
+        this.sound.setPaused(false);
+    },
+
+    goToTitle() {
+        this.state = "title";
+        this.sound.setSiren(false);
+        this.sound.setPaused(false);
+    },
+
+    hints() {
+        return this.controls.isTouch() ? HINTS.touch : HINTS.keyboard;
+    },
+
     speed() {
         return SPEED * Math.min(MAX_SPEED_MULTIPLIER, 1 + SPEED_PER_LEVEL * (this.level - 1));
     },
 
-    // Your score is what you banked on earlier levels plus how long you are: every segment is a
-    // pellet you ate. Bitten-off segments still count until they pop, so the score drains away as they do.
+    // Your score is what you banked on earlier levels, plus bonus points, plus how long you are: every
+    // segment is a pellet you ate. Bitten-off segments still count until they pop, so the score drains away as they do.
     getScore() {
         if (this.finalScore !== null) {
             return this.finalScore;
         }
         const bitten = this.snackMan.pieces.reduce((sum, piece) => sum + piece.tiles.length, 0);
-        return this.bankedScore + (this.snackMan.body.length - 1 + bitten) * PELLET_POINTS;
+        return this.bankedScore + this.snackMan.bonusPoints + (this.snackMan.body.length - 1 + bitten) * PELLET_POINTS;
     },
 
-    // The level is over (he died, or cleared the board). Your score is what you banked plus how long
-    // you are right now; anything you bit off is already lost, even if it hasn't finished popping.
+    // The level is over (he died, or cleared the board). Anything you bit off is already lost,
+    // even if it hasn't finished popping.
     endRound() {
-        this.finalScore = this.bankedScore + (this.snackMan.body.length - 1) * PELLET_POINTS;
+        this.finalScore = this.bankedScore + this.snackMan.bonusPoints + (this.snackMan.body.length - 1) * PELLET_POINTS;
         if (this.finalScore > this.best) {
             this.best = this.finalScore;
             this.newBest = true;
@@ -1227,21 +1357,88 @@ const game = {
         return this.board.pelletsLeft === 0;
     },
 
+    showBonus(points, x, y) {
+        this.freezeTimer = BONUS_FREEZE_TICKS;
+        this.bonusPopup = {text: "" + points, x: x, y: y};
+        this.snackMan.mouthShut = true;
+        this.sound.bonus();
+    },
+
     update() {
         this.tick += 1;
+        this.controls.update();
 
-        if (keyDown(keys.restart, false)) {
+        if (this.controls.mutePressed()) {
+            this.sound.toggleMute();
+        }
+
+        if (this.state === "title") {
+            if (this.controls.confirmPressed()) {
+                this.startGame();
+            }
+            return;
+        }
+
+        if (this.state === "paused") {
+            this.updatePauseMenu();
+            return;
+        }
+
+        if (this.controls.pausePressed() || this.controls.tappedScreen()) {
+            this.pause();
+            return;
+        }
+        if (this.controls.restartPressed()) {
             this.restart();
             return;
         }
 
         this.effects.update();
-        this.snackMan.updatePieces();
 
-        if (this.isClearing()) {
-            this.updateClear();
+        if (this.freezeTimer > 0) {
+            this.freezeTimer -= 1;
+            if (this.freezeTimer === 0) {
+                this.bonusPopup = null;
+                this.snackMan.mouthShut = false;
+            }
         } else {
-            this.snackMan.update(this.speed());
+            this.snackMan.updatePieces();
+            if (this.isClearing()) {
+                this.updateClear();
+            } else {
+                this.snackMan.update(this.speed());
+            }
+        }
+
+        const sirenOn = this.snackMan.blue && !this.snackMan.dead && !this.isClearing() && this.freezeTimer === 0;
+        this.sound.setSiren(sirenOn);
+    },
+
+    updatePauseMenu() {
+        if (this.controls.pausePressed()) {
+            this.resume();
+            return;
+        }
+
+        const direction = this.controls.pressedDirection();
+        if (direction === "up") {
+            this.pauseSelection = (this.pauseSelection + PAUSE_OPTIONS.length - 1) % PAUSE_OPTIONS.length;
+        } else if (direction === "down") {
+            this.pauseSelection = (this.pauseSelection + 1) % PAUSE_OPTIONS.length;
+        }
+
+        if (this.controls.confirmPressed()) {
+            const choice = PAUSE_OPTIONS[this.pauseSelection];
+            if (choice === "RESUME") {
+                this.resume();
+            } else if (choice === "RESTART") {
+                this.resume();
+                this.restart();
+            } else if (choice === "MUTE") {
+                this.sound.toggleMute();
+            } else {
+                this.goToTitle();
+            }
         }
     },
 
@@ -1253,6 +1450,7 @@ const game = {
                 return;
             }
             this.endRound();
+            this.sound.levelClear();
         }
         this.clearTimer += 1;
         if (this.clearTimer >= CLEAR_PAUSE_TICKS + CLEAR_FLASH_TICKS * CLEAR_FLASHES) {
@@ -1270,6 +1468,11 @@ const game = {
     },
 
     draw() {
+        if (this.state === "title") {
+            this.drawTitle();
+            return;
+        }
+
         const shake = this.effects.shakeOffset();
         MDog.Draw.translate(MAZE_X + shake.x, MAZE_Y + shake.y);
 
@@ -1285,6 +1488,11 @@ const game = {
         this.snackMan.drawOverPellets(this.tick);
         this.effects.draw();
 
+        if (this.bonusPopup !== null) {
+            const popup = this.bonusPopup;
+            MDog.Draw.textImage(popup.text, popup.x, popup.y, COLORS.bonus, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
+        }
+
         // Hide anything poking out of the tunnel
         const screenHeight = MDog.Draw.getScreenHeightInArtPixels();
         MDog.Draw.rectangleFill(-MAZE_X - SHAKE_AMOUNT, -MAZE_Y - SHAKE_AMOUNT, MAZE_X + SHAKE_AMOUNT, screenHeight + SHAKE_AMOUNT * 2, COLORS.background);
@@ -1292,6 +1500,43 @@ const game = {
 
         MDog.Draw.translate(MAZE_X, MAZE_Y);
         this.drawHud();
+
+        if (this.state === "paused") {
+            this.drawPauseMenu();
+        }
+    },
+
+    drawTitle() {
+        const font = "fonts/marsfont.png";
+        const middle = MAZE_WIDTH / 2;
+        MDog.Draw.translate(MAZE_X, MAZE_Y);
+        MDog.Draw.clear({color: COLORS.background});
+
+        drawLogo("SNACK MAN", middle, -30);
+        this.drawTitleBest(middle, 6);
+
+        for (const line of TITLE_LINES) {
+            MDog.Draw.textImage(line.text, middle, line.y, COLORS[line.color], font, {alignX: "center", alignY: "center"});
+        }
+
+        const hints = this.hints();
+        MDog.Draw.textImage(hints.move, middle, 208, COLORS.dim, font, {alignX: "center", alignY: "center"});
+        MDog.Draw.textImage(hints.pause, middle, 220, COLORS.dim, font, {alignX: "center", alignY: "center"});
+        if (Math.floor(this.tick / 40) % 2 === 0) {
+            MDog.Draw.textImage(hints.start, middle, 256, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+        }
+    },
+
+    // The best score on the title screen, in its own box so it stands out
+    drawTitleBest(middle, top) {
+        const font = "fonts/marsfont.png";
+        const width = 96;
+        const height = 34;
+        const x = middle - width / 2;
+        MDog.Draw.rectangle(x, top, width, height, COLORS.wall);
+        MDog.Draw.rectangle(x + 2, top + 2, width - 4, height - 4, COLORS.wall);
+        MDog.Draw.textImage("BEST SCORE", middle, top + 10, COLORS.label, font, {alignX: "center", alignY: "center"});
+        MDog.Draw.textImage("" + this.best, middle, top + 23, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
     },
 
     drawHud() {
@@ -1308,7 +1553,7 @@ const game = {
         MDog.Draw.textImage("" + this.best, MAZE_WIDTH, top + 9, bestFlashing ? COLORS.snack : COLORS.text, font, {size: 2, alignX: "right"});
 
         MDog.Draw.textImage("LEVEL " + this.level, 0, MAZE_HEIGHT + 8, COLORS.label, font);
-        MDog.Draw.textImage("ARROWS TO MOVE - R TO RESTART", MAZE_WIDTH, MAZE_HEIGHT + 8, COLORS.dim, font, {alignX: "right"});
+        MDog.Draw.textImage((this.sound.muted ? "MUTED - " : "") + this.hints().hud, MAZE_WIDTH, MAZE_HEIGHT + 8, COLORS.dim, font, {alignX: "right"});
 
         this.drawMessage();
     },
@@ -1330,11 +1575,52 @@ const game = {
             return;
         }
         MDog.Draw.textImage(text, MESSAGE_X, MESSAGE_Y, color, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
+    },
+
+    drawPauseMenu() {
+        const font = "fonts/marsfont.png";
+        const middle = MAZE_WIDTH / 2;
+        const width = 170;
+        const height = 87;
+        // Whole pixels only: text drawn at a half pixel comes out blurry
+        const x = Math.floor(middle - width / 2);
+        const y = Math.floor(MAZE_HEIGHT / 2 - height / 2);
+
+        MDog.Draw.rectangleFill(x, y, width, height, COLORS.background);
+        MDog.Draw.rectangle(x, y, width, height, COLORS.wall);
+        MDog.Draw.rectangle(x + 2, y + 2, width - 4, height - 4, COLORS.wall);
+
+        MDog.Draw.textImage("PAUSED", middle, y + 13, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+        PAUSE_OPTIONS.forEach((option, i) => {
+            const selected = i === this.pauseSelection;
+            const label = option === "MUTE" && this.sound.muted ? "UNMUTE" : option;
+            const text = selected ? "> " + label + " <" : label;
+            MDog.Draw.textImage(text, middle, y + 32 + i * 11, selected ? COLORS.snack : COLORS.text, font, {alignX: "center", alignY: "center"});
+        });
+        MDog.Draw.textImage(this.hints().menu, middle, y + height - 8, COLORS.dim, font, {alignX: "center", alignY: "center"});
     }
 }
+
 game.snackMan = new SnackMan(game.board, game.effects, {
+    onEat: () => game.sound.chomp(),
+    onBite: () => game.sound.bite(),
+    onBonus: (points, x, y) => game.showBonus(points, x, y),
+    onPiecePop: () => game.sound.pop(),
     onDie: () => game.endRound(),
+    onDeathSpin: () => game.sound.death(),
     onDeathOver: () => game.restart()
+}, game.controls);
+
+// Tabbing away (or the window losing focus) pauses the game, so it's safe
+window.addEventListener("blur", () => {
+    if (game.state === "playing") {
+        game.pause();
+    }
+});
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden && game.state === "playing") {
+        game.pause();
+    }
 });
 
 function update() {
