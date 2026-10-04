@@ -1833,13 +1833,17 @@ function update() {
     game.draw();
 }
 
-// Load the recolorable images up front, so the first blue face or white maze isn't missing for a moment
+// Load the images up front, so nothing is missing for a moment the first time it's drawn. The recolored
+// shapes and MDog.Draw.image keep separate caches, so each needs loading. Drawing off-screen starts the load.
 for (const dir of ["right", "up"]) {
     for (const frame of [1, 2, 3]) {
-        loadShape("snack-man/snack-man-" + dir + "-" + frame + ".png");
+        const name = "snack-man/snack-man-" + dir + "-" + frame + ".png";
+        loadShape(name);
+        MDog.Draw.image(name, -1000, -1000);
     }
 }
 loadShape("snack-man/map.png");
+MDog.Draw.image("snack-man/map.png", -1000, -1000);
 
 // Without a viewport tag, phones lay the page out as if it were a 980 pixel wide desktop screen and
 // shrink it to fit, which makes the game tiny. Adding it here leaves index.html alone.
