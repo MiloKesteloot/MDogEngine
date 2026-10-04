@@ -21,7 +21,6 @@ const KEYS = {
     mute: ["m"],
     debugSkip: ["l"], // double tap to skip the level (for testing)
     help: ["h"],
-    newName: ["n"],
     enter: ["Enter"],
     cancel: ["Escape"]
 }

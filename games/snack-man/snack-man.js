@@ -56,9 +56,11 @@ const DEATH_FREEZE_TICKS = 50; // how long he flashes before his tail slides bac
 const UNRAVEL_MIN_TICKS = 80; // even a tiny tail takes this long to slide back in, so the ease is visible
 const UNRAVEL_MAX_TICKS = 280; // even a huge tail is back in by this point
 const UNRAVEL_SPEED = 0.75; // average pixels per tick for tails in between
-const DEATH_HOLD_TICKS = 25; // pause once the tail is gone, before the classic death
+const UNRAVEL_END_SPEED = 0.3; // how fast the tail is still sliding when it finishes, as a fraction of its average speed (0 eases to a full stop)
+const DEATH_HOLD_TICKS = 0; // pause once the tail is gone, before the classic death (0 spins straight away)
 const DEATH_SPIN_TICKS = 176; // mouth opens all the way while he spins
 const DEATH_SPINS = 1.5; // full turns during the spin
+const DEATH_SPIN_START_SPEED = 0.3; // how fast the spin starts, as a fraction of its average speed (0 starts from a standstill)
 const DEATH_POP_TICKS = 40;
 const DEATH_AFTER_TICKS = 40; // empty pause before you're put back in
 const PELLET_POINTS = 10;
@@ -728,7 +730,8 @@ class DeathAnimation {
         }
 
         const t = Math.min(1, (this.timer - DEATH_FREEZE_TICKS) / this.unravelTicks);
-        const easeOut = 1 - Math.pow(1 - t, 3);
+        // A cubic ease-out mixed with a bit of steady sliding, so it slows down without creeping to a stop
+        const easeOut = UNRAVEL_END_SPEED * t + (1 - UNRAVEL_END_SPEED) * (1 - Math.pow(1 - t, 3));
         this.slidPixels = this.tailPixels * easeOut - this.removedPixels;
 
         let removed = 0;
@@ -778,7 +781,9 @@ class DeathAnimation {
         if (frame < popStart) {
             const t = Math.max(0, (frame - DEATH_HOLD_TICKS) / DEATH_SPIN_TICKS);
             const halfMouth = Math.PI * Math.pow(t, 1.5);
-            pie(x, y, facing - Math.PI * 2 * DEATH_SPINS * t * t, halfMouth, COLORS.snack);
+            // Speeds up as it goes, but starts already turning instead of from a standstill
+            const turned = DEATH_SPIN_START_SPEED * t + (1 - DEATH_SPIN_START_SPEED) * t * t;
+            pie(x, y, facing - Math.PI * 2 * DEATH_SPINS * turned, halfMouth, COLORS.snack);
             return;
         }
 
@@ -1336,7 +1341,6 @@ const HINTS = {
         help: "PRESS H FOR HOW TO PLAY",
         back: "PRESS ENTER TO GO BACK",
         save: "ENTER TO SAVE - ESC TO SKIP",
-        known: "ENTER: OK - N: NEW NAME",
         retry: "ENTER: TRY AGAIN - ESC: SKIP"
     },
     touch: {
@@ -1348,7 +1352,6 @@ const HINTS = {
         help: "TAP HERE FOR HOW TO PLAY",
         back: "TAP TO GO BACK",
         save: "", // buttons instead
-        known: "",
         retry: ""
     }
 };
@@ -1447,20 +1450,19 @@ const game = {
             return;
         }
 
+        // This device's name is already on the board with a score at least this good: there's nothing to
+        // save, so it's just back to the title screen
+        const myName = this.scoreboard.myName;
+        const mine = myName ? this.scoreboard.find(myName) : null;
+        if (mine !== null && mine.score >= score) {
+            this.goToTitle();
+            return;
+        }
+
         this.state = "entry";
         this.sound.setBackground(null);
         const rank = this.scoreboard.entries.filter(entry => entry.score >= score).length + 1;
         this.entry = {mode: "name", score: score, rank: rank, message: null, takenName: null, existing: null};
-
-        // This device already has a name, and that name already has a better spot on the board
-        const myName = this.scoreboard.myName;
-        const mine = myName ? this.scoreboard.find(myName) : null;
-        if (mine !== null && mine.score >= score) {
-            this.entry.mode = "known";
-            this.entry.existing = mine;
-            this.entry.takenName = myName;
-            return;
-        }
         this.nameInput.open(myName ?? "");
     },
 
@@ -1533,7 +1535,7 @@ const game = {
     entryButtons() {
         const box = this.entryLayout();
         const y = box.y + box.height - 22;
-        const labels = {name: ["SAVE", "SKIP"], taken: ["OK", "SKIP"], known: ["OK", "NEW NAME"], error: ["RETRY", "SKIP"]}[this.entry.mode];
+        const labels = {name: ["SAVE", "SKIP"], taken: ["OK", "SKIP"], error: ["RETRY", "SKIP"]}[this.entry.mode];
         if (labels === undefined) {
             return [];
         }
@@ -1567,13 +1569,6 @@ const game = {
                 this.submitName();
             } else if (cancel || button === "SKIP") {
                 this.finishEntry();
-            }
-        } else if (entry.mode === "known") {
-            if (enter || button === "OK") {
-                this.finishEntry();
-            } else if (this.controls.pressed("newName") || button === "NEW NAME") {
-                entry.mode = "name";
-                this.nameInput.open("");
             }
         } else if (entry.mode === "error") {
             if (enter || button === "RETRY") {
@@ -2015,13 +2010,7 @@ const game = {
         text("NEW HIGH SCORE!", 14, COLORS.snack, 2);
         text("" + entry.score, 34, COLORS.text, 2);
 
-        if (entry.mode === "known") {
-            text("THAT'S " + ordinal(entry.rank) + " ON THE BOARD...", 56, COLORS.text);
-            text("BUT YOUR BEST AS " + entry.takenName + " IS", 72, COLORS.label);
-            text(entry.existing.score + ", " + ordinal(entry.existing.rank) + " PLACE.", 84, COLORS.label);
-            text("THAT STAYS ON THE BOARD.", 100, COLORS.label);
-            text(this.hints().known, height - 14, COLORS.dim);
-        } else if (entry.mode === "saving") {
+        if (entry.mode === "saving") {
             text("SAVING...", 80, COLORS.label);
         } else if (entry.mode === "error") {
             text("COULDN'T SAVE YOUR SCORE.", 64, COLORS.loss);
