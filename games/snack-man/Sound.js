@@ -14,7 +14,7 @@
 // out by Andre Weissflog's pacman.c (https://github.com/floooh/pacman.c).
 
 const MUTED_KEY = "snack-man-muted";
-const VOLUME = 0.22;
+const VOLUME = 0.09;
 
 // ---------- The arcade sound chip ----------
 
@@ -72,29 +72,23 @@ function siren(stage) {
     return sweep(6, 6, start, 0x200, 12).concat(sweep(6, 6, start + 0x1600, -0x200, 12));
 }
 
-// Pac-Man dying, recorded from the arcade chip a frame at a time: six falling "wee-oo"s, each one lower
-// and quieter, then two quick rising pops. Each value packs volume (top 4 bits), waveform and frequency.
-const DEATH = [
-    0xF1001F00, 0xF1001E00, 0xF1001D00, 0xF1001C00, 0xF1001B00, 0xF1001C00, 0xF1001D00, 0xF1001E00,
-    0xF1001F00, 0xF1002000, 0xF1002100, 0xE1001D00, 0xE1001C00, 0xE1001B00, 0xE1001A00, 0xE1001900,
-    0xE1001800, 0xE1001900, 0xE1001A00, 0xE1001B00, 0xE1001C00, 0xE1001D00, 0xE1001E00, 0xD1001B00,
-    0xD1001A00, 0xD1001900, 0xD1001800, 0xD1001700, 0xD1001600, 0xD1001700, 0xD1001800, 0xD1001900,
-    0xD1001A00, 0xD1001B00, 0xD1001C00, 0xC1001900, 0xC1001800, 0xC1001700, 0xC1001600, 0xC1001500,
-    0xC1001400, 0xC1001500, 0xC1001600, 0xC1001700, 0xC1001800, 0xC1001900, 0xC1001A00, 0xB1001700,
-    0xB1001600, 0xB1001500, 0xB1001400, 0xB1001300, 0xB1001200, 0xB1001300, 0xB1001400, 0xB1001500,
-    0xB1001600, 0xB1001700, 0xB1001800, 0xA1001500, 0xA1001400, 0xA1001300, 0xA1001200, 0xA1001100,
-    0xA1001000, 0xA1001100, 0xA1001200, 0x80000800, 0x80001000, 0x80001800, 0x80002000, 0x80002800,
-    0x80003000, 0x80003800, 0x80004000, 0x80004800, 0x80005000, 0x80005800, 0x00000000, 0x80000800,
-    0x80001000, 0x80001800, 0x80002000, 0x80002800, 0x80003000, 0x80003800, 0x80004000, 0x80004800,
-    0x80005000, 0x80005800
-].map(value => ({
-    frequency: value & 0xFFFFF,
-    waveform: (value >>> 24) & 7,
-    volume: (value >>> 28) & 0xF
-}));
-
-// How long the death sound's falling part lasts, before the two pops (66 frames)
-export const DEATH_FALL_SECONDS = 66 / WSG_FRAME_RATE;
+// Pac-Man dying, as the arcade played it: falling "wee-oo"s, each one lower and quieter, then two quick
+// rising pops. The arcade plays six wee-oos; here they keep going for as long as the death takes, so a long
+// tail sliding back in gets an absurdly long death. frames is how long the wee-oos last.
+function death(frames) {
+    const result = [];
+    const count = Math.max(1, Math.round(frames / 12));
+    for (let i = 0; result.length < frames; i++) {
+        // Like the arcade, from 0x1F00 down to 0x1500 and from volume 15 down to 10, just spread out
+        const t = Math.min(1, i / Math.max(1, count - 1));
+        const start = 0x1F00 - Math.round(t * 0x0A) * 0x100;
+        const volume = Math.round(15 - 5 * t);
+        result.push(...sweep(1, volume, start, -0x100, 6), ...sweep(1, volume, start - 0x400, 0x100, 6));
+    }
+    result.length = frames;
+    const pop = sweep(1, 8, 0x800, 0x800, 11);
+    return result.concat(pop, [{frequency: 0, waveform: 0, volume: 0}], pop);
+}
 
 class Sound {
     constructor() {
@@ -303,13 +297,13 @@ class Sound {
         const source = this.ctx.createBufferSource();
         const gain = this.ctx.createGain();
         source.buffer = this.noise;
-        gain.gain.setValueAtTime(0.5, start);
+        gain.gain.setValueAtTime(1, start);
         gain.gain.exponentialRampToValueAtTime(0.01, start + 0.12);
         source.connect(gain);
         gain.connect(this.master);
         source.start(start);
         source.stop(start + 0.13);
-        this.tone("square", 520, 70, 0.2, 0.2);
+        this.tone("square", 520, 70, 0.2, 0.5);
     }
 
     // A bitten-off segment popping
@@ -317,10 +311,17 @@ class Sound {
         this.tone("square", 1100, 500, 0.035, 0.08);
     }
 
-    // Pac-Man's death
-    death() {
+    // Pac-Man's death. seconds is how long the wee-oos go on before the two pops.
+    death(seconds) {
         this.setBackground(null);
-        this.play(2, "death", DEATH, false);
+        const frames = Math.max(1, Math.round(seconds * WSG_FRAME_RATE));
+        this.play(2, "death" + frames, death(frames), false);
+    }
+
+    // Cuts off anything still playing, like a long death sound when the game restarts
+    stopAll() {
+        this.setBackground(null);
+        this.stopVoice(2);
     }
 
     // A short tune when a game starts (not Pac-Man's; that one's copyrighted music)

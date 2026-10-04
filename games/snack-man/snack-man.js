@@ -26,7 +26,7 @@
 
 import MDog from "../../MDogModules/MDogMain.js"
 import Controls, {KEY_BUFFER_TICKS} from "./Controls.js";
-import Sound, {DEATH_FALL_SECONDS} from "./Sound.js";
+import Sound from "./Sound.js";
 import Scoreboard from "./Scoreboard.js";
 import NameInput from "./NameInput.js";
 
@@ -57,7 +57,7 @@ const UNRAVEL_MIN_TICKS = 80; // even a tiny tail takes this long to slide back 
 const UNRAVEL_MAX_TICKS = 280; // even a huge tail is back in by this point
 const UNRAVEL_SPEED = 0.75; // average pixels per tick for tails in between
 const DEATH_HOLD_TICKS = 25; // pause once the tail is gone, before the classic death
-const DEATH_SPIN_TICKS = Math.round(DEATH_FALL_SECONDS * TICKS_PER_SECOND); // mouth opens all the way while he spins, timed so the death sound's pops land as he pops
+const DEATH_SPIN_TICKS = 176; // mouth opens all the way while he spins
 const DEATH_SPINS = 1.5; // full turns during the spin
 const DEATH_POP_TICKS = 40;
 const DEATH_AFTER_TICKS = 40; // empty pause before you're put back in
@@ -745,6 +745,12 @@ class DeathAnimation {
         return removed;
     }
 
+    // Ticks from the tail starting to slide in until he pops, so the death sound can last exactly that long
+    ticksUntilPop() {
+        const unravel = this.tailPixels > 0 ? Math.ceil(this.unravelTicks) : 0;
+        return unravel + DEATH_HOLD_TICKS + DEATH_SPIN_TICKS;
+    }
+
     isFlashing() {
         return this.timer < DEATH_FREEZE_TICKS && Math.floor(this.timer / 6) % 2 === 0;
     }
@@ -798,7 +804,7 @@ class DeathAnimation {
 
 class SnackMan {
     // events (all optional): onEat(kind), onBite(), onBonus(points, x, y), onPiecePop(),
-    //     onDie(), onDeathSpin() when the classic death starts, onDeathOver() once it's finished
+    //     onDie(), onDeathSound(seconds) when the tail starts sliding in (seconds until he pops), onDeathOver() once it's finished
     // input: where turns come from (pressedDirection(), bufferTicks(), isHeld(name))
     constructor(board, effects, events, input) {
         this.board = board;
@@ -806,7 +812,7 @@ class SnackMan {
         const nothing = () => {};
         this.events = Object.assign({
             onEat: nothing, onBite: nothing, onBonus: nothing, onPiecePop: nothing,
-            onDie: nothing, onDeathSpin: nothing, onDeathOver: nothing
+            onDie: nothing, onDeathSound: nothing, onDeathOver: nothing
         }, events);
         this.input = input;
         this.reset();
@@ -1092,8 +1098,8 @@ class SnackMan {
 
     updateDying() {
         const removed = this.death.update();
-        if (this.death.finaleFrame() === DEATH_HOLD_TICKS) {
-            this.events.onDeathSpin();
+        if (this.death.timer === DEATH_FREEZE_TICKS) {
+            this.events.onDeathSound(this.death.ticksUntilPop() / TICKS_PER_SECOND);
         }
         for (let i = 0; i < removed; i++) {
             const tail = this.body.pop();
@@ -1409,6 +1415,7 @@ const game = {
 
     // Back to level 1 with a fresh board and no score (after dying, or pressing R)
     restart() {
+        this.sound.stopAll();
         this.level = 1;
         this.bankedScore = 0;
         this.debugRun = false;
@@ -2155,7 +2162,7 @@ game.snackMan = new SnackMan(game.board, game.effects, {
         game.endRound();
         game.vibrate(VIBRATIONS.death);
     },
-    onDeathSpin: () => game.sound.death(),
+    onDeathSound: seconds => game.sound.death(seconds),
     onDeathOver: () => game.endOfRun()
 }, game.controls);
 
