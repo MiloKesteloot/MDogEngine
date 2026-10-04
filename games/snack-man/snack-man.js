@@ -64,7 +64,20 @@ const DEATH_FREEZE_TICKS = 50; // how long he flashes before his tail slides bac
 const UNRAVEL_MIN_TICKS = 40; // even a tiny tail takes this long to slide back in, so the ease is visible
 const UNRAVEL_MAX_TICKS = 140; // even a huge tail is back in by this point
 const UNRAVEL_SPEED = 1.5; // average pixels per tick for tails in between
+const DEATH_HOLD_TICKS = 25; // pause once the tail is gone, before the classic death
+const DEATH_SPIN_TICKS = 110; // mouth opens all the way while he spins
+const DEATH_SPINS = 1.5; // full turns during the spin
+const DEATH_POP_TICKS = 40;
+const DEATH_AFTER_TICKS = 40; // empty pause before you're put back in
 const PELLET_POINTS = 10;
+const BLUE_END_FLASH_TICKS = 64; // after a bite, he flashes blue/yellow this long before he's plain yellow again
+const BITE_CHOMP_TICKS = 24; // big chomp when he bites himself
+const SHAKE_TICKS = 14;
+const SHAKE_AMOUNT = 2; // pixels
+const PIECE_FLASH_TICKS = 36; // the bitten-off piece flashes before it starts popping
+const PIECE_POP_MIN_TICKS = 3; // fastest a long piece pops, per segment
+const PIECE_POP_MAX_TICKS = 10; // slowest a short piece pops, per segment
+const PIECE_POP_TOTAL_TICKS = 140; // roughly how long popping a whole piece takes
 
 // ---------- Maze ----------
 
@@ -125,7 +138,10 @@ const COLORS = {
     background: "#000000",
     pellet: "#ffb9af",
     snack: "#ffff00",
-    flash: "#ffffff"
+    blue: "#2e8bff",
+    flash: "#ffffff",
+    text: "#ffffff",
+    scoreDrain: "#ff5a5a"
 }
 
 // ---------- Helpers ----------
@@ -166,6 +182,45 @@ const CIRCLE_SPANS = [
 // The part of the trail closer than this to the head center counts as his neck
 const NECK_LENGTH = 7;
 
+// CIRCLE_MASK[y][x] is true for pixels inside the 13x13 circle
+const CIRCLE_MASK = [];
+for (let y = 0; y < CIRCLE_SIZE; y++) {
+    CIRCLE_MASK.push(new Array(CIRCLE_SIZE).fill(false));
+}
+for (const [dx, dy, w, h] of CIRCLE_SPANS) {
+    for (let y = dy; y < dy + h; y++) {
+        for (let x = dx; x < dx + w; x++) {
+            CIRCLE_MASK[y][x] = true;
+        }
+    }
+}
+
+// Snack man with his mouth open by any amount, facing any angle (used for the death animation)
+function pie(x, y, facing, halfMouth, color) {
+    const half = Math.floor(CIRCLE_SIZE / 2);
+    for (let j = 0; j < CIRCLE_SIZE; j++) {
+        let runStart = -1;
+        for (let i = 0; i <= CIRCLE_SIZE; i++) {
+            let filled = false;
+            if (i < CIRCLE_SIZE && CIRCLE_MASK[j][i]) {
+                if (i === half && j === half) {
+                    filled = halfMouth < Math.PI * 0.95;
+                } else {
+                    let diff = Math.atan2(j - half, i - half) - facing;
+                    diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // wrap to -PI..PI
+                    filled = Math.abs(diff) >= halfMouth;
+                }
+            }
+            if (filled && runStart === -1) {
+                runStart = i;
+            } else if (!filled && runStart !== -1) {
+                MDog.Draw.rectangleFill(x - half + runStart, y - half + j, i - runStart, 1, color);
+                runStart = -1;
+            }
+        }
+    }
+}
+
 function circle(x, y, color) {
     const half = Math.floor(CIRCLE_SIZE / 2);
     for (const [dx, dy, w, h] of CIRCLE_SPANS) {
@@ -181,6 +236,160 @@ const POWER_SPANS = [
     [1, 6, 6, 1],
     [2, 7, 4, 1]
 ];
+
+// Centers of a run of tiles, unwrapped across the tunnel so the path stays continuous
+function tilePath(tiles, from) {
+    const points = [];
+    let last = from ?? null;
+    for (const tile of tiles) {
+        const c = center(tile);
+        if (last !== null) {
+            while (c.x - last.x > MAZE_WIDTH / 2) c.x -= MAZE_WIDTH;
+            while (last.x - c.x > MAZE_WIDTH / 2) c.x += MAZE_WIDTH;
+        }
+        points.push(c);
+        last = c;
+    }
+    return points;
+}
+
+function wrapPixelX(x) {
+    return ((x % MAZE_WIDTH) + MAZE_WIDTH) % MAZE_WIDTH;
+}
+
+// When something is in the tunnel, it also gets drawn on the other side
+function tunnelOffsets(points) {
+    const offsets = [0];
+    if (points.some(p => p.x < 8)) offsets.push(MAZE_WIDTH);
+    if (points.some(p => p.x > MAZE_WIDTH - 8)) offsets.push(-MAZE_WIDTH);
+    return offsets;
+}
+
+function isStraight(a, b, c) {
+    return Math.sign(b.x - a.x) === Math.sign(c.x - b.x) && Math.sign(b.y - a.y) === Math.sign(c.y - b.y);
+}
+
+// Draws a stretch of trail along a path. roundEnd rounds off its last point (used for the tail tip).
+function drawTrail(points, offsetX, color, roundEnd) {
+    const half = Math.floor(CIRCLE_SIZE / 2);
+    for (let i = 0; i < points.length - 1; i++) {
+        const a = points[i];
+        const b = points[i + 1];
+        if (a.x === b.x) {
+            MDog.Draw.rectangleFill(a.x - half + offsetX, Math.min(a.y, b.y), CIRCLE_SIZE, Math.abs(a.y - b.y) + 1, color);
+        } else {
+            MDog.Draw.rectangleFill(Math.min(a.x, b.x) + offsetX, a.y - half, Math.abs(a.x - b.x) + 1, CIRCLE_SIZE, color);
+        }
+    }
+
+    // Round off the corners
+    for (let i = 1; i < points.length; i++) {
+        const isEnd = i === points.length - 1;
+        if (isEnd ? roundEnd : !isStraight(points[i - 1], points[i], points[i + 1])) {
+            circle(points[i].x + offsetX, points[i].y, color);
+        }
+    }
+}
+
+// Recolored copies of the face sprites, made once and reused (MDog's own tint makes a new canvas every draw)
+const tintCache = new Map();
+
+function tintedSprite(fileName, color) {
+    const key = fileName + color;
+    if (tintCache.has(key)) {
+        return tintCache.get(key);
+    }
+    const image = MDog.Draw._getImageByName(fileName);
+    if (!image.complete || image.naturalWidth === 0) {
+        return null;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    ctx.globalCompositeOperation = "source-in";
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    tintCache.set(key, canvas);
+    return canvas;
+}
+
+// ---------- Particles ----------
+
+class Particle {
+    constructor(x, y, color) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 0.25 + Math.random() * 0.6;
+        this.x = x;
+        this.y = y;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.life = 22 + Math.floor(Math.random() * 14);
+        this.maxLife = this.life;
+        this.color = color;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.97;
+        this.vy *= 0.97;
+        this.life -= 1;
+    }
+
+    draw() {
+        const size = this.life > this.maxLife / 2 ? 2 : 1;
+        MDog.Draw.rectangleFill(Math.round(this.x), Math.round(this.y), size, size, this.color);
+    }
+}
+
+function burst(x, y, count, colors) {
+    for (let i = 0; i < count; i++) {
+        game.particles.push(new Particle(x, y, colors[i % colors.length]));
+    }
+}
+
+// ---------- Bitten-off piece ----------
+
+// The part of his tail he bit off. It flashes, then pops one segment at a time,
+// starting where he bit it, and your score goes down with every pop.
+class SeveredPiece {
+    constructor(tiles) {
+        this.tiles = tiles;
+        this.points = tilePath(tiles);
+        this.timer = 0;
+        this.popInterval = Math.max(PIECE_POP_MIN_TICKS, Math.min(PIECE_POP_MAX_TICKS, Math.floor(PIECE_POP_TOTAL_TICKS / tiles.length)));
+    }
+
+    isDone() {
+        return this.tiles.length === 0;
+    }
+
+    update() {
+        this.timer += 1;
+        if (this.timer < PIECE_FLASH_TICKS) {
+            return;
+        }
+        if ((this.timer - PIECE_FLASH_TICKS) % this.popInterval === 0 && this.tiles.length > 0) {
+            this.tiles.shift();
+            const popped = this.points.shift();
+            burst(wrapPixelX(popped.x), popped.y, 6, [COLORS.flash, COLORS.blue, COLORS.snack]);
+        }
+    }
+
+    draw() {
+        if (this.points.length === 0) {
+            return;
+        }
+        const flashing = this.timer < PIECE_FLASH_TICKS;
+        const color = flashing && Math.floor(this.timer / 6) % 2 === 1 ? COLORS.blue : COLORS.flash;
+        for (const offsetX of tunnelOffsets(this.points)) {
+            drawTrail(this.points, offsetX, color, true);
+            circle(this.points[0].x + offsetX, this.points[0].y, color);
+        }
+    }
+}
 
 // ---------- Board ----------
 
@@ -273,6 +482,11 @@ class SnackMan {
         this.unravelDuration = 0;
         this.unravelPopped = 0;
         this.unravelPixels = 0;
+
+        this.blue = false; // from a power pellet: the next time he runs into himself, he bites instead of dying
+        this.blueEndTimer = 0;
+        this.biteTimer = 0;
+        this.pieces = [];
     }
 
     // ----- Rules -----
@@ -287,7 +501,14 @@ class SnackMan {
     }
 
     canEnter(tile) {
-        return !this.board.isWall(tile) && !this.isBodyBlocking(tile);
+        if (this.board.isWall(tile)) {
+            return false;
+        }
+        if (!this.isBodyBlocking(tile)) {
+            return true;
+        }
+        // When blue he can bite into himself, just not the segment right behind his head
+        return this.blue && !(this.body.length > 1 && sameTile(tile, this.body[1]));
     }
 
     hasSafeMove() {
@@ -323,7 +544,28 @@ class SnackMan {
     setTarget(dir) {
         this.dir = dir;
         this.target = step(this.body[0], dir);
+        if (this.isBodyBlocking(this.target)) {
+            this.bite(this.target);
+        }
         this.grows = this.board.hasPellet(this.target);
+    }
+
+    // Bites through his own body at tile: everything from there to the tail comes off
+    bite(tile) {
+        const index = this.body.findIndex(b => sameTile(b, tile));
+        const cut = this.body.splice(index);
+        for (const t of cut) {
+            this.occupied[tileIndex(t)] = false;
+        }
+        this.pieces.push(new SeveredPiece(cut));
+
+        this.blue = false;
+        this.blueEndTimer = BLUE_END_FLASH_TICKS;
+        this.biteTimer = BITE_CHOMP_TICKS;
+        game.shake();
+
+        const c = center(tile);
+        burst(c.x, c.y, 10, [COLORS.flash, COLORS.blue]);
     }
 
     // Called while standing on a tile center: pick where to go next
@@ -367,7 +609,12 @@ class SnackMan {
         this.body.unshift(this.target);
         this.occupied[tileIndex(this.target)] = true;
 
-        this.board.eat(this.target);
+        if (this.board.eat(this.target) === POWER) {
+            this.blue = true;
+            this.blueEndTimer = 0;
+            const c = center(this.target);
+            burst(c.x, c.y, 10, [COLORS.blue, COLORS.pellet]);
+        }
 
         this.target = null;
     }
@@ -412,6 +659,14 @@ class SnackMan {
     }
 
     update() {
+        for (const piece of this.pieces) {
+            piece.update();
+        }
+        this.pieces = this.pieces.filter(piece => !piece.isDone());
+
+        if (this.biteTimer > 0) this.biteTimer -= 1;
+        if (this.blueEndTimer > 0) this.blueEndTimer -= 1;
+
         if (this.dead) {
             this.updateDying();
             return;
@@ -460,6 +715,7 @@ class SnackMan {
         this.unravelDuration = Math.min(UNRAVEL_MAX_TICKS, Math.max(UNRAVEL_MIN_TICKS, this.unravelTotal / UNRAVEL_SPEED));
         this.unravelPopped = 0; // pixels of tail already removed as whole tiles
         this.unravelPixels = 0; // pixels the current tail end has slid in
+        this.unraveledAt = DEATH_FREEZE_TICKS; // when the tail finished sliding in
     }
 
     updateDying() {
@@ -486,7 +742,8 @@ class SnackMan {
             return;
         }
 
-        if (this.deathTimer - this.unraveledAt > 40) {
+        const finale = DEATH_HOLD_TICKS + DEATH_SPIN_TICKS + DEATH_POP_TICKS + DEATH_AFTER_TICKS;
+        if (this.deathTimer - this.unraveledAt > finale) {
             game.restart();
         }
     }
@@ -502,15 +759,7 @@ class SnackMan {
         const head = moving ? {x: start.x + this.dir.x * px, y: start.y + this.dir.y * px} : start;
         const points = [head];
 
-        let last = head;
-        for (const tile of this.body) {
-            const c = center(tile);
-            // Unwrap the tunnel so the path stays continuous
-            while (c.x - last.x > MAZE_WIDTH / 2) c.x -= MAZE_WIDTH;
-            while (last.x - c.x > MAZE_WIDTH / 2) c.x += MAZE_WIDTH;
-            points.push(c);
-            last = c;
-        }
+        points.push(...tilePath(this.body, head));
 
         // The tail end slides along with the head when it's about to give up a tile,
         // and slides back into him when he's dying
@@ -550,43 +799,43 @@ class SnackMan {
         return {neck, rest: []};
     }
 
-    // Draws a stretch of trail. roundEnd rounds off its last point (used for the tail tip).
-    drawTrail(points, offsetX, color, roundEnd) {
-        const half = Math.floor(CIRCLE_SIZE / 2);
-        for (let i = 0; i < points.length - 1; i++) {
-            const a = points[i];
-            const b = points[i + 1];
-            if (a.x === b.x) {
-                MDog.Draw.rectangleFill(a.x - half + offsetX, Math.min(a.y, b.y), CIRCLE_SIZE, Math.abs(a.y - b.y) + 1, color);
-            } else {
-                MDog.Draw.rectangleFill(Math.min(a.x, b.x) + offsetX, a.y - half, Math.abs(a.x - b.x) + 1, CIRCLE_SIZE, color);
-            }
-        }
-
-        // Round off the corners
-        for (let i = 1; i < points.length; i++) {
-            const isEnd = i === points.length - 1;
-            if (isEnd ? roundEnd : !this.isStraight(points[i - 1], points[i], points[i + 1])) {
-                circle(points[i].x + offsetX, points[i].y, color);
-            }
-        }
-    }
-
-    isStraight(a, b, c) {
-        return Math.sign(b.x - a.x) === Math.sign(c.x - b.x) && Math.sign(b.y - a.y) === Math.sign(c.y - b.y);
-    }
-
     mouthFrame() {
         if (!this.started || this.dead) {
             return 1;
         }
+        // Big chomp: wide open, then snapped shut
+        if (this.biteTimer > 0) {
+            return this.biteTimer > BITE_CHOMP_TICKS / 2 ? 3 : 1;
+        }
         return CHOMP_FRAMES[Math.floor(this.chompDistance / CHOMP_PIXELS) % CHOMP_FRAMES.length];
     }
 
-    drawFace(x, y) {
+    color() {
+        if (this.dead && this.deathTimer < DEATH_FREEZE_TICKS && Math.floor(this.deathTimer / 6) % 2 === 0) {
+            return COLORS.flash;
+        }
+        if (this.blue) {
+            return COLORS.blue;
+        }
+        if (this.blueEndTimer > 0 && Math.floor(this.blueEndTimer / 8) % 2 === 1) {
+            return COLORS.blue;
+        }
+        return COLORS.snack;
+    }
+
+    drawFace(x, y, color) {
         const horizontal = this.dir.x !== 0;
         const name = "snack-man/snack-man-" + (horizontal ? "right" : "up") + "-" + this.mouthFrame() + ".png";
-        MDog.Draw.image(name, x - 6, y - 6, {flipX: this.dir.x < 0, flipY: this.dir.y > 0});
+        const flip = {flipX: this.dir.x < 0, flipY: this.dir.y > 0};
+
+        if (color === COLORS.snack) {
+            MDog.Draw.image(name, x - 6, y - 6, flip);
+            return;
+        }
+        const tinted = tintedSprite(name, color);
+        if (tinted !== null) {
+            MDog.Draw._rawImage(tinted, x - 6, y - 6, tinted.width, tinted.height, flip);
+        }
     }
 
     // Snack Man is drawn in layers around the pellets: body and a black mouth first, then the
@@ -595,33 +844,84 @@ class SnackMan {
         const points = this.getPath();
         this.points = points;
 
-        // When he's in the tunnel, draw a copy on the other side too
-        this.offsets = [0];
-        if (points.some(p => p.x < 8)) this.offsets.push(MAZE_WIDTH);
-        if (points.some(p => p.x > MAZE_WIDTH - 8)) this.offsets.push(-MAZE_WIDTH);
-
-        const flashing = this.dead && this.deathTimer < DEATH_FREEZE_TICKS && Math.floor(this.deathTimer / 6) % 2 === 0;
-        const color = flashing ? COLORS.flash : COLORS.snack;
+        this.offsets = tunnelOffsets(points);
+        const color = this.color();
 
         // A black disc behind the face fills his open mouth. His neck goes under it, so it never
         // shows inside his mouth. The rest of his body goes over it, so if his own tail is right
         // in front of him, you see the tail in his mouth instead of a black outline.
+        if (this.deathFinaleFrame() >= 0) {
+            this.drawPieces();
+            return; // only the head is left, and drawOverPellets handles it
+        }
+
         const {neck, rest} = this.splitNeck(points);
         for (const offsetX of this.offsets) {
-            this.drawTrail(neck, offsetX, color, rest.length < 2);
+            drawTrail(neck, offsetX, color, rest.length < 2);
         }
         for (const offsetX of this.offsets) {
             circle(points[0].x + offsetX, points[0].y, COLORS.background);
         }
+        this.drawPieces();
         for (const offsetX of this.offsets) {
-            this.drawTrail(rest, offsetX, color, true);
+            drawTrail(rest, offsetX, color, true);
+        }
+    }
+
+    // Bitten-off pieces go over his black mouth disc, so he looks like he's eating them,
+    // but under the rest of his body, so his new trail covers them as he moves over them
+    drawPieces() {
+        for (const piece of this.pieces) {
+            piece.draw();
         }
     }
 
     drawOverPellets(tick) {
         const head = this.points[0];
+        const finaleFrame = this.deathFinaleFrame();
         for (const offsetX of this.offsets) {
-            this.drawFace(head.x + offsetX, head.y);
+            if (finaleFrame >= 0) {
+                this.drawDeathFinale(head.x + offsetX, head.y, finaleFrame);
+            } else {
+                this.drawFace(head.x + offsetX, head.y, this.color());
+            }
+        }
+    }
+
+    // Ticks since his tail finished sliding back in after dying, or -1 if that hasn't happened
+    deathFinaleFrame() {
+        if (!this.dead || this.body.length > 1 || this.deathTimer < DEATH_FREEZE_TICKS) {
+            return -1;
+        }
+        return this.deathTimer - this.unraveledAt;
+    }
+
+    // The classic Pac-Man death: his mouth opens all the way while he spins, then he pops
+    drawDeathFinale(x, y, frame) {
+        const popStart = DEATH_HOLD_TICKS + DEATH_SPIN_TICKS;
+
+        if (frame < popStart) {
+            const t = Math.max(0, (frame - DEATH_HOLD_TICKS) / DEATH_SPIN_TICKS);
+            const facing = Math.atan2(this.dir.y, this.dir.x) - Math.PI * 2 * DEATH_SPINS * t * t;
+            const halfMouth = Math.PI * Math.pow(t, 1.5);
+            pie(x, y, facing, halfMouth, COLORS.snack);
+            return;
+        }
+
+        if (frame < popStart + DEATH_POP_TICKS) {
+            const t = (frame - popStart) / DEATH_POP_TICKS;
+            const inner = 2 + 8 * t;
+            const outer = inner + 1 + 4 * (1 - t);
+            for (let k = 0; k < 8; k++) {
+                const angle = k * Math.PI / 4;
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                MDog.Draw.line(
+                    Math.round(x + cos * inner), Math.round(y + sin * inner),
+                    Math.round(x + cos * outer), Math.round(y + sin * outer),
+                    COLORS.snack
+                );
+            }
         }
     }
 }
@@ -633,16 +933,30 @@ const game = {
     board: new Board(),
     snackMan: null,
     clearTimer: 0,
+    particles: [],
+    shakeTimer: 0,
 
     restart() {
         this.clearTimer = 0;
+        this.particles = [];
+        this.shakeTimer = 0;
         this.board.reset();
         this.snackMan.reset();
     },
 
-    // Your score is just how long you are: every segment is a pellet you ate
+    // Your score is just how long you are: every segment is a pellet you ate. Bitten-off
+    // segments still count until they pop, so the score drains away as they do.
     getScore() {
-        return (this.snackMan.body.length - 1) * PELLET_POINTS;
+        const bitten = this.snackMan.pieces.reduce((sum, piece) => sum + piece.tiles.length, 0);
+        return (this.snackMan.body.length - 1 + bitten) * PELLET_POINTS;
+    },
+
+    getMaxScore() {
+        return this.board.totalPellets * PELLET_POINTS;
+    },
+
+    shake() {
+        this.shakeTimer = SHAKE_TICKS;
     },
 
     update() {
@@ -652,6 +966,12 @@ const game = {
             this.restart();
             return;
         }
+
+        for (const particle of this.particles) {
+            particle.update();
+        }
+        this.particles = this.particles.filter(particle => particle.life > 0);
+        if (this.shakeTimer > 0) this.shakeTimer -= 1;
 
         if (this.board.pelletsLeft === 0) {
             // TODO (chunk 3): level clear celebration and next level
@@ -665,17 +985,39 @@ const game = {
     },
 
     draw() {
+        let shakeX = 0;
+        let shakeY = 0;
+        if (this.shakeTimer > 0) {
+            const amount = Math.ceil(SHAKE_AMOUNT * this.shakeTimer / SHAKE_TICKS);
+            shakeX = Math.round((Math.random() * 2 - 1) * amount);
+            shakeY = Math.round((Math.random() * 2 - 1) * amount);
+        }
+        MDog.Draw.translate(MAZE_X + shakeX, MAZE_Y + shakeY);
+
         MDog.Draw.clear({color: COLORS.background});
         MDog.Draw.image("snack-man/map.png", 0, 0);
 
         this.snackMan.drawUnderPellets(this.tick);
         this.board.drawPellets(this.tick);
         this.snackMan.drawOverPellets(this.tick);
+        for (const particle of this.particles) {
+            particle.draw();
+        }
 
         // Hide anything poking out of the tunnel
         const screenHeight = MDog.Draw.getScreenHeightInArtPixels();
-        MDog.Draw.rectangleFill(-MAZE_X, -MAZE_Y, MAZE_X, screenHeight, COLORS.background);
-        MDog.Draw.rectangleFill(MAZE_WIDTH, -MAZE_Y, MAZE_X, screenHeight, COLORS.background);
+        MDog.Draw.rectangleFill(-MAZE_X - SHAKE_AMOUNT, -MAZE_Y - SHAKE_AMOUNT, MAZE_X + SHAKE_AMOUNT, screenHeight + SHAKE_AMOUNT * 2, COLORS.background);
+        MDog.Draw.rectangleFill(MAZE_WIDTH, -MAZE_Y - SHAKE_AMOUNT, MAZE_X + SHAKE_AMOUNT, screenHeight + SHAKE_AMOUNT * 2, COLORS.background);
+
+        MDog.Draw.translate(MAZE_X, MAZE_Y);
+        this.drawHud();
+    },
+
+    // TODO (chunk 3): best score and the rest of the HUD
+    drawHud() {
+        const draining = this.snackMan.pieces.length > 0;
+        const text = this.getScore() + "/" + this.getMaxScore();
+        MDog.Draw.textImage(text, 0, -6, draining ? COLORS.scoreDrain : COLORS.text, "fonts/marsfont.png", {size: 2, alignY: "bottom"});
     }
 }
 game.snackMan = new SnackMan(game.board);
@@ -685,6 +1027,5 @@ function update() {
     game.draw();
 }
 
-MDog.Draw.translate(MAZE_X, MAZE_Y);
 MDog.Draw.setBackgroundColor("#000000");
 MDog.setActiveFunction(update);
