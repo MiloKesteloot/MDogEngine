@@ -300,6 +300,27 @@ class Draw extends Module {
         this.layer = layer;
     }
 
+    // CAI Function
+    // Lets a game pick its own screen size, in art pixels. Games that never call this keep the default
+    // size (set in MDogMain.js). Best called once, at the top of the game, before anything is drawn.
+    setScreenSize(width, height) {
+        this.screenWidthInArtPixels = width;
+        this.screenHeightInArtPixels = height;
+
+        // Resizing a canvas clears it and resets its settings (smoothing and translation), so those are put back
+        const drawingBoards = [this.mainDrawingBoard, ...Object.values(this.drawingBoards)];
+        for (const drawingBoard of drawingBoards) {
+            drawingBoard.element.width = width;
+            drawingBoard.element.height = height;
+            drawingBoard.ctx.imageSmoothingEnabled = false;
+            drawingBoard.ctx.translate(drawingBoard.offset.getX(), drawingBoard.offset.getY());
+        }
+
+        this.mainDrawingBoard.ctx.fillStyle = "#000000";
+        this.mainDrawingBoard.ctx.fillRect(0, 0, width, height);
+        this.mainDrawingBoard._calculateSize(this);
+    }
+
     getScreenWidthInArtPixels() {
         return this.screenWidthInArtPixels;
     }

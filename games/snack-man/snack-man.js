@@ -28,6 +28,10 @@ import MDog from "../../MDogModules/MDogMain.js"
 import Controls, {KEY_BUFFER_TICKS} from "./Controls.js";
 import Sound from "./Sound.js";
 
+// Just big enough for the maze, the score above it and the hints below it. A tall, narrow screen
+// gets scaled up much bigger on phones (held upright) than MDog's default wide one.
+MDog.Draw.setScreenSize(240, 328);
+
 const DIRS = {
     up: {x: 0, y: -1},
     down: {x: 0, y: 1},
@@ -1775,6 +1779,16 @@ for (const dir of ["right", "up"]) {
     }
 }
 loadShape("snack-man/map.png");
+
+// Without a viewport tag, phones lay the page out as if it were a 980 pixel wide desktop screen and
+// shrink it to fit, which makes the game tiny. Adding it here leaves index.html alone.
+if (document.querySelector("meta[name=viewport]") === null) {
+    const viewport = document.createElement("meta");
+    viewport.name = "viewport";
+    viewport.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no";
+    document.head.appendChild(viewport);
+    window.dispatchEvent(new Event("resize")); // so MDog sizes the canvas for the new layout
+}
 
 MDog.Draw.setBackgroundColor("#000000");
 MDog.setActiveFunction(update);
