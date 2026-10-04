@@ -60,6 +60,7 @@ const LATE_TURN_WINDOW = 0.25; // how far past a tile center (in tiles) you can 
 const BLOCKED_GRACE_TICKS = 24; // time to turn away when your face is up against your body (0.15s)
 const CHOMP_PIXELS = 2.5; // pixels travelled per mouth frame
 const CHOMP_FRAMES = [1, 2, 3, 2];
+const STOPPED_MOUTH_FRAME = 2; // half open when he's stopped, so you can tell which way he's facing
 const DEATH_FREEZE_TICKS = 50; // how long he flashes before his tail slides back in
 const UNRAVEL_MIN_TICKS = 40; // even a tiny tail takes this long to slide back in, so the ease is visible
 const UNRAVEL_MAX_TICKS = 140; // even a huge tail is back in by this point
@@ -70,7 +71,7 @@ const DEATH_SPINS = 1.5; // full turns during the spin
 const DEATH_POP_TICKS = 40;
 const DEATH_AFTER_TICKS = 40; // empty pause before you're put back in
 const PELLET_POINTS = 10;
-const BLUE_END_FLASH_TICKS = 64; // after a bite, he flashes blue/yellow this long before he's plain yellow again
+const BLUE_FLASH_TICKS = 22; // while blue he slowly flashes blue/white, this long per color
 const BITE_CHOMP_TICKS = 24; // big chomp when he bites himself
 const SHAKE_TICKS = 14;
 const SHAKE_AMOUNT = 2; // pixels
@@ -78,6 +79,7 @@ const PIECE_FLASH_TICKS = 36; // the bitten-off piece flashes before it starts p
 const PIECE_POP_MIN_TICKS = 3; // fastest a long piece pops, per segment
 const PIECE_POP_MAX_TICKS = 10; // slowest a short piece pops, per segment
 const PIECE_POP_TOTAL_TICKS = 140; // roughly how long popping a whole piece takes
+const LOSS_TEXT_TICKS = 50; // how long a "-10" floats up from a popped segment
 
 // ---------- Maze ----------
 
@@ -138,10 +140,11 @@ const COLORS = {
     background: "#000000",
     pellet: "#ffb9af",
     snack: "#ffff00",
-    blue: "#2e8bff",
+    blue: "#1a1acc", // a bit darker than the map walls (#2121ff), since a big solid shape looks brighter than thin lines
     flash: "#ffffff",
     text: "#ffffff",
-    scoreDrain: "#ff5a5a"
+    scoreDrain: "#ff5a5a",
+    loss: "#ff2a2a"
 }
 
 // ---------- Helpers ----------
@@ -344,6 +347,28 @@ class Particle {
     }
 }
 
+// A "-10" that floats up from a bitten-off segment as it pops
+class LossText {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.life = LOSS_TEXT_TICKS;
+    }
+
+    update() {
+        this.y -= 0.15;
+        this.life -= 1;
+    }
+
+    draw() {
+        // Blinks out at the end instead of fading, to stay pixel-crisp
+        if (this.life < LOSS_TEXT_TICKS / 4 && Math.floor(this.life / 3) % 2 === 0) {
+            return;
+        }
+        MDog.Draw.textImage("-" + PELLET_POINTS, Math.round(this.x), Math.round(this.y), COLORS.loss, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
+    }
+}
+
 function burst(x, y, count, colors) {
     for (let i = 0; i < count; i++) {
         game.particles.push(new Particle(x, y, colors[i % colors.length]));
@@ -359,6 +384,7 @@ class SeveredPiece {
         this.tiles = tiles;
         this.points = tilePath(tiles);
         this.timer = 0;
+        this.popped = 0;
         this.popInterval = Math.max(PIECE_POP_MIN_TICKS, Math.min(PIECE_POP_MAX_TICKS, Math.floor(PIECE_POP_TOTAL_TICKS / tiles.length)));
     }
 
@@ -374,7 +400,13 @@ class SeveredPiece {
         if ((this.timer - PIECE_FLASH_TICKS) % this.popInterval === 0 && this.tiles.length > 0) {
             this.tiles.shift();
             const popped = this.points.shift();
-            burst(wrapPixelX(popped.x), popped.y, 6, [COLORS.flash, COLORS.blue, COLORS.snack]);
+            const x = wrapPixelX(popped.x);
+            burst(x, popped.y, 6, [COLORS.loss, COLORS.loss, COLORS.flash]);
+            // Only every other segment gets a "-10" so they don't pile up; it's just there to show it's bad
+            if (this.popped % 2 === 0) {
+                game.lossTexts.push(new LossText(x, popped.y));
+            }
+            this.popped += 1;
         }
     }
 
@@ -484,7 +516,7 @@ class SnackMan {
         this.unravelPixels = 0;
 
         this.blue = false; // from a power pellet: the next time he runs into himself, he bites instead of dying
-        this.blueEndTimer = 0;
+        this.blueTimer = 0; // ticks since he turned blue, for the flash
         this.biteTimer = 0;
         this.pieces = [];
     }
@@ -560,7 +592,6 @@ class SnackMan {
         this.pieces.push(new SeveredPiece(cut));
 
         this.blue = false;
-        this.blueEndTimer = BLUE_END_FLASH_TICKS;
         this.biteTimer = BITE_CHOMP_TICKS;
         game.shake();
 
@@ -610,8 +641,10 @@ class SnackMan {
         this.occupied[tileIndex(this.target)] = true;
 
         if (this.board.eat(this.target) === POWER) {
+            if (!this.blue) {
+                this.blueTimer = 0;
+            }
             this.blue = true;
-            this.blueEndTimer = 0;
             const c = center(this.target);
             burst(c.x, c.y, 10, [COLORS.blue, COLORS.pellet]);
         }
@@ -665,7 +698,7 @@ class SnackMan {
         this.pieces = this.pieces.filter(piece => !piece.isDone());
 
         if (this.biteTimer > 0) this.biteTimer -= 1;
-        if (this.blueEndTimer > 0) this.blueEndTimer -= 1;
+        if (this.blue) this.blueTimer += 1;
 
         if (this.dead) {
             this.updateDying();
@@ -807,6 +840,9 @@ class SnackMan {
         if (this.biteTimer > 0) {
             return this.biteTimer > BITE_CHOMP_TICKS / 2 ? 3 : 1;
         }
+        if (this.target === null) {
+            return STOPPED_MOUTH_FRAME;
+        }
         return CHOMP_FRAMES[Math.floor(this.chompDistance / CHOMP_PIXELS) % CHOMP_FRAMES.length];
     }
 
@@ -815,10 +851,7 @@ class SnackMan {
             return COLORS.flash;
         }
         if (this.blue) {
-            return COLORS.blue;
-        }
-        if (this.blueEndTimer > 0 && Math.floor(this.blueEndTimer / 8) % 2 === 1) {
-            return COLORS.blue;
+            return Math.floor(this.blueTimer / BLUE_FLASH_TICKS) % 2 === 0 ? COLORS.blue : COLORS.flash;
         }
         return COLORS.snack;
     }
@@ -934,11 +967,13 @@ const game = {
     snackMan: null,
     clearTimer: 0,
     particles: [],
+    lossTexts: [],
     shakeTimer: 0,
 
     restart() {
         this.clearTimer = 0;
         this.particles = [];
+        this.lossTexts = [];
         this.shakeTimer = 0;
         this.board.reset();
         this.snackMan.reset();
@@ -971,6 +1006,10 @@ const game = {
             particle.update();
         }
         this.particles = this.particles.filter(particle => particle.life > 0);
+        for (const text of this.lossTexts) {
+            text.update();
+        }
+        this.lossTexts = this.lossTexts.filter(text => text.life > 0);
         if (this.shakeTimer > 0) this.shakeTimer -= 1;
 
         if (this.board.pelletsLeft === 0) {
@@ -1002,6 +1041,9 @@ const game = {
         this.snackMan.drawOverPellets(this.tick);
         for (const particle of this.particles) {
             particle.draw();
+        }
+        for (const text of this.lossTexts) {
+            text.draw();
         }
 
         // Hide anything poking out of the tunnel
