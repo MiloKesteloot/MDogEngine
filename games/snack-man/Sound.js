@@ -330,7 +330,7 @@ class Sound {
         const notes = [523, 659, 784, 659, 698, 880, 784, 0, 1047];
         notes.forEach((note, i) => {
             if (note > 0) {
-                this.tone("square", note, note * 0.995, 0.1, 0.1, i * 0.11);
+                this.tone("square", note, note * 0.995, 0.1, 0.4, i * 0.11);
             }
         });
     }

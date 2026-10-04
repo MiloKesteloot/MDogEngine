@@ -12,8 +12,8 @@
 // Fill these in from your Supabase project (Project Settings -> API). The anon / publishable key is meant
 // to be public, so it's fine here. Never put the service_role / secret key here.
 // While they're empty, the scoreboard just shows as offline and the game works without it.
-const SUPABASE_URL = ""; // like "https://abcdefghijklmnop.supabase.co"
-const SUPABASE_ANON_KEY = "";
+const SUPABASE_URL = "https://vymdamtkgujoqprmzuma.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_iHinE0cf-DQxoC4-HZ4Wmw_O2lc7Eil";
 
 const TABLE = "snack_man_scores";
 const SUBMIT_FUNCTION = "submit_snack_man_score";
