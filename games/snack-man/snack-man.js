@@ -51,9 +51,9 @@ const CHOMP_PIXELS = 2.5; // pixels travelled per mouth frame
 const CHOMP_FRAMES = [1, 2, 3, 2];
 const STOPPED_MOUTH_FRAME = 2; // half open when he's stopped, so you can tell which way he's facing
 const DEATH_FREEZE_TICKS = 50; // how long he flashes before his tail slides back in
-const UNRAVEL_MIN_TICKS = 40; // even a tiny tail takes this long to slide back in, so the ease is visible
-const UNRAVEL_MAX_TICKS = 140; // even a huge tail is back in by this point
-const UNRAVEL_SPEED = 1.5; // average pixels per tick for tails in between
+const UNRAVEL_MIN_TICKS = 80; // even a tiny tail takes this long to slide back in, so the ease is visible
+const UNRAVEL_MAX_TICKS = 280; // even a huge tail is back in by this point
+const UNRAVEL_SPEED = 0.75; // average pixels per tick for tails in between
 const DEATH_HOLD_TICKS = 25; // pause once the tail is gone, before the classic death
 const DEATH_SPIN_TICKS = 110; // mouth opens all the way while he spins
 const DEATH_SPINS = 1.5; // full turns during the spin
@@ -74,7 +74,10 @@ const CLEAR_FLASH_TICKS = 24; // ...then the maze flashes white, this long per f
 const CLEAR_FLASHES = 8; // ...this many times, and the next level starts
 const BEST_SCORE_KEY = "snack-man-best";
 const VIBRATION_KEY = "snack-man-vibration";
-const POWER_PELLET_COUNT = 4;
+// How many power pellets each level has. After these, it's 2 to 6, picked by powerPelletCount().
+const POWER_PELLETS_PER_LEVEL = [4, 4, 2, 6, 3, 8, 1, 7]; // levels 1 to 8
+const MIN_POWER_PELLETS = 2;
+const MAX_POWER_PELLETS = 6;
 const POWER_PELLET_MIN_DISTANCE = 4 * 6.5; // pixels between random power pellets: 4 snack man radiuses
 const BONUS_POINTS = 200; // a power pellet eaten while already blue; each one after that is worth double
 const BONUS_FREEZE_TICKS = 100; // like eating a ghost in Pac-Man, everything stops while the points show
@@ -297,6 +300,30 @@ function drawTrail(points, offsetX, color, roundEnd) {
         const isEnd = i === points.length - 1;
         if (isEnd ? roundEnd : !isStraight(points[i - 1], points[i], points[i + 1])) {
             circle(points[i].x + offsetX, points[i].y, color);
+        }
+    }
+}
+
+// The circle rounds the outside of each turn; this softens the inside with one pixel in the sharp corner.
+// That pixel is just past the band's edge: a step back the way he came, and a step over the way he turned.
+// It's only drawn once the body reaches past it on both sides (his head has moved far enough along after
+// turning, and his tail hasn't pulled back too close), otherwise it would float there on its own.
+// Pass the whole path, not the neck and the rest separately, so the lengths are measured right.
+function drawInnerCorners(points, offsetX, color) {
+    const reach = Math.floor(CIRCLE_SIZE / 2) + 1;
+    for (let i = 1; i < points.length - 1; i++) {
+        const before = points[i - 1];
+        const corner = points[i];
+        const after = points[i + 1];
+        const inX = Math.sign(corner.x - before.x);
+        const inY = Math.sign(corner.y - before.y);
+        const outX = Math.sign(after.x - corner.x);
+        const outY = Math.sign(after.y - corner.y);
+        const turning = (inX !== 0 || inY !== 0) && (outX !== 0 || outY !== 0) && inX * outX + inY * outY === 0;
+        const lengthIn = Math.abs(corner.x - before.x) + Math.abs(corner.y - before.y);
+        const lengthOut = Math.abs(after.x - corner.x) + Math.abs(after.y - corner.y);
+        if (turning && lengthIn >= reach && lengthOut >= reach) {
+            MDog.Draw.rectangleFill(corner.x + (outX - inX) * reach + offsetX, corner.y + (outY - inY) * reach, 1, 1, color);
         }
     }
 }
@@ -538,12 +565,44 @@ class SeveredPiece {
         const color = flashing && Math.floor(this.timer / 6) % 2 === 1 ? COLORS.blue : COLORS.flash;
         for (const offsetX of tunnelOffsets(this.points)) {
             drawTrail(this.points, offsetX, color, true);
+            drawInnerCorners(this.points, offsetX, color);
             circle(this.points[0].x + offsetX, this.points[0].y, color);
         }
     }
 }
 
 // ---------- Board ----------
+
+// How many power pellets a level has. Past the hand-picked first levels it looks random, but it's
+// worked out from the level number alone, so a given level always has the same number for everyone.
+// It's never the same as the level before. (Where they go is still random each time.)
+function powerPelletCount(level) {
+    if (level <= POWER_PELLETS_PER_LEVEL.length) {
+        return POWER_PELLETS_PER_LEVEL[level - 1];
+    }
+
+    // Walk forward from the last hand-picked level, so each level knows the one before it
+    let previous = POWER_PELLETS_PER_LEVEL[POWER_PELLETS_PER_LEVEL.length - 1];
+    for (let l = POWER_PELLETS_PER_LEVEL.length + 1; l <= level; l++) {
+        // Choose from every count except the previous one, by numbering the choices and skipping over it
+        const choices = [];
+        for (let count = MIN_POWER_PELLETS; count <= MAX_POWER_PELLETS; count++) {
+            if (count !== previous) {
+                choices.push(count);
+            }
+        }
+        previous = choices[scramble(l) % choices.length];
+    }
+    return previous;
+}
+
+// Turns a number into a big, random-looking whole number (a simple integer hash). The same number in
+// always gives the same number out.
+function scramble(n) {
+    let hash = Math.imul(n, 2654435761) >>> 0;
+    hash = Math.imul(hash ^ (hash >>> 15), 2246822519) >>> 0;
+    return (hash ^ (hash >>> 13)) >>> 0;
+}
 
 class Board {
     constructor() {
@@ -553,13 +612,14 @@ class Board {
     // Level 1 uses the normal power pellets; later levels move them to random spots
     reset(level) {
         this.tiles = LAYOUT.join("").split("");
-        if ((level ?? 1) > 1) {
-            this.randomizePowerPellets();
+        level = level ?? 1;
+        if (level > 1) {
+            this.randomizePowerPellets(powerPelletCount(level));
         }
         this.pelletsLeft = this.tiles.filter(t => t === PELLET || t === POWER).length;
     }
 
-    randomizePowerPellets() {
+    randomizePowerPellets(count) {
         const pellets = [];
         for (let i = 0; i < this.tiles.length; i++) {
             if (this.tiles[i] === POWER) {
@@ -577,7 +637,7 @@ class Board {
         }
         const picked = [];
         for (const p of pellets) {
-            if (picked.length === POWER_PELLET_COUNT) {
+            if (picked.length === count) {
                 break;
             }
             if (picked.every(q => Math.hypot(p.x - q.x, p.y - q.y) >= POWER_PELLET_MIN_DISTANCE)) {
@@ -1156,6 +1216,7 @@ class SnackMan {
         this.drawPieces();
         for (const offsetX of this.offsets) {
             drawTrail(rest, offsetX, color, true);
+            drawInnerCorners(points, offsetX, color);
         }
     }
 
