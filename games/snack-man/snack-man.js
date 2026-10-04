@@ -69,6 +69,7 @@ const CLEAR_PAUSE_TICKS = 60; // after the last pellet, everything freezes for a
 const CLEAR_FLASH_TICKS = 24; // ...then the maze flashes white, this long per flash...
 const CLEAR_FLASHES = 8; // ...this many times, and the next level starts
 const BEST_SCORE_KEY = "snack-man-best";
+const VIBRATION_KEY = "snack-man-vibration";
 const POWER_PELLET_COUNT = 4;
 const POWER_PELLET_MIN_DISTANCE = 4 * 6.5; // pixels between random power pellets: 4 snack man radiuses
 const BONUS_POINTS = 200; // a power pellet eaten while already blue; each one after that is worth double
@@ -1280,7 +1281,20 @@ const VIBRATIONS = {
     levelClear: [40, 60, 40, 60, 40]
 };
 
-const PAUSE_OPTIONS = ["RESUME", "RESTART", "MUTE", "TITLE SCREEN"];
+// The vibration option only shows on phones that can vibrate
+const PAUSE_OPTIONS = ["RESUME", "RESTART", "MUTE", "VIBRATION", "TITLE SCREEN"];
+
+function canVibrate() {
+    return navigator.vibrate !== undefined;
+}
+
+function loadVibrationAllowed() {
+    try {
+        return localStorage.getItem(VIBRATION_KEY) !== "off";
+    } catch (e) {
+        return true;
+    }
+}
 
 const game = {
     state: "title", // "title", "playing" or "paused"
@@ -1299,6 +1313,7 @@ const game = {
     bankedScore: 0, // score from levels already cleared this run
     finalScore: null, // set when a level is over, so the score stops changing
     newBest: false,
+    vibrationAllowed: loadVibrationAllowed(),
     debugRun: false, // a level was skipped this run, so it can't set a best score
 
     // Back to level 1 with a fresh board and no score (after dying, or pressing R)
@@ -1377,17 +1392,43 @@ const game = {
         return this.board.pelletsLeft === 0;
     },
 
-    // Buzzes the phone. Only on touch screens, and only where the browser can (iPhones can't).
+    // Buzzes the phone. Only on touch screens, only where the browser can (iPhones can't),
+    // and only if the player hasn't turned it off.
     vibrate(pattern) {
-        if (this.controls.isTouch() && navigator.vibrate !== undefined) {
+        if (this.controls.isTouch() && canVibrate() && this.vibrationAllowed) {
             navigator.vibrate(pattern);
         }
+    },
+
+    toggleVibration() {
+        this.vibrationAllowed = !this.vibrationAllowed;
+        try {
+            localStorage.setItem(VIBRATION_KEY, this.vibrationAllowed ? "on" : "off");
+        } catch (e) {
+            // No storage: the setting just won't stick around
+        }
+    },
+
+    // The options in the pause menu right now
+    pauseOptions() {
+        const showVibration = this.controls.isTouch() && canVibrate();
+        return PAUSE_OPTIONS.filter(option => option !== "VIBRATION" || showVibration);
+    },
+
+    pauseOptionLabel(option) {
+        if (option === "MUTE") {
+            return this.sound.muted ? "UNMUTE" : "MUTE";
+        }
+        if (option === "VIBRATION") {
+            return this.vibrationAllowed ? "TURN VIBRATION OFF" : "TURN VIBRATION ON";
+        }
+        return option;
     },
 
     // Where the pause menu and its options are, for drawing it and for tapping options
     pauseMenuLayout() {
         const width = 170;
-        const height = 87;
+        const height = 54 + (this.pauseOptions().length - 1) * 11;
         // Whole pixels only: text drawn at a half pixel comes out blurry
         const x = Math.floor(MAZE_WIDTH / 2 - width / 2);
         const y = Math.floor(MAZE_HEIGHT / 2 - height / 2);
@@ -1481,11 +1522,13 @@ const game = {
             return;
         }
 
+        const options = this.pauseOptions();
+        this.pauseSelection = Math.min(this.pauseSelection, options.length - 1);
         const direction = this.controls.pressedDirection();
         if (direction === "up") {
-            this.pauseSelection = (this.pauseSelection + PAUSE_OPTIONS.length - 1) % PAUSE_OPTIONS.length;
+            this.pauseSelection = (this.pauseSelection + options.length - 1) % options.length;
         } else if (direction === "down") {
-            this.pauseSelection = (this.pauseSelection + 1) % PAUSE_OPTIONS.length;
+            this.pauseSelection = (this.pauseSelection + 1) % options.length;
         }
 
         // On a touch screen, tapping an option picks it straight away
@@ -1494,7 +1537,7 @@ const game = {
         if (tap !== null) {
             const menu = this.pauseMenuLayout();
             const insideX = tap.x >= menu.x && tap.x < menu.x + menu.width;
-            PAUSE_OPTIONS.forEach((option, i) => {
+            options.forEach((option, i) => {
                 const top = menu.optionY(i) - menu.optionHeight / 2;
                 if (insideX && tap.y >= top && tap.y < top + menu.optionHeight) {
                     this.pauseSelection = i;
@@ -1504,7 +1547,7 @@ const game = {
         }
 
         if (chosen) {
-            const choice = PAUSE_OPTIONS[this.pauseSelection];
+            const choice = options[this.pauseSelection];
             if (choice === "RESUME") {
                 this.resume();
             } else if (choice === "RESTART") {
@@ -1512,6 +1555,9 @@ const game = {
                 this.restart();
             } else if (choice === "MUTE") {
                 this.sound.toggleMute();
+            } else if (choice === "VIBRATION") {
+                this.toggleVibration();
+                this.vibrate(VIBRATIONS.bite); // a little buzz so you can feel it's back on
             } else {
                 this.goToTitle();
             }
@@ -1679,9 +1725,9 @@ const game = {
         MDog.Draw.rectangle(x + 2, y + 2, width - 4, height - 4, COLORS.wall);
 
         MDog.Draw.textImage("PAUSED", middle, y + 13, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
-        PAUSE_OPTIONS.forEach((option, i) => {
+        this.pauseOptions().forEach((option, i) => {
             const selected = i === this.pauseSelection;
-            const label = option === "MUTE" && this.sound.muted ? "UNMUTE" : option;
+            const label = this.pauseOptionLabel(option);
             const text = selected ? "> " + label + " <" : label;
             MDog.Draw.textImage(text, middle, optionY(i), selected ? COLORS.snack : COLORS.text, font, {alignX: "center", alignY: "center"});
         });
