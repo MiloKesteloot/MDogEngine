@@ -19,7 +19,11 @@ const KEYS = {
     pause: ["p", "Escape"],
     restart: ["r"],
     mute: ["m"],
-    debugSkip: ["l"] // double tap to skip the level (for testing)
+    debugSkip: ["l"], // double tap to skip the level (for testing)
+    help: ["h"],
+    newName: ["n"],
+    enter: ["Enter"],
+    cancel: ["Escape"]
 }
 
 const DIRECTION_NAMES = ["up", "down", "left", "right"];
@@ -160,6 +164,11 @@ class Controls {
 
     restartPressed() {
         return keyDown(KEYS.restart, false);
+    }
+
+    // Whether one of the KEYS (like "help" or "enter") was pressed this tick
+    pressed(action) {
+        return keyDown(KEYS[action], false);
     }
 
     // Double tapped L

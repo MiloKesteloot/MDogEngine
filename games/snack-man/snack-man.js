@@ -26,7 +26,9 @@
 
 import MDog from "../../MDogModules/MDogMain.js"
 import Controls, {KEY_BUFFER_TICKS} from "./Controls.js";
-import Sound from "./Sound.js";
+import Sound, {DEATH_FALL_SECONDS} from "./Sound.js";
+import Scoreboard from "./Scoreboard.js";
+import NameInput from "./NameInput.js";
 
 // Just big enough for the maze, the score above it and the hints below it. A tall, narrow screen
 // gets scaled up much bigger on phones (held upright) than MDog's default wide one.
@@ -55,7 +57,7 @@ const UNRAVEL_MIN_TICKS = 80; // even a tiny tail takes this long to slide back 
 const UNRAVEL_MAX_TICKS = 280; // even a huge tail is back in by this point
 const UNRAVEL_SPEED = 0.75; // average pixels per tick for tails in between
 const DEATH_HOLD_TICKS = 25; // pause once the tail is gone, before the classic death
-const DEATH_SPIN_TICKS = 110; // mouth opens all the way while he spins
+const DEATH_SPIN_TICKS = Math.round(DEATH_FALL_SECONDS * TICKS_PER_SECOND); // mouth opens all the way while he spins, timed so the death sound's pops land as he pops
 const DEATH_SPINS = 1.5; // full turns during the spin
 const DEATH_POP_TICKS = 40;
 const DEATH_AFTER_TICKS = 40; // empty pause before you're put back in
@@ -1324,16 +1326,36 @@ const HINTS = {
         pause: "P OR ESC TO PAUSE - M TO MUTE",
         start: "PRESS ENTER TO START",
         hud: "P OR ESC TO PAUSE",
-        menu: "ARROWS TO PICK, ENTER TO CHOOSE"
+        menu: "ARROWS TO PICK, ENTER TO CHOOSE",
+        help: "PRESS H FOR HOW TO PLAY",
+        back: "PRESS ENTER TO GO BACK",
+        save: "ENTER TO SAVE - ESC TO SKIP",
+        known: "ENTER: OK - N: NEW NAME",
+        retry: "ENTER: TRY AGAIN - ESC: SKIP"
     },
     touch: {
         move: "SWIPE TO MOVE",
         pause: "PAUSE BUTTON IS AT THE TOP",
         start: "TAP TO START",
         hud: "", // the pause button speaks for itself
-        menu: "TAP AN OPTION"
+        menu: "TAP AN OPTION",
+        help: "TAP HERE FOR HOW TO PLAY",
+        back: "TAP TO GO BACK",
+        save: "", // buttons instead
+        known: "",
+        retry: ""
     }
 };
+
+// On touch screens, the "how to play" hint on the title screen is a button (in maze pixels)
+const HELP_BUTTON = {x: 32, y: 203, width: 160, height: 17};
+
+// "1ST", "2ND", "3RD", "4TH"...
+function ordinal(n) {
+    const tens = n % 100;
+    if (tens >= 11 && tens <= 13) return n + "TH";
+    return n + (["TH", "ST", "ND", "RD"][n % 10] ?? "TH");
+}
 
 // The pause button shown at the top of the screen on touch screens (in maze pixels)
 const PAUSE_BUTTON = {x: MAZE_WIDTH / 2 - 8, y: -31, size: 15};
@@ -1363,7 +1385,7 @@ function loadVibrationAllowed() {
 }
 
 const game = {
-    state: "title", // "title", "playing" or "paused"
+    state: "title", // "title", "howto", "playing", "paused" or "entry" (typing a name for the scoreboard)
     tick: 0,
     level: 1,
     board: new Board(),
@@ -1371,6 +1393,9 @@ const game = {
     effects: new Effects(),
     controls: new Controls(),
     sound: new Sound(),
+    scoreboard: new Scoreboard(),
+    nameInput: new NameInput(),
+    entry: null, // while typing a name: {mode, score, message, takenName, rank, existing}
     clearTimer: 0,
     freezeTimer: 0, // while bonus points are showing, everything stops
     bonusPopup: null,
@@ -1405,6 +1430,152 @@ const game = {
         this.state = "playing";
         this.restart();
         this.sound.start();
+        this.scoreboard.refresh(); // so it's up to date when the run ends
+    },
+
+    // The run is over (the death animation finished). If the score makes the online top 10, ask for a name.
+    endOfRun() {
+        const score = this.finalScore ?? 0;
+        if (this.debugRun || !this.scoreboard.qualifies(score)) {
+            this.restart();
+            return;
+        }
+
+        this.state = "entry";
+        this.sound.setBackground(null);
+        const rank = this.scoreboard.entries.filter(entry => entry.score >= score).length + 1;
+        this.entry = {mode: "name", score: score, rank: rank, message: null, takenName: null, existing: null};
+
+        // This device already has a name, and that name already has a better spot on the board
+        const myName = this.scoreboard.myName;
+        const mine = myName ? this.scoreboard.find(myName) : null;
+        if (mine !== null && mine.score >= score) {
+            this.entry.mode = "known";
+            this.entry.existing = mine;
+            this.entry.takenName = myName;
+            return;
+        }
+        this.nameInput.open(myName ?? "");
+    },
+
+    finishEntry() {
+        this.nameInput.close();
+        this.entry = null;
+        this.goToTitle();
+    },
+
+    // Enter (or "done" on a phone) in the name box
+    submitName() {
+        const entry = this.entry;
+        const name = this.nameInput.value().trim();
+        const problem = this.scoreboard.nameProblem(name);
+        if (problem !== null) {
+            entry.message = problem;
+            return;
+        }
+
+        // Pressing Enter again on a name that's taken means "yes, that's me": their better score stays
+        if (entry.mode === "taken" && name === entry.takenName) {
+            this.scoreboard.rememberName(name);
+            this.scoreboard.highlight = name;
+            this.finishEntry();
+            return;
+        }
+
+        // The name already has a better score: explain, and let them type a different name
+        const existing = this.scoreboard.find(name);
+        if (existing !== null && existing.score >= entry.score) {
+            entry.mode = "taken";
+            entry.takenName = name;
+            entry.existing = existing;
+            entry.message = null;
+            return;
+        }
+
+        this.saveScore(name);
+    },
+
+    async saveScore(name) {
+        const entry = this.entry;
+        entry.mode = "saving";
+        entry.message = null;
+        this.nameInput.close();
+        try {
+            const result = await this.scoreboard.submit(name, entry.score);
+            if (this.entry !== entry) {
+                return;
+            }
+            if (result.improved) {
+                this.finishEntry();
+            } else {
+                // Someone saved a better score under this name since the board was loaded
+                entry.mode = "taken";
+                entry.takenName = result.name;
+                entry.existing = this.scoreboard.find(result.name) ?? {rank: null, score: result.score};
+                this.nameInput.open(result.name);
+            }
+        } catch (e) {
+            console.error(e);
+            if (this.entry === entry) {
+                entry.mode = "error";
+                entry.takenName = name;
+            }
+        }
+    },
+
+    // Buttons used on touch screens in the name box (in maze pixels)
+    entryButtons() {
+        const box = this.entryLayout();
+        const y = box.y + box.height - 22;
+        const labels = {name: ["SAVE", "SKIP"], taken: ["OK", "SKIP"], known: ["OK", "NEW NAME"], error: ["RETRY", "SKIP"]}[this.entry.mode];
+        if (labels === undefined) {
+            return [];
+        }
+        const width = 70;
+        const gap = 12;
+        const left = Math.floor(MAZE_WIDTH / 2 - width - gap / 2);
+        return labels.map((label, i) => ({label: label, x: left + i * (width + gap), y: y, width: width, height: 15}));
+    },
+
+    tappedButton() {
+        const tap = this.tapInMaze();
+        if (tap === null) {
+            return null;
+        }
+        const button = this.entryButtons().find(b => tap.x >= b.x && tap.x < b.x + b.width && tap.y >= b.y - 4 && tap.y < b.y + b.height + 4);
+        return button === undefined ? null : button.label;
+    },
+
+    updateEntry() {
+        const entry = this.entry;
+        const button = this.tappedButton();
+        const enter = this.controls.pressed("enter");
+        const cancel = this.controls.pressed("cancel");
+
+        if (!this.controls.isTouch()) {
+            this.nameInput.keepFocus();
+        }
+
+        if (entry.mode === "name" || entry.mode === "taken") {
+            if (this.nameInput.takeSubmit() || button === "SAVE" || button === "OK") {
+                this.submitName();
+            } else if (cancel || button === "SKIP") {
+                this.finishEntry();
+            }
+        } else if (entry.mode === "known") {
+            if (enter || button === "OK") {
+                this.finishEntry();
+            } else if (this.controls.pressed("newName") || button === "NEW NAME") {
+                entry.mode = "name";
+                this.nameInput.open("");
+            }
+        } else if (entry.mode === "error") {
+            if (enter || button === "RETRY") {
+                this.saveScore(entry.takenName);
+            } else if (cancel || button === "SKIP") {
+                this.finishEntry();
+            }
+        }
     },
 
     pause() {
@@ -1421,8 +1592,8 @@ const game = {
 
     goToTitle() {
         this.state = "title";
-        this.sound.setSiren(false);
-        this.sound.setDrone(false, 0);
+        this.scoreboard.refresh();
+        this.sound.setBackground(null);
         this.sound.setPaused(false);
     },
 
@@ -1508,6 +1679,15 @@ const game = {
         return tap === null ? null : {x: tap.x - MAZE_X, y: tap.y - MAZE_Y};
     },
 
+    tappedHelpButton() {
+        if (!this.controls.isTouch()) {
+            return false;
+        }
+        const tap = this.tapInMaze();
+        const b = HELP_BUTTON;
+        return tap !== null && tap.x >= b.x && tap.x < b.x + b.width && tap.y >= b.y - 4 && tap.y < b.y + b.height + 4;
+    },
+
     tappedPauseButton() {
         const tap = this.tapInMaze();
         if (tap === null) {
@@ -1530,13 +1710,28 @@ const game = {
         this.tick += 1;
         this.controls.update();
 
+        // While typing a name, letters are for the name, not for shortcuts like M to mute
+        if (this.state === "entry") {
+            this.updateEntry();
+            return;
+        }
+
         if (this.controls.mutePressed()) {
             this.sound.toggleMute();
         }
 
         if (this.state === "title") {
-            if (this.controls.confirmPressed() || this.controls.tapPosition() !== null) {
+            if (this.controls.pressed("help") || this.tappedHelpButton()) {
+                this.state = "howto";
+            } else if (this.controls.confirmPressed() || this.controls.tapPosition() !== null) {
                 this.startGame();
+            }
+            return;
+        }
+
+        if (this.state === "howto") {
+            if (this.controls.confirmPressed() || this.controls.pressed("help") || this.controls.pressed("cancel") || this.controls.tapPosition() !== null) {
+                this.state = "title";
             }
             return;
         }
@@ -1579,10 +1774,9 @@ const game = {
             }
         }
 
-        const sirenOn = this.snackMan.blue && !this.snackMan.dead && !this.isClearing() && this.freezeTimer === 0;
-        this.sound.setSiren(sirenOn);
-        const droneOn = this.snackMan.started && !this.snackMan.blue && !this.snackMan.dead && !this.isClearing() && this.freezeTimer === 0;
-        this.sound.setDrone(droneOn, 1 - this.board.pelletsLeft / this.board.totalPellets);
+        const frightened = this.snackMan.blue && !this.snackMan.dead && !this.isClearing() && this.freezeTimer === 0;
+        const droneOn = this.snackMan.started && !this.snackMan.dead && !this.isClearing() && this.freezeTimer === 0;
+        this.sound.setBackground(frightened ? "frightened" : (droneOn ? "siren" : null), 1 - this.board.pelletsLeft / this.board.totalPellets);
     },
 
     updatePauseMenu() {
@@ -1664,6 +1858,10 @@ const game = {
             this.drawTitle();
             return;
         }
+        if (this.state === "howto") {
+            this.drawHowTo();
+            return;
+        }
 
         const shake = this.effects.shakeOffset();
         MDog.Draw.translate(MAZE_X + shake.x, MAZE_Y + shake.y);
@@ -1696,6 +1894,9 @@ const game = {
         if (this.state === "paused") {
             this.drawPauseMenu();
         }
+        if (this.state === "entry") {
+            this.drawEntry();
+        }
     },
 
     drawTitle() {
@@ -1705,7 +1906,70 @@ const game = {
         MDog.Draw.clear({color: COLORS.background});
 
         drawLogo("SNACK MAN", middle, -30);
-        this.drawTitleBest(middle, 6);
+        this.drawScoreboard(middle, 4);
+
+        MDog.Draw.textImage("YOUR BEST: " + this.best, middle, 164, COLORS.label, font, {alignX: "center", alignY: "center"});
+
+        const hints = this.hints();
+        MDog.Draw.textImage(hints.help, middle, 212, COLORS.dim, font, {alignX: "center", alignY: "center"});
+        if (this.controls.isTouch()) {
+            this.drawHelpButton();
+        }
+        if (Math.floor(this.tick / 40) % 2 === 0) {
+            MDog.Draw.textImage(hints.start, middle, 256, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+        }
+    },
+
+    // The online top 10, in a double-walled box like the maze
+    drawScoreboard(middle, top) {
+        const font = "fonts/marsfont.png";
+        const width = 184;
+        const height = 148;
+        const x = middle - width / 2;
+        MDog.Draw.rectangle(x, top, width, height, COLORS.wall);
+        MDog.Draw.rectangle(x + 2, top + 2, width - 4, height - 4, COLORS.wall);
+        MDog.Draw.textImage("HIGH SCORES", middle, top + 11, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+
+        const board = this.scoreboard;
+        const firstRow = top + 30;
+        if (board.status !== "ready" || board.entries.length === 0) {
+            const lines = board.status === "loading" ? ["LOADING SCORES..."]
+                : board.status === "offline" ? ["SCOREBOARD OFFLINE"]
+                : ["NO SCORES YET.", "BE THE FIRST!"];
+            lines.forEach((line, i) => {
+                MDog.Draw.textImage(line, middle, firstRow + 40 + i * 12, COLORS.dim, font, {alignX: "center", alignY: "center"});
+            });
+            return;
+        }
+
+        board.entries.forEach((entry, i) => {
+            const y = firstRow + i * 11;
+            const justSaved = entry.name === board.highlight;
+            const mine = entry.name === board.myName;
+            let color = mine ? COLORS.snack : COLORS.text;
+            if (justSaved && Math.floor(this.tick / 12) % 2 === 0) {
+                color = COLORS.bonus;
+            }
+            MDog.Draw.textImage((i + 1) + ".", x + 28, y, COLORS.label, font, {alignX: "right", alignY: "center"});
+            MDog.Draw.textImage(entry.name, x + 34, y, color, font, {alignY: "center"});
+            MDog.Draw.textImage("" + entry.score, x + width - 12, y, color, font, {alignX: "right", alignY: "center"});
+        });
+    },
+
+    drawHelpButton() {
+        const b = HELP_BUTTON;
+        MDog.Draw.rectangle(b.x, b.y, b.width, b.height, COLORS.wall);
+        MDog.Draw.rectangle(b.x + 1, b.y + 1, b.width - 2, b.height - 2, COLORS.wall);
+    },
+
+    drawHowTo() {
+        const font = "fonts/marsfont.png";
+        const middle = MAZE_WIDTH / 2;
+        MDog.Draw.translate(MAZE_X, MAZE_Y);
+        MDog.Draw.clear({color: COLORS.background});
+
+        drawLogo("SNACK MAN", middle, -30);
+        MDog.Draw.textImage("HOW TO PLAY", middle, 18, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
 
         for (const line of TITLE_LINES) {
             MDog.Draw.textImage(line.text, middle, line.y, COLORS[line.color], font, {alignX: "center", alignY: "center"});
@@ -1715,20 +1979,95 @@ const game = {
         MDog.Draw.textImage(hints.move, middle, 208, COLORS.dim, font, {alignX: "center", alignY: "center"});
         MDog.Draw.textImage(hints.pause, middle, 220, COLORS.dim, font, {alignX: "center", alignY: "center"});
         if (Math.floor(this.tick / 40) % 2 === 0) {
-            MDog.Draw.textImage(hints.start, middle, 256, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+            MDog.Draw.textImage(hints.back, middle, 256, COLORS.snack, font, {alignX: "center", alignY: "center"});
         }
     },
 
-    // The best score on the title screen, in its own box so it stands out
-    drawTitleBest(middle, top) {
+    entryLayout() {
+        const width = 208;
+        const height = 150;
+        // Whole pixels only: text drawn at a half pixel comes out blurry
+        return {x: Math.floor(MAZE_WIDTH / 2 - width / 2), y: Math.floor(MAZE_HEIGHT / 2 - height / 2), width: width, height: height};
+    },
+
+    // The box for typing a name onto the scoreboard, over the frozen maze
+    drawEntry() {
         const font = "fonts/marsfont.png";
-        const width = 96;
-        const height = 34;
+        const middle = MAZE_WIDTH / 2;
+        const entry = this.entry;
+        const {x, y, width, height} = this.entryLayout();
+        const text = (line, row, color, size) => MDog.Draw.textImage(line, middle, y + row, color, font, {size: size ?? 1, alignX: "center", alignY: "center"});
+
+        MDog.Draw.rectangleFill(x, y, width, height, COLORS.background);
+        MDog.Draw.rectangle(x, y, width, height, COLORS.wall);
+        MDog.Draw.rectangle(x + 2, y + 2, width - 4, height - 4, COLORS.wall);
+
+        text("NEW HIGH SCORE!", 14, COLORS.snack, 2);
+        text("" + entry.score, 34, COLORS.text, 2);
+
+        if (entry.mode === "known") {
+            text("THAT'S " + ordinal(entry.rank) + " ON THE BOARD...", 56, COLORS.text);
+            text("BUT YOUR BEST AS " + entry.takenName + " IS", 72, COLORS.label);
+            text(entry.existing.score + ", " + ordinal(entry.existing.rank) + " PLACE.", 84, COLORS.label);
+            text("THAT STAYS ON THE BOARD.", 100, COLORS.label);
+            text(this.hints().known, height - 14, COLORS.dim);
+        } else if (entry.mode === "saving") {
+            text("SAVING...", 80, COLORS.label);
+        } else if (entry.mode === "error") {
+            text("COULDN'T SAVE YOUR SCORE.", 64, COLORS.loss);
+            text("CHECK YOUR CONNECTION.", 76, COLORS.label);
+            text(this.hints().retry, height - 14, COLORS.dim);
+        } else {
+            if (entry.mode === "taken") {
+                const place = entry.existing.rank !== null ? " IS ALREADY " + ordinal(entry.existing.rank) + " PLACE" : " IS ALREADY ON THE BOARD";
+                text(entry.takenName + place, 48, COLORS.label);
+                text("WITH A BETTER SCORE: " + entry.existing.score + ".", 58, COLORS.label);
+                text("NOT YOU? TYPE A NEW NAME.", 68, COLORS.text);
+            } else {
+                text("THAT'S " + ordinal(entry.rank) + " PLACE! TYPE YOUR NAME:", 56, COLORS.label);
+            }
+            this.drawNameField(middle, y + 82);
+            if (entry.message !== null) {
+                text(entry.message, 104, COLORS.loss);
+            } else if (entry.mode === "taken") {
+                text("OR ENTER TO KEEP IT AS IT IS.", 104, COLORS.dim);
+            }
+            text(this.hints().save, height - 14, COLORS.dim);
+        }
+
+        if (this.controls.isTouch()) {
+            for (const button of this.entryButtons()) {
+                MDog.Draw.rectangle(button.x, button.y, button.width, button.height, COLORS.wall);
+                MDog.Draw.rectangle(button.x + 1, button.y + 1, button.width - 2, button.height - 2, COLORS.wall);
+                MDog.Draw.textImage(button.label, button.x + Math.floor(button.width / 2), button.y + 8, COLORS.text, font, {alignX: "center", alignY: "center"});
+            }
+        }
+    },
+
+    // The name being typed, in a box, with a blinking cursor
+    drawNameField(middle, centerY) {
+        const font = "fonts/marsfont.png";
+        const width = 120;
+        const height = 17;
         const x = middle - width / 2;
-        MDog.Draw.rectangle(x, top, width, height, COLORS.wall);
-        MDog.Draw.rectangle(x + 2, top + 2, width - 4, height - 4, COLORS.wall);
-        MDog.Draw.textImage("BEST SCORE", middle, top + 8, COLORS.label, font, {alignX: "center", alignY: "center"});
-        MDog.Draw.textImage("" + this.best, middle, top + 21, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+        const y = centerY - Math.floor(height / 2);
+        MDog.Draw.rectangle(x, y, width, height, COLORS.wall);
+
+        const name = this.nameInput.value();
+        const cursorOn = Math.floor(this.tick / 40) % 2 === 0;
+        if (name === "" && this.controls.isTouch() && !this.nameInput.hasFocus()) {
+            MDog.Draw.textImage("TAP HERE TO TYPE", middle, centerY, COLORS.dim, font, {alignX: "center", alignY: "center"});
+            return;
+        }
+        // Each letter is 5 pixels wide at size 2, with a pixel between, so the text is centered by hand
+        const textWidth = name.length === 0 ? 0 : name.length * 10 - 2;
+        const left = Math.floor(middle - textWidth / 2);
+        if (name !== "") {
+            MDog.Draw.textImage(name, left, centerY, COLORS.snack, font, {size: 2, alignY: "center"});
+        }
+        if (cursorOn) {
+            MDog.Draw.rectangleFill(left + textWidth + 2, centerY - 4, 2, 10, COLORS.snack);
+        }
     },
 
     drawHud() {
@@ -1805,7 +2144,7 @@ const game = {
 }
 
 game.snackMan = new SnackMan(game.board, game.effects, {
-    onEat: () => game.sound.chomp(1 / (game.speed() * TICKS_PER_SECOND)), // the time it takes to reach the next pellet
+    onEat: () => game.sound.chomp(),
     onBite: () => {
         game.sound.bite();
         game.vibrate(VIBRATIONS.bite);
@@ -1817,7 +2156,7 @@ game.snackMan = new SnackMan(game.board, game.effects, {
         game.vibrate(VIBRATIONS.death);
     },
     onDeathSpin: () => game.sound.death(),
-    onDeathOver: () => game.restart()
+    onDeathOver: () => game.endOfRun()
 }, game.controls);
 
 // Tabbing away (or the window losing focus) pauses the game, so it's safe
