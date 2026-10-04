@@ -1,13 +1,19 @@
 /*
  * ╔══════════════════════════════════════════════════════════════════════╗
  * ║                                                                      ║
- * ║    ███████ ███    ██  █████   ██████ ██   ██     ███    ███  █████   ║
- * ║    ██      ████   ██ ██   ██ ██      ██  ██      ████  ████ ██   ██  ║
- * ║    ███████ ██ ██  ██ ███████ ██      █████       ██ ████ ██ ███████  ║
- * ║         ██ ██  ██ ██ ██   ██ ██      ██  ██      ██  ██  ██ ██   ██  ║
- * ║    ███████ ██   ████ ██   ██  ██████ ██   ██     ██      ██ ██   ██  ║
+ * ║              ███████ ███    ██  █████   ██████ ██   ██               ║
+ * ║              ██      ████   ██ ██   ██ ██      ██  ██                ║
+ * ║              ███████ ██ ██  ██ ███████ ██      █████                 ║
+ * ║                   ██ ██  ██ ██ ██   ██ ██      ██  ██                ║
+ * ║              ███████ ██   ████ ██   ██  ██████ ██   ██               ║
  * ║                                                                      ║
- * ║                          ~ REMASTERED ~                              ║
+ * ║                     ███    ███  █████  ███    ██                     ║
+ * ║                     ████  ████ ██   ██ ████   ██                     ║
+ * ║                     ██ ████ ██ ███████ ██ ██  ██                     ║
+ * ║                     ██  ██  ██ ██   ██ ██  ██ ██                     ║
+ * ║                     ██      ██ ██   ██ ██   ████                     ║
+ * ║                                                                      ║
+ * ║                            ~ REMASTERED ~                            ║
  * ║                                                                      ║
  * ║   This file was written by Claude (Anthropic's AI), as a remaster    ║
  * ║   of Milo's original Snack Man (see games/snack-man-old).            ║
@@ -54,6 +60,10 @@ const LATE_TURN_WINDOW = 0.25; // how far past a tile center (in tiles) you can 
 const BLOCKED_GRACE_TICKS = 24; // time to turn away when your face is up against your body (0.15s)
 const CHOMP_PIXELS = 2.5; // pixels travelled per mouth frame
 const CHOMP_FRAMES = [1, 2, 3, 2];
+const DEATH_FREEZE_TICKS = 50; // how long he flashes before his tail slides back in
+const UNRAVEL_MIN_TICKS = 40; // even a tiny tail takes this long to slide back in, so the ease is visible
+const UNRAVEL_MAX_TICKS = 140; // even a huge tail is back in by this point
+const UNRAVEL_SPEED = 1.5; // average pixels per tick for tails in between
 const PELLET_POINTS = 10;
 
 // ---------- Maze ----------
@@ -259,6 +269,10 @@ class SnackMan {
         this.dead = false;
         this.deathTimer = 0;
         this.unraveledAt = 0;
+        this.unravelTotal = 0;
+        this.unravelDuration = 0;
+        this.unravelPopped = 0;
+        this.unravelPixels = 0;
     }
 
     // ----- Rules -----
@@ -440,22 +454,33 @@ class SnackMan {
         this.deathTimer = 0;
         this.target = null;
         this.progress = 0;
+
+        // The tail slides back into him, fast at first and easing out at the end
+        this.unravelTotal = (this.body.length - 1) * TILE;
+        this.unravelDuration = Math.min(UNRAVEL_MAX_TICKS, Math.max(UNRAVEL_MIN_TICKS, this.unravelTotal / UNRAVEL_SPEED));
+        this.unravelPopped = 0; // pixels of tail already removed as whole tiles
+        this.unravelPixels = 0; // pixels the current tail end has slid in
     }
 
     updateDying() {
         this.deathTimer += 1;
 
-        const freezeTicks = 50;
-        if (this.deathTimer < freezeTicks) {
+        if (this.deathTimer < DEATH_FREEZE_TICKS) {
             return;
         }
 
-        // Unravel from the tail, quickly enough that long snakes don't take forever
-        const interval = Math.max(1, Math.floor(100 / this.body.length));
         if (this.body.length > 1) {
-            if (this.deathTimer % interval === 0) {
+            const t = Math.min(1, (this.deathTimer - DEATH_FREEZE_TICKS) / this.unravelDuration);
+            const easeOut = 1 - Math.pow(1 - t, 3);
+            this.unravelPixels = this.unravelTotal * easeOut - this.unravelPopped;
+            while (this.unravelPixels >= TILE && this.body.length > 1) {
+                this.unravelPixels -= TILE;
+                this.unravelPopped += TILE;
                 const tail = this.body.pop();
                 this.occupied[tileIndex(tail)] = false;
+            }
+            if (this.body.length === 1) {
+                this.unravelPixels = 0;
             }
             this.unraveledAt = this.deathTimer;
             return;
@@ -487,12 +512,19 @@ class SnackMan {
             last = c;
         }
 
-        // The tail end slides along with the head when it's about to give up a tile
+        // The tail end slides along with the head when it's about to give up a tile,
+        // and slides back into him when he's dying
+        let retract = 0;
         if (moving && !this.grows) {
+            retract = px;
+        } else if (this.dead) {
+            retract = Math.floor(this.unravelPixels);
+        }
+        if (retract > 0) {
             const end = points[points.length - 1];
             const before = points[points.length - 2];
-            end.x += Math.sign(before.x - end.x) * px;
-            end.y += Math.sign(before.y - end.y) * px;
+            end.x += Math.sign(before.x - end.x) * retract;
+            end.y += Math.sign(before.y - end.y) * retract;
         }
 
         return points;
@@ -568,7 +600,7 @@ class SnackMan {
         if (points.some(p => p.x < 8)) this.offsets.push(MAZE_WIDTH);
         if (points.some(p => p.x > MAZE_WIDTH - 8)) this.offsets.push(-MAZE_WIDTH);
 
-        const flashing = this.dead && this.deathTimer < 50 && Math.floor(this.deathTimer / 6) % 2 === 0;
+        const flashing = this.dead && this.deathTimer < DEATH_FREEZE_TICKS && Math.floor(this.deathTimer / 6) % 2 === 0;
         const color = flashing ? COLORS.flash : COLORS.snack;
 
         // A black disc behind the face fills his open mouth. His neck goes under it, so it never
