@@ -26,7 +26,7 @@
 
 import MDog from "../../MDogModules/MDogMain.js"
 import Controls, {KEY_BUFFER_TICKS} from "./Controls.js";
-import Sound from "./Sound.js";
+import Sound, {START_JINGLE_SECONDS} from "./Sound.js";
 import Scoreboard from "./Scoreboard.js";
 import NameInput from "./NameInput.js";
 
@@ -140,6 +140,7 @@ const LAYOUT = [
 const START_TILE = {x: 14, y: 23};
 const START_DIR = DIRS.left;
 const START_PROGRESS = 0.5;
+const READY_TICKS = Math.round((START_JINGLE_SECONDS + 0.5) * TICKS_PER_SECOND); // READY! shows this long, then he sets off on his own
 
 // Where READY! and the other messages go (the open row under the middle box, like Pac-Man)
 const MESSAGE_X = 14 * 8;
@@ -155,7 +156,6 @@ const COLORS = {
     scoreDrain: "#ff5a5a",
     label: "#dedeff",
     bonus: "#00ffff", // Pac-Man's ghost-points cyan
-    logoShadow: "#d96b00",
     wall: "#2121ff",
     dim: "#5a5a8c",
     loss: "#ff2a2a"
@@ -839,6 +839,7 @@ class SnackMan {
         this.wantTimer = 0;
 
         this.started = false;
+        this.readyTimer = READY_TICKS;
         this.blockedTimer = 0;
         this.chompDistance = 0;
 
@@ -1064,8 +1065,11 @@ class SnackMan {
 
         this.readInput();
 
+        // Like Pac-Man, he waits through READY! and then starts moving left by himself. A direction held
+        // or pressed during READY! is remembered, so he can turn or reverse straight away.
         if (!this.started) {
-            if (this.wantDir === null || !this.canEnter(step(this.body[0], this.wantDir))) {
+            this.readyTimer -= 1;
+            if (this.readyTimer > 0) {
                 return;
             }
             this.started = true;
@@ -1282,21 +1286,45 @@ function logoWidth(text) {
     return (width - LOGO_GAP) * LOGO_SCALE;
 }
 
+// The logo's filled pixels, worked out once per text: {cells: [{x, y}], width}, in logo pixels
+const logoCache = new Map();
+
+function logoCells(text) {
+    if (logoCache.has(text)) {
+        return logoCache.get(text);
+    }
+    const cells = [];
+    let left = 0;
+    for (const char of text) {
+        const rows = LOGO_LETTERS[char];
+        rows.forEach((row, y) => {
+            for (let x = 0; x < row.length; x++) {
+                if (row[x] === "#") {
+                    cells.push({x: left + x, y: y});
+                }
+            }
+        });
+        left += rows[0].length + LOGO_GAP;
+    }
+    const logo = {cells: cells, width: left - LOGO_GAP};
+    logoCache.set(text, logo);
+    return logo;
+}
+
+// An arcade-style gradient down the letters, from pale yellow at the top to deep orange at the bottom
+const LOGO_ROW_COLORS = ["#fff7b0", "#fff04a", "#ffe000", "#ffc400", "#ffa600", "#ff8400", "#ff6000"];
+const LOGO_SHADOW_COLOR = "#7a1500";
+
 // Draws the logo with its top middle at (x, y), with a drop shadow
 function drawLogo(text, x, y) {
-    for (const [offset, color] of [[LOGO_SCALE / 2, COLORS.logoShadow], [0, COLORS.snack]]) {
-        let left = x - logoWidth(text) / 2 + offset;
-        for (const letter of text) {
-            const rows = LOGO_LETTERS[letter];
-            rows.forEach((row, j) => {
-                for (let i = 0; i < row.length; i++) {
-                    if (row[i] === "#") {
-                        MDog.Draw.rectangleFill(left + i * LOGO_SCALE, y + offset + j * LOGO_SCALE, LOGO_SCALE, LOGO_SCALE, color);
-                    }
-                }
-            });
-            left += (rows[0].length + LOGO_GAP) * LOGO_SCALE;
-        }
+    const logo = logoCells(text);
+    const left = Math.floor(x - logo.width * LOGO_SCALE / 2);
+    const shadow = LOGO_SCALE / 2;
+    for (const cell of logo.cells) {
+        MDog.Draw.rectangleFill(left + cell.x * LOGO_SCALE + shadow, y + cell.y * LOGO_SCALE + shadow, LOGO_SCALE, LOGO_SCALE, LOGO_SHADOW_COLOR);
+    }
+    for (const cell of logo.cells) {
+        MDog.Draw.rectangleFill(left + cell.x * LOGO_SCALE, y + cell.y * LOGO_SCALE, LOGO_SCALE, LOGO_SCALE, LOGO_ROW_COLORS[cell.y]);
     }
 }
 
@@ -1357,7 +1385,7 @@ const HINTS = {
 };
 
 // On touch screens, the "how to play" hint on the title screen is a button (in maze pixels)
-const HELP_BUTTON = {x: 32, y: 217, width: 160, height: 17};
+const HELP_BUTTON = {x: 32, y: 259, width: 160, height: 17};
 
 // "1ST", "2ND", "3RD", "4TH"...
 function ordinal(n) {
@@ -1416,7 +1444,7 @@ const game = {
     vibrationAllowed: loadVibrationAllowed(),
     debugRun: false, // a level was skipped this run, so it can't set a best score
 
-    // Back to level 1 with a fresh board and no score (after dying, or pressing R)
+    // Back to level 1 with a fresh board and no score (after dying, or choosing RESTART)
     restart() {
         this.level = 1;
         this.bankedScore = 0;
@@ -1579,9 +1607,10 @@ const game = {
         }
     },
 
-    pause() {
+    // selected is the option to start on (RESUME if not given)
+    pause(selected) {
         this.state = "paused";
-        this.pauseSelection = 0;
+        this.pauseSelection = Math.max(0, this.pauseOptions().indexOf(selected));
         this.sound.setPaused(true);
     },
 
@@ -1617,10 +1646,11 @@ const game = {
     },
 
     // The level is over (he died, or cleared the board). Anything you bit off is already lost,
-    // even if it hasn't finished popping.
-    endRound() {
+    // even if it hasn't finished popping. Only a death can set a best score: a run has to be played out
+    // to the end, so restarting, quitting or closing the tab with a big score doesn't count.
+    endRound(died) {
         this.finalScore = this.bankedScore + this.snackMan.bonusPoints + (this.snackMan.body.length - 1) * PELLET_POINTS;
-        if (this.finalScore > this.best && !this.debugRun) {
+        if (died && this.finalScore > this.best && !this.debugRun) {
             this.best = this.finalScore;
             this.newBest = true;
             saveBest(this.best);
@@ -1746,9 +1776,9 @@ const game = {
             this.pause();
             return;
         }
+        // R doesn't restart straight away, so a stray key press can't throw away a run
         if (this.controls.restartPressed()) {
-            this.sound.stopAll(); // cuts off a death sound if you restart partway through one
-            this.restart();
+            this.pause("RESTART");
             return;
         }
         // For testing: double tap L to skip straight to the next level. Pellets aren't eaten, so your
@@ -1837,7 +1867,7 @@ const game = {
             if (this.snackMan.pieces.length > 0) {
                 return;
             }
-            this.endRound();
+            this.endRound(false);
             this.sound.levelClear();
             this.vibrate(VIBRATIONS.levelClear);
         }
@@ -1908,19 +1938,21 @@ const game = {
         MDog.Draw.translate(MAZE_X, MAZE_Y);
         MDog.Draw.clear({color: COLORS.background});
 
-        drawLogo("SNACK MAN", middle, -30);
-        MDog.Draw.textImage("BY MILO KESTELOOT", middle, 8, COLORS.label, font, {alignX: "center", alignY: "center"});
-        this.drawScoreboard(middle, 18);
+        // Three groups (title, scores, what to do next) with even space between them, and even margins
+        // above and below. The screen runs from -40 to 288 here.
+        drawLogo("SNACK MAN", middle, -22);
+        MDog.Draw.textImage("BY MILO KESTELOOT", middle, 16, COLORS.label, font, {alignX: "center", alignY: "center"});
+        this.drawScoreboard(middle, 53);
 
-        MDog.Draw.textImage("YOUR BEST: " + this.best, middle, 178, COLORS.label, font, {alignX: "center", alignY: "center"});
+        MDog.Draw.textImage("YOUR BEST: " + this.best, middle, 211, COLORS.label, font, {alignX: "center", alignY: "center"});
 
         const hints = this.hints();
-        MDog.Draw.textImage(hints.help, middle, 226, COLORS.dim, font, {alignX: "center", alignY: "center"});
+        MDog.Draw.textImage(hints.help, middle, 268, COLORS.dim, font, {alignX: "center", alignY: "center"});
         if (this.controls.isTouch()) {
             this.drawHelpButton();
         }
         if (Math.floor(this.tick / 40) % 2 === 0) {
-            MDog.Draw.textImage(hints.start, middle, 270, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+            MDog.Draw.textImage(hints.start, middle, 252, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
         }
     },
 
@@ -1973,8 +2005,8 @@ const game = {
         MDog.Draw.translate(MAZE_X, MAZE_Y);
         MDog.Draw.clear({color: COLORS.background});
 
-        drawLogo("SNACK MAN", middle, -30);
-        MDog.Draw.textImage("HOW TO PLAY", middle, 18, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+        drawLogo("SNACK MAN", middle, -22);
+        MDog.Draw.textImage("HOW TO PLAY", middle, 28, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
 
         for (const line of TITLE_LINES) {
             MDog.Draw.textImage(line.text, middle, line.y, COLORS[line.color], font, {alignX: "center", alignY: "center"});
@@ -2152,7 +2184,7 @@ game.snackMan = new SnackMan(game.board, game.effects, {
     onPiecePop: () => game.sound.pop(),
     onDie: () => {
         game.sound.bite(); // the crash itself, before the slow death
-        game.endRound();
+        game.endRound(true);
         game.vibrate(VIBRATIONS.death);
     },
     onDeathSound: seconds => game.sound.death(seconds),

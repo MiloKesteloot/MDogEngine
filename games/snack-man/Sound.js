@@ -91,6 +91,12 @@ function death(frames) {
     return result.concat(pop, [{frequency: 0, waveform: 0, volume: 0}], pop);
 }
 
+// The start jingle (not Pac-Man's; that one's copyrighted music). 0 is a rest.
+const START_NOTES = [523, 659, 784, 659, 698, 880, 784, 0, 1047];
+const START_NOTE_SPACING = 0.11;
+const START_NOTE_LENGTH = 0.1;
+export const START_JINGLE_SECONDS = (START_NOTES.length - 1) * START_NOTE_SPACING + START_NOTE_LENGTH;
+
 class Sound {
     constructor() {
         this.ctx = null;
@@ -325,12 +331,11 @@ class Sound {
         this.stopVoice(2);
     }
 
-    // A short tune when a game starts (not Pac-Man's; that one's copyrighted music)
+    // A short tune when a game starts
     start() {
-        const notes = [523, 659, 784, 659, 698, 880, 784, 0, 1047];
-        notes.forEach((note, i) => {
+        START_NOTES.forEach((note, i) => {
             if (note > 0) {
-                this.tone("square", note, note * 0.995, 0.1, 0.4, i * 0.11);
+                this.tone("square", note, note * 0.995, START_NOTE_LENGTH, 0.4, i * START_NOTE_SPACING);
             }
         });
     }
