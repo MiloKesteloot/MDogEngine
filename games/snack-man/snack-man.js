@@ -86,6 +86,8 @@ const CLEAR_PAUSE_TICKS = 60; // after the last pellet, everything freezes for a
 const CLEAR_FLASH_TICKS = 24; // ...then the maze flashes white, this long per flash...
 const CLEAR_FLASHES = 8; // ...this many times, and the next level starts
 const BEST_SCORE_KEY = "snack-man-best";
+const POWER_PELLET_COUNT = 4;
+const POWER_PELLET_MIN_DISTANCE = 4 * 6.5; // pixels between random power pellets: 4 snack man radiuses
 
 // ---------- Maze ----------
 
@@ -436,9 +438,64 @@ class LossText {
     }
 }
 
-function burst(x, y, count, colors) {
-    for (let i = 0; i < count; i++) {
-        game.particles.push(new Particle(x, y, colors[i % colors.length]));
+// Particles, floating "-10"s and screen shake. Snack Man and his bitten-off pieces add to these,
+// and the game updates and draws them.
+class Effects {
+    constructor() {
+        this.clear();
+    }
+
+    clear() {
+        this.particles = [];
+        this.lossTexts = [];
+        this.shakeTimer = 0;
+    }
+
+    burst(x, y, count, colors) {
+        for (let i = 0; i < count; i++) {
+            this.particles.push(new Particle(x, y, colors[i % colors.length]));
+        }
+    }
+
+    lossText(x, y) {
+        this.lossTexts.push(new LossText(x, y));
+    }
+
+    shake() {
+        this.shakeTimer = SHAKE_TICKS;
+    }
+
+    // How far to nudge the whole maze this frame while shaking
+    shakeOffset() {
+        if (this.shakeTimer <= 0) {
+            return {x: 0, y: 0};
+        }
+        const amount = Math.ceil(SHAKE_AMOUNT * this.shakeTimer / SHAKE_TICKS);
+        return {
+            x: Math.round((Math.random() * 2 - 1) * amount),
+            y: Math.round((Math.random() * 2 - 1) * amount)
+        };
+    }
+
+    update() {
+        for (const particle of this.particles) {
+            particle.update();
+        }
+        this.particles = this.particles.filter(particle => particle.life > 0);
+        for (const text of this.lossTexts) {
+            text.update();
+        }
+        this.lossTexts = this.lossTexts.filter(text => text.life > 0);
+        if (this.shakeTimer > 0) this.shakeTimer -= 1;
+    }
+
+    draw() {
+        for (const particle of this.particles) {
+            particle.draw();
+        }
+        for (const text of this.lossTexts) {
+            text.draw();
+        }
     }
 }
 
@@ -447,8 +504,9 @@ function burst(x, y, count, colors) {
 // The part of his tail he bit off. It flashes, then pops one segment at a time,
 // starting where he bit it, and your score goes down with every pop.
 class SeveredPiece {
-    constructor(tiles) {
+    constructor(tiles, effects) {
         this.tiles = tiles;
+        this.effects = effects;
         this.points = tilePath(tiles);
         this.timer = 0;
         this.popped = 0;
@@ -468,10 +526,10 @@ class SeveredPiece {
             this.tiles.shift();
             const popped = this.points.shift();
             const x = wrapPixelX(popped.x);
-            burst(x, popped.y, 6, [COLORS.loss, COLORS.loss, COLORS.flash]);
+            this.effects.burst(x, popped.y, 6, [COLORS.loss, COLORS.loss, COLORS.flash]);
             // Only every other segment gets a "-10" so they don't pile up; it's just there to show it's bad
             if (this.popped % 2 === 0) {
-                game.lossTexts.push(new LossText(x, popped.y));
+                this.effects.lossText(x, popped.y);
             }
             this.popped += 1;
         }
@@ -497,10 +555,43 @@ class Board {
         this.reset();
     }
 
-    reset() {
+    // Level 1 uses the normal power pellets; later levels move them to random spots
+    reset(level) {
         this.tiles = LAYOUT.join("").split("");
+        if ((level ?? 1) > 1) {
+            this.randomizePowerPellets();
+        }
         this.pelletsLeft = this.tiles.filter(t => t === PELLET || t === POWER).length;
-        this.totalPellets = this.pelletsLeft;
+    }
+
+    randomizePowerPellets() {
+        const pellets = [];
+        for (let i = 0; i < this.tiles.length; i++) {
+            if (this.tiles[i] === POWER) {
+                this.tiles[i] = PELLET;
+            }
+            if (this.tiles[i] === PELLET) {
+                pellets.push(center({x: i % COLS, y: Math.floor(i / COLS)}));
+            }
+        }
+
+        // Shuffle, then take pellets in that order, skipping any too close to one already picked
+        for (let i = pellets.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pellets[i], pellets[j]] = [pellets[j], pellets[i]];
+        }
+        const picked = [];
+        for (const p of pellets) {
+            if (picked.length === POWER_PELLET_COUNT) {
+                break;
+            }
+            if (picked.every(q => Math.hypot(p.x - q.x, p.y - q.y) >= POWER_PELLET_MIN_DISTANCE)) {
+                picked.push(p);
+            }
+        }
+        for (const p of picked) {
+            this.tiles[Math.floor(p.x / TILE) + Math.floor(p.y / TILE) * COLS] = POWER;
+        }
     }
 
     get(tile) {
@@ -547,11 +638,106 @@ class Board {
     }
 }
 
+// ---------- Death ----------
+
+// Everything that happens after he crashes into himself:
+// 1. he flashes white for a moment,
+// 2. his tail slides back into him, fast at first and easing out at the end,
+// 3. the classic Pac-Man death: his mouth opens all the way while he spins, then he pops.
+// Snack Man asks it each tick how many tail tiles to remove, and how far the current tail end has slid in.
+class DeathAnimation {
+    constructor(tailTiles) {
+        this.timer = 0;
+        this.tailLeft = tailTiles;
+        this.tailPixels = tailTiles * TILE;
+        this.unravelTicks = Math.min(UNRAVEL_MAX_TICKS, Math.max(UNRAVEL_MIN_TICKS, this.tailPixels / UNRAVEL_SPEED));
+        this.removedPixels = 0; // tail already removed as whole tiles
+        this.slidPixels = 0; // how far the current tail end has slid in
+        this.finaleStart = tailTiles === 0 ? DEATH_FREEZE_TICKS : null; // when the tail finished sliding in
+    }
+
+    // Returns how many tail tiles finished sliding in this tick
+    update() {
+        this.timer += 1;
+        if (this.timer < DEATH_FREEZE_TICKS || this.finaleStart !== null) {
+            return 0;
+        }
+
+        const t = Math.min(1, (this.timer - DEATH_FREEZE_TICKS) / this.unravelTicks);
+        const easeOut = 1 - Math.pow(1 - t, 3);
+        this.slidPixels = this.tailPixels * easeOut - this.removedPixels;
+
+        let removed = 0;
+        while (this.slidPixels >= TILE && this.tailLeft > 0) {
+            this.slidPixels -= TILE;
+            this.removedPixels += TILE;
+            this.tailLeft -= 1;
+            removed += 1;
+        }
+        if (this.tailLeft === 0) {
+            this.slidPixels = 0;
+            this.finaleStart = this.timer;
+        }
+        return removed;
+    }
+
+    isFlashing() {
+        return this.timer < DEATH_FREEZE_TICKS && Math.floor(this.timer / 6) % 2 === 0;
+    }
+
+    tailSlide() {
+        return Math.floor(this.slidPixels);
+    }
+
+    // Ticks since his tail finished sliding in, or -1 if it hasn't yet
+    finaleFrame() {
+        if (this.finaleStart === null || this.timer < this.finaleStart) {
+            return -1;
+        }
+        return this.timer - this.finaleStart;
+    }
+
+    isOver() {
+        return this.finaleFrame() > DEATH_HOLD_TICKS + DEATH_SPIN_TICKS + DEATH_POP_TICKS + DEATH_AFTER_TICKS;
+    }
+
+    drawFinale(x, y, facing) {
+        const frame = this.finaleFrame();
+        const popStart = DEATH_HOLD_TICKS + DEATH_SPIN_TICKS;
+
+        if (frame < popStart) {
+            const t = Math.max(0, (frame - DEATH_HOLD_TICKS) / DEATH_SPIN_TICKS);
+            const halfMouth = Math.PI * Math.pow(t, 1.5);
+            pie(x, y, facing - Math.PI * 2 * DEATH_SPINS * t * t, halfMouth, COLORS.snack);
+            return;
+        }
+
+        if (frame < popStart + DEATH_POP_TICKS) {
+            const t = (frame - popStart) / DEATH_POP_TICKS;
+            const inner = 2 + 8 * t;
+            const outer = inner + 1 + 4 * (1 - t);
+            for (let k = 0; k < 8; k++) {
+                const angle = k * Math.PI / 4;
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                MDog.Draw.line(
+                    Math.round(x + cos * inner), Math.round(y + sin * inner),
+                    Math.round(x + cos * outer), Math.round(y + sin * outer),
+                    COLORS.snack
+                );
+            }
+        }
+    }
+}
+
 // ---------- Snack Man ----------
 
 class SnackMan {
-    constructor(board) {
+    // events: onDie() when he crashes, onDeathOver() once the death animation has finished
+    constructor(board, effects, events) {
         this.board = board;
+        this.effects = effects;
+        this.events = events;
         this.reset();
     }
 
@@ -574,18 +760,16 @@ class SnackMan {
         this.blockedTimer = 0;
         this.chompDistance = 0;
 
-        this.dead = false;
-        this.deathTimer = 0;
-        this.unraveledAt = 0;
-        this.unravelTotal = 0;
-        this.unravelDuration = 0;
-        this.unravelPopped = 0;
-        this.unravelPixels = 0;
+        this.death = null; // a DeathAnimation while he's dying
 
         this.blue = false; // from a power pellet: the next time he runs into himself, he bites instead of dying
         this.blueTimer = 0; // ticks since he turned blue, for the flash
         this.biteTimer = 0;
         this.pieces = [];
+    }
+
+    get dead() {
+        return this.death !== null;
     }
 
     // ----- Rules -----
@@ -656,14 +840,14 @@ class SnackMan {
         for (const t of cut) {
             this.occupied[tileIndex(t)] = false;
         }
-        this.pieces.push(new SeveredPiece(cut));
+        this.pieces.push(new SeveredPiece(cut, this.effects));
 
         this.blue = false;
         this.biteTimer = BITE_CHOMP_TICKS;
-        game.shake();
+        this.effects.shake();
 
         const c = center(tile);
-        burst(c.x, c.y, 10, [COLORS.flash, COLORS.blue]);
+        this.effects.burst(c.x, c.y, 10, [COLORS.flash, COLORS.blue]);
     }
 
     // Called while standing on a tile center: pick where to go next
@@ -713,7 +897,7 @@ class SnackMan {
             }
             this.blue = true;
             const c = center(this.target);
-            burst(c.x, c.y, 10, [COLORS.blue, COLORS.pellet]);
+            this.effects.burst(c.x, c.y, 10, [COLORS.blue, COLORS.pellet]);
         }
 
         this.target = null;
@@ -765,7 +949,8 @@ class SnackMan {
         this.pieces = this.pieces.filter(piece => !piece.isDone());
     }
 
-    update() {
+    // speed is in tiles per tick
+    update(speed) {
         if (this.biteTimer > 0) this.biteTimer -= 1;
         if (this.blue) this.blueTimer += 1;
 
@@ -792,7 +977,6 @@ class SnackMan {
             this.tryLateTurn();
         }
 
-        const speed = game.speed();
         this.progress += speed;
         this.chompDistance += speed * TILE;
 
@@ -808,47 +992,20 @@ class SnackMan {
     // ----- Death -----
 
     die() {
-        game.endRound();
-        this.dead = true;
-        this.deathTimer = 0;
+        this.events.onDie();
+        this.death = new DeathAnimation(this.body.length - 1);
         this.target = null;
         this.progress = 0;
-
-        // The tail slides back into him, fast at first and easing out at the end
-        this.unravelTotal = (this.body.length - 1) * TILE;
-        this.unravelDuration = Math.min(UNRAVEL_MAX_TICKS, Math.max(UNRAVEL_MIN_TICKS, this.unravelTotal / UNRAVEL_SPEED));
-        this.unravelPopped = 0; // pixels of tail already removed as whole tiles
-        this.unravelPixels = 0; // pixels the current tail end has slid in
-        this.unraveledAt = DEATH_FREEZE_TICKS; // when the tail finished sliding in
     }
 
     updateDying() {
-        this.deathTimer += 1;
-
-        if (this.deathTimer < DEATH_FREEZE_TICKS) {
-            return;
+        const removed = this.death.update();
+        for (let i = 0; i < removed; i++) {
+            const tail = this.body.pop();
+            this.occupied[tileIndex(tail)] = false;
         }
-
-        if (this.body.length > 1) {
-            const t = Math.min(1, (this.deathTimer - DEATH_FREEZE_TICKS) / this.unravelDuration);
-            const easeOut = 1 - Math.pow(1 - t, 3);
-            this.unravelPixels = this.unravelTotal * easeOut - this.unravelPopped;
-            while (this.unravelPixels >= TILE && this.body.length > 1) {
-                this.unravelPixels -= TILE;
-                this.unravelPopped += TILE;
-                const tail = this.body.pop();
-                this.occupied[tileIndex(tail)] = false;
-            }
-            if (this.body.length === 1) {
-                this.unravelPixels = 0;
-            }
-            this.unraveledAt = this.deathTimer;
-            return;
-        }
-
-        const finale = DEATH_HOLD_TICKS + DEATH_SPIN_TICKS + DEATH_POP_TICKS + DEATH_AFTER_TICKS;
-        if (this.deathTimer - this.unraveledAt > finale) {
-            game.restart();
+        if (this.death.isOver()) {
+            this.events.onDeathOver();
         }
     }
 
@@ -871,7 +1028,7 @@ class SnackMan {
         if (moving && !this.grows) {
             retract = px;
         } else if (this.dead) {
-            retract = Math.floor(this.unravelPixels);
+            retract = this.death.tailSlide();
         }
         if (retract > 0) {
             const end = points[points.length - 1];
@@ -918,7 +1075,7 @@ class SnackMan {
     }
 
     color() {
-        if (this.dead && this.deathTimer < DEATH_FREEZE_TICKS && Math.floor(this.deathTimer / 6) % 2 === 0) {
+        if (this.dead && this.death.isFlashing()) {
             return COLORS.flash;
         }
         if (this.blue) {
@@ -952,7 +1109,7 @@ class SnackMan {
         // A black disc behind the face fills his open mouth. His neck goes under it, so it never
         // shows inside his mouth. The rest of his body goes over it, so if his own tail is right
         // in front of him, you see the tail in his mouth instead of a black outline.
-        if (this.deathFinaleFrame() >= 0) {
+        if (this.inDeathFinale()) {
             this.drawPieces();
             return; // only the head is left, and drawOverPellets handles it
         }
@@ -980,51 +1137,18 @@ class SnackMan {
 
     drawOverPellets(tick) {
         const head = this.points[0];
-        const finaleFrame = this.deathFinaleFrame();
         for (const offsetX of this.offsets) {
-            if (finaleFrame >= 0) {
-                this.drawDeathFinale(head.x + offsetX, head.y, finaleFrame);
+            if (this.inDeathFinale()) {
+                this.death.drawFinale(head.x + offsetX, head.y, Math.atan2(this.dir.y, this.dir.x));
             } else {
                 this.drawFace(head.x + offsetX, head.y, this.color());
             }
         }
     }
 
-    // Ticks since his tail finished sliding back in after dying, or -1 if that hasn't happened
-    deathFinaleFrame() {
-        if (!this.dead || this.body.length > 1 || this.deathTimer < DEATH_FREEZE_TICKS) {
-            return -1;
-        }
-        return this.deathTimer - this.unraveledAt;
-    }
-
-    // The classic Pac-Man death: his mouth opens all the way while he spins, then he pops
-    drawDeathFinale(x, y, frame) {
-        const popStart = DEATH_HOLD_TICKS + DEATH_SPIN_TICKS;
-
-        if (frame < popStart) {
-            const t = Math.max(0, (frame - DEATH_HOLD_TICKS) / DEATH_SPIN_TICKS);
-            const facing = Math.atan2(this.dir.y, this.dir.x) - Math.PI * 2 * DEATH_SPINS * t * t;
-            const halfMouth = Math.PI * Math.pow(t, 1.5);
-            pie(x, y, facing, halfMouth, COLORS.snack);
-            return;
-        }
-
-        if (frame < popStart + DEATH_POP_TICKS) {
-            const t = (frame - popStart) / DEATH_POP_TICKS;
-            const inner = 2 + 8 * t;
-            const outer = inner + 1 + 4 * (1 - t);
-            for (let k = 0; k < 8; k++) {
-                const angle = k * Math.PI / 4;
-                const cos = Math.cos(angle);
-                const sin = Math.sin(angle);
-                MDog.Draw.line(
-                    Math.round(x + cos * inner), Math.round(y + sin * inner),
-                    Math.round(x + cos * outer), Math.round(y + sin * outer),
-                    COLORS.snack
-                );
-            }
-        }
+    // Once his tail is all the way in, only the spinning head is drawn
+    inDeathFinale() {
+        return this.dead && this.death.finaleFrame() >= 0;
     }
 }
 
@@ -1051,28 +1175,26 @@ const game = {
     level: 1,
     board: new Board(),
     snackMan: null,
+    effects: new Effects(),
     clearTimer: 0,
-    particles: [],
-    lossTexts: [],
-    shakeTimer: 0,
     best: loadBest(),
-    finalScore: null, // set when the round is over, so the score stops changing
+    bankedScore: 0, // score from levels already cleared this run
+    finalScore: null, // set when a level is over, so the score stops changing
     newBest: false,
 
-    // Back to level 1 with a fresh board (after dying, or pressing R)
+    // Back to level 1 with a fresh board and no score (after dying, or pressing R)
     restart() {
         this.level = 1;
+        this.bankedScore = 0;
         this.startLevel();
     },
 
     startLevel() {
         this.clearTimer = 0;
-        this.particles = [];
-        this.lossTexts = [];
-        this.shakeTimer = 0;
+        this.effects.clear();
         this.finalScore = null;
         this.newBest = false;
-        this.board.reset();
+        this.board.reset(this.level);
         this.snackMan.reset();
     },
 
@@ -1080,20 +1202,20 @@ const game = {
         return SPEED * Math.min(MAX_SPEED_MULTIPLIER, 1 + SPEED_PER_LEVEL * (this.level - 1));
     },
 
-    // Your score is just how long you are: every segment is a pellet you ate. Bitten-off
-    // segments still count until they pop, so the score drains away as they do.
+    // Your score is what you banked on earlier levels plus how long you are: every segment is a
+    // pellet you ate. Bitten-off segments still count until they pop, so the score drains away as they do.
     getScore() {
         if (this.finalScore !== null) {
             return this.finalScore;
         }
         const bitten = this.snackMan.pieces.reduce((sum, piece) => sum + piece.tiles.length, 0);
-        return (this.snackMan.body.length - 1 + bitten) * PELLET_POINTS;
+        return this.bankedScore + (this.snackMan.body.length - 1 + bitten) * PELLET_POINTS;
     },
 
-    // The round is over (he died, or cleared the board). Your score is how long you are right
-    // now; anything you bit off is already lost, even if it hasn't finished popping.
+    // The level is over (he died, or cleared the board). Your score is what you banked plus how long
+    // you are right now; anything you bit off is already lost, even if it hasn't finished popping.
     endRound() {
-        this.finalScore = (this.snackMan.body.length - 1) * PELLET_POINTS;
+        this.finalScore = this.bankedScore + (this.snackMan.body.length - 1) * PELLET_POINTS;
         if (this.finalScore > this.best) {
             this.best = this.finalScore;
             this.newBest = true;
@@ -1105,14 +1227,6 @@ const game = {
         return this.board.pelletsLeft === 0;
     },
 
-    getMaxScore() {
-        return this.board.totalPellets * PELLET_POINTS;
-    },
-
-    shake() {
-        this.shakeTimer = SHAKE_TICKS;
-    },
-
     update() {
         this.tick += 1;
 
@@ -1121,22 +1235,13 @@ const game = {
             return;
         }
 
-        for (const particle of this.particles) {
-            particle.update();
-        }
-        this.particles = this.particles.filter(particle => particle.life > 0);
-        for (const text of this.lossTexts) {
-            text.update();
-        }
-        this.lossTexts = this.lossTexts.filter(text => text.life > 0);
-        if (this.shakeTimer > 0) this.shakeTimer -= 1;
-
+        this.effects.update();
         this.snackMan.updatePieces();
 
         if (this.isClearing()) {
             this.updateClear();
         } else {
-            this.snackMan.update();
+            this.snackMan.update(this.speed());
         }
     },
 
@@ -1152,6 +1257,7 @@ const game = {
         this.clearTimer += 1;
         if (this.clearTimer >= CLEAR_PAUSE_TICKS + CLEAR_FLASH_TICKS * CLEAR_FLASHES) {
             this.level += 1;
+            this.bankedScore = this.finalScore;
             this.startLevel();
         }
     },
@@ -1164,14 +1270,8 @@ const game = {
     },
 
     draw() {
-        let shakeX = 0;
-        let shakeY = 0;
-        if (this.shakeTimer > 0) {
-            const amount = Math.ceil(SHAKE_AMOUNT * this.shakeTimer / SHAKE_TICKS);
-            shakeX = Math.round((Math.random() * 2 - 1) * amount);
-            shakeY = Math.round((Math.random() * 2 - 1) * amount);
-        }
-        MDog.Draw.translate(MAZE_X + shakeX, MAZE_Y + shakeY);
+        const shake = this.effects.shakeOffset();
+        MDog.Draw.translate(MAZE_X + shake.x, MAZE_Y + shake.y);
 
         MDog.Draw.clear({color: COLORS.background});
         if (this.mazeFlashing()) {
@@ -1183,12 +1283,7 @@ const game = {
         this.snackMan.drawUnderPellets(this.tick);
         this.board.drawPellets(this.tick);
         this.snackMan.drawOverPellets(this.tick);
-        for (const particle of this.particles) {
-            particle.draw();
-        }
-        for (const text of this.lossTexts) {
-            text.draw();
-        }
+        this.effects.draw();
 
         // Hide anything poking out of the tunnel
         const screenHeight = MDog.Draw.getScreenHeightInArtPixels();
@@ -1203,10 +1298,10 @@ const game = {
         const font = "fonts/marsfont.png";
         const top = -30;
 
-        // Score (out of the most you could get on this board) on the left, best on the right
+        // Score on the left, best on the right
         const draining = this.snackMan.pieces.length > 0 && this.finalScore === null;
         MDog.Draw.textImage("SCORE", 0, top, COLORS.label, font);
-        MDog.Draw.textImage(this.getScore() + "/" + this.getMaxScore(), 0, top + 9, draining ? COLORS.scoreDrain : COLORS.text, font, {size: 2});
+        MDog.Draw.textImage("" + this.getScore(), 0, top + 9, draining ? COLORS.scoreDrain : COLORS.text, font, {size: 2});
 
         const bestFlashing = this.newBest && Math.floor(this.tick / 12) % 2 === 0;
         MDog.Draw.textImage("BEST", MAZE_WIDTH, top, COLORS.label, font, {alignX: "right"});
@@ -1237,7 +1332,10 @@ const game = {
         MDog.Draw.textImage(text, MESSAGE_X, MESSAGE_Y, color, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
     }
 }
-game.snackMan = new SnackMan(game.board);
+game.snackMan = new SnackMan(game.board, game.effects, {
+    onDie: () => game.endRound(),
+    onDeathOver: () => game.restart()
+});
 
 function update() {
     game.update();

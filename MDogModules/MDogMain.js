@@ -55,6 +55,7 @@ class MDog {
             this.Input._postInUpdate();
         }
 
+        // TODO should draw with browser refresh rate, not 160 times per second
         this.Draw._postOutUpdate();
 
         requestAnimationFrame(() => this._everyFrame());
