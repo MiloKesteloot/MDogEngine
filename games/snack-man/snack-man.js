@@ -306,28 +306,83 @@ function drawTrail(points, offsetX, color, roundEnd) {
     }
 }
 
-// Recolored copies of the face sprites, made once and reused (MDog's own tint makes a new canvas every draw)
-const tintCache = new Map();
+// ---------- Recolored images ----------
 
-function tintedSprite(fileName, color) {
-    const key = fileName + color;
-    if (tintCache.has(key)) {
-        return tintCache.get(key);
+// To draw an image in another color (Snack Man turning blue, the maze flashing white), each image is read once
+// and turned into a list of rectangles covering its pixels, which can then be drawn in any color.
+// (MDog's tint setting does the same job, but it builds a new canvas every time it draws.)
+const shapes = new Map();
+
+function loadShape(fileName) {
+    let shape = shapes.get(fileName);
+    if (shape !== undefined) {
+        return shape;
     }
-    const image = MDog.Draw._getImageByName(fileName);
-    if (!image.complete || image.naturalWidth === 0) {
-        return null;
+
+    shape = {rects: null, width: 0, height: 0};
+    shapes.set(fileName, shape);
+
+    const image = new Image();
+    image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(image, 0, 0);
+        const pixels = ctx.getImageData(0, 0, image.width, image.height).data;
+
+        shape.rects = pixelsToRects(pixels, image.width, image.height);
+        shape.width = image.width;
+        shape.height = image.height;
+    };
+    image.src = "assets/" + fileName;
+    return shape;
+}
+
+// Covers the solid pixels with rectangles: a run of pixels in a row, stretched down while the rows below
+// have the exact same run (so straight wall lines become one tall rectangle instead of many short ones)
+function pixelsToRects(pixels, width, height) {
+    const rects = [];
+    let open = new Map(); // "x,width" of runs in the previous row -> the rectangle they're part of
+    for (let y = 0; y < height; y++) {
+        const nextOpen = new Map();
+        let x = 0;
+        while (x < width) {
+            if (pixels[(x + y * width) * 4 + 3] < 128) {
+                x += 1;
+                continue;
+            }
+            const start = x;
+            while (x < width && pixels[(x + y * width) * 4 + 3] >= 128) {
+                x += 1;
+            }
+            const key = start + "," + (x - start);
+            let rect = open.get(key);
+            if (rect !== undefined) {
+                rect[3] += 1;
+            } else {
+                rect = [start, y, x - start, 1];
+                rects.push(rect);
+            }
+            nextOpen.set(key, rect);
+        }
+        open = nextOpen;
     }
-    const canvas = document.createElement("canvas");
-    canvas.width = image.width;
-    canvas.height = image.height;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(image, 0, 0);
-    ctx.globalCompositeOperation = "source-in";
-    ctx.fillStyle = color;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    tintCache.set(key, canvas);
-    return canvas;
+    return rects;
+}
+
+// Draws an image as a solid color. Returns false if it hasn't loaded yet.
+function drawRecolored(fileName, x, y, color, flipX, flipY) {
+    const shape = loadShape(fileName);
+    if (shape.rects === null) {
+        return false;
+    }
+    for (const [rx, ry, w, h] of shape.rects) {
+        const dx = flipX ? shape.width - rx - w : rx;
+        const dy = flipY ? shape.height - ry - h : ry;
+        MDog.Draw.rectangleFill(x + dx, y + dy, w, h, color);
+    }
+    return true;
 }
 
 // ---------- Particles ----------
@@ -875,15 +930,13 @@ class SnackMan {
     drawFace(x, y, color) {
         const horizontal = this.dir.x !== 0;
         const name = "snack-man/snack-man-" + (horizontal ? "right" : "up") + "-" + this.mouthFrame() + ".png";
-        const flip = {flipX: this.dir.x < 0, flipY: this.dir.y > 0};
-
+        const flipX = this.dir.x < 0;
+        const flipY = this.dir.y > 0;
+        // The sprites are already yellow, so only other colors need recoloring
         if (color === COLORS.snack) {
-            MDog.Draw.image(name, x - 6, y - 6, flip);
-            return;
-        }
-        const tinted = tintedSprite(name, color);
-        if (tinted !== null) {
-            MDog.Draw._rawImage(tinted, x - 6, y - 6, tinted.width, tinted.height, flip);
+            MDog.Draw.image(name, x - 6, y - 6, {flipX: flipX, flipY: flipY});
+        } else {
+            drawRecolored(name, x - 6, y - 6, color, flipX, flipY);
         }
     }
 
@@ -1121,9 +1174,8 @@ const game = {
         MDog.Draw.translate(MAZE_X + shakeX, MAZE_Y + shakeY);
 
         MDog.Draw.clear({color: COLORS.background});
-        const whiteMaze = this.mazeFlashing() ? tintedSprite("snack-man/map.png", COLORS.flash) : null;
-        if (whiteMaze !== null) {
-            MDog.Draw._rawImage(whiteMaze, 0, 0, whiteMaze.width, whiteMaze.height);
+        if (this.mazeFlashing()) {
+            drawRecolored("snack-man/map.png", 0, 0, COLORS.flash, false, false);
         } else {
             MDog.Draw.image("snack-man/map.png", 0, 0);
         }
@@ -1161,7 +1213,7 @@ const game = {
         MDog.Draw.textImage("" + this.best, MAZE_WIDTH, top + 9, bestFlashing ? COLORS.snack : COLORS.text, font, {size: 2, alignX: "right"});
 
         MDog.Draw.textImage("LEVEL " + this.level, 0, MAZE_HEIGHT + 8, COLORS.label, font);
-        MDog.Draw.textImage("R TO RESTART", MAZE_WIDTH, MAZE_HEIGHT + 8, COLORS.dim, font, {alignX: "right"});
+        MDog.Draw.textImage("ARROWS TO MOVE - R TO RESTART", MAZE_WIDTH, MAZE_HEIGHT + 8, COLORS.dim, font, {alignX: "right"});
 
         this.drawMessage();
     },
@@ -1191,6 +1243,14 @@ function update() {
     game.update();
     game.draw();
 }
+
+// Load the recolorable images up front, so the first blue face or white maze isn't missing for a moment
+for (const dir of ["right", "up"]) {
+    for (const frame of [1, 2, 3]) {
+        loadShape("snack-man/snack-man-" + dir + "-" + frame + ".png");
+    }
+}
+loadShape("snack-man/map.png");
 
 MDog.Draw.setBackgroundColor("#000000");
 MDog.setActiveFunction(update);
