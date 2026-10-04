@@ -84,7 +84,7 @@ class MenuButton {
 
 // Same layout as Minecraft's title screen
 const buttonX = screenWidth / 2 - 100;
-const buttonY = screenHeight / 4 + 48;
+const buttonY = screenHeight / 4 + 48 + 20; // 20 lower than Minecraft, to leave room for the bigger logo
 const buttons = [
     new MenuButton("Singleplayer", buttonX, buttonY, 200, () => console.log("Singleplayer clicked")),
     new MenuButton("Multiplayer", buttonX, buttonY + 24, 200, () => console.log("Multiplayer clicked")),
@@ -123,9 +123,14 @@ function positionLogo() {
 }
 positionLogo();
 
-// Where Minecraft puts its splash relative to its logo (123 right of center, 39 below the logo's top), scaled with the logo.
-// Made after the logo so it's on top of it.
-new SplashText(SPLASHES[Math.floor(Math.random() * SPLASHES.length)], gameCanvas, screenWidth / 2 + 123 * LOGO_SCALE, LOGO_Y + 39 * LOGO_SCALE);
+// Like Minecraft, the splash sits on the lower right of the logo's big lettering, and is sized to match the logo.
+// SPLASH_X and SPLASH_Y are fractions of the logo's width and height. Made after the logo so it's on top of it.
+const SPLASH_X = 0.965;
+const SPLASH_Y = 0.88;
+const SPLASH_SIZE = 1.25; // Times Minecraft's size
+const logoHeight = LOGO_WIDTH * logoImage.naturalHeight / logoImage.naturalWidth;
+new SplashText(SPLASHES[Math.floor(Math.random() * SPLASHES.length)], gameCanvas,
+    (screenWidth - LOGO_WIDTH) / 2 + LOGO_WIDTH * SPLASH_X, LOGO_Y + logoHeight * SPLASH_Y, {size: SPLASH_SIZE});
 
 // Debug text, shown by pressing "i", naming the panorama so unwanted ones can be found and removed from PANORAMAS
 let showDebugText = false;

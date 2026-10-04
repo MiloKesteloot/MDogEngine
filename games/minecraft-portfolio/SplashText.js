@@ -5,7 +5,10 @@ import PixelFont from "./PixelFont.js";
 // the same way Minecraft draws it, instead of squashing it into the low resolution game canvas.
 class SplashText {
     // anchorX, anchorY - where the bottom middle of the text goes, in game pixels
-    constructor(text, gameCanvas, anchorX, anchorY) {
+    // Settings - size (multiplies Minecraft's size, default 1)
+    constructor(text, gameCanvas, anchorX, anchorY, settings) {
+        settings = settings ?? {};
+        this.size = settings.size ?? 1;
         this.gameCanvas = gameCanvas;
         this.anchorX = anchorX;
         this.anchorY = anchorY;
@@ -36,7 +39,7 @@ class SplashText {
 
         // Same as Minecraft's SplashRenderer: pulses twice a second, and longer text is drawn smaller
         let scale = 1.8 - Math.abs(Math.sin((performance.now() % 1000) / 1000 * Math.PI * 2) * 0.1);
-        scale = scale * 100 / (this.textWidth + 32);
+        scale = scale * 100 / (this.textWidth + 32) * this.size;
 
         // Read right to left: center the text above the anchor, scale it, tilt it, then move it into place
         this.element.style.transform =
