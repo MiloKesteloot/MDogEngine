@@ -43,7 +43,7 @@ const DIRS = {
 
 // Shown in the corner of the title screen, so you can tell which version of the game you're running.
 // Bump it with every change.
-const VERSION = "1.5";
+const VERSION = "1.6";
 
 // ---------- Tuning ----------
 
@@ -2022,7 +2022,7 @@ const game = {
         // above and below. The screen runs from -40 to 288 here.
         drawLogo("SNACK MAN", middle, -22);
         // Bottom left corner of the screen
-        MDog.Draw.textImage("V" + VERSION, 3 - MAZE_X, MDog.Draw.getScreenHeightInArtPixels() - MAZE_Y - 3, COLORS.version, font, {alignY: "bottom"});
+        MDog.Draw.textImage("V" + VERSION, 2 - MAZE_X, MDog.Draw.getScreenHeightInArtPixels() - MAZE_Y - 4, COLORS.version, font, {alignY: "bottom"});
         MDog.Draw.textImage("BY MILO KESTELOOT", middle, 16, COLORS.label, font, {alignX: "center", alignY: "center"});
         this.drawScoreboard(middle, 53);
 
