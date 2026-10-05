@@ -43,7 +43,7 @@ const DIRS = {
 
 // Shown in the corner of the title screen, so you can tell which version of the game you're running.
 // Bump it with every change.
-const VERSION = "1.1";
+const VERSION = "1.5";
 
 // ---------- Tuning ----------
 
@@ -150,6 +150,11 @@ const READY_TICKS = Math.round((START_JINGLE_SECONDS + 0.5) * TICKS_PER_SECOND);
 const MESSAGE_X = 14 * 8;
 const MESSAGE_Y = 17 * 8 + 4;
 
+// The middle of the box in the middle of the maze. Snack Man can't go in there, so nothing covers what's
+// written in it. (Its inside is 48 by 24 pixels: just enough for "NEW BEST!")
+const MIDDLE_BOX_X = 112;
+const MIDDLE_BOX_Y = 116;
+
 const COLORS = {
     background: "#000000",
     pellet: "#ffb9af",
@@ -162,6 +167,7 @@ const COLORS = {
     bonus: "#00ffff", // Pac-Man's ghost-points cyan
     wall: "#2121ff",
     dim: "#5a5a8c",
+    version: "#2d2d46", // the dim color, halfway to black
     loss: "#ff2a2a"
 }
 
@@ -890,6 +896,9 @@ class SnackMan {
 
     // ----- Input -----
 
+    // A turn you press is remembered until he takes it (or you press a different one), like Pac-Man, so you
+    // can press it early and he'll turn at the next place he can. wantTimer is how "fresh" the press is: a
+    // held key, or one pressed in the last moment. Only a fresh press can make him bite himself.
     readInput() {
         const pressed = this.input.pressedDirection();
         if (pressed !== null) {
@@ -898,16 +907,36 @@ class SnackMan {
             this.wantTimer = this.input.bufferTicks();
         }
 
-        if (this.wantDir !== null) {
-            if (this.input.isHeld(this.wantName)) {
-                this.wantTimer = KEY_BUFFER_TICKS;
-            } else {
-                this.wantTimer -= 1;
-                if (this.wantTimer <= 0) {
-                    this.clearInput();
+        // Holding a direction keeps asking for it, even after he's turned that way once
+        if (this.wantDir === null) {
+            for (const name in DIRS) {
+                if (this.input.isHeld(name)) {
+                    this.wantDir = DIRS[name];
+                    this.wantName = name;
                 }
             }
         }
+
+        if (this.wantDir !== null) {
+            if (this.input.isHeld(this.wantName)) {
+                this.wantTimer = KEY_BUFFER_TICKS;
+            } else if (this.wantTimer > 0) {
+                this.wantTimer -= 1;
+            }
+            // Already going that way: nothing left to do (but during READY! keep it, for when he sets off)
+            if (this.started && this.wantDir === this.dir && !this.input.isHeld(this.wantName)) {
+                this.clearInput();
+            }
+        }
+    }
+
+    // Whether the remembered turn can be taken into this tile. An old press never makes him bite himself;
+    // only a fresh one (or a held key) does.
+    canTakeWantedTurn(tile) {
+        if (!this.canEnter(tile)) {
+            return false;
+        }
+        return this.wantTimer > 0 || !this.isBodyBlocking(tile);
     }
 
     // Forget any remembered turn (after the game was paused, keys may have been let go without us seeing)
@@ -949,18 +978,15 @@ class SnackMan {
 
     // Called while standing on a tile center: pick where to go next
     depart() {
-        const options = [];
-        if (this.wantDir !== null) {
-            options.push(this.wantDir);
+        if (this.wantDir !== null && this.canTakeWantedTurn(step(this.body[0], this.wantDir))) {
+            this.setTarget(this.wantDir);
+            this.blockedTimer = 0;
+            return true;
         }
-        options.push(this.dir);
-
-        for (const dir of options) {
-            if (this.canEnter(step(this.body[0], dir))) {
-                this.setTarget(dir);
-                this.blockedTimer = 0;
-                return true;
-            }
+        if (this.canEnter(step(this.body[0], this.dir))) {
+            this.setTarget(this.dir);
+            this.blockedTimer = 0;
+            return true;
         }
 
         this.target = null;
@@ -1025,7 +1051,7 @@ class SnackMan {
             return;
         }
 
-        if (this.canEnter(step(this.body[0], this.wantDir))) {
+        if (this.canTakeWantedTurn(step(this.body[0], this.wantDir))) {
             this.setTarget(this.wantDir);
         }
     }
@@ -1996,7 +2022,7 @@ const game = {
         // above and below. The screen runs from -40 to 288 here.
         drawLogo("SNACK MAN", middle, -22);
         // Bottom left corner of the screen
-        MDog.Draw.textImage("V" + VERSION, 2 - MAZE_X, MDog.Draw.getScreenHeightInArtPixels() - MAZE_Y - 2, COLORS.dim, font, {alignY: "bottom"});
+        MDog.Draw.textImage("V" + VERSION, 3 - MAZE_X, MDog.Draw.getScreenHeightInArtPixels() - MAZE_Y - 3, COLORS.version, font, {alignY: "bottom"});
         MDog.Draw.textImage("BY MILO KESTELOOT", middle, 16, COLORS.label, font, {alignX: "center", alignY: "center"});
         this.drawScoreboard(middle, 53);
 
@@ -2186,19 +2212,23 @@ const game = {
     drawMessage() {
         let text = null;
         let color = COLORS.snack;
+        let x = MESSAGE_X;
+        let y = MESSAGE_Y;
         if (this.isClearing() && this.finalScore !== null) {
             text = "LEVEL CLEAR!";
             color = Math.floor(this.tick / 12) % 2 === 0 ? COLORS.snack : COLORS.text;
         } else if (this.snackMan.dead && this.newBest) {
             text = "NEW BEST!";
             color = Math.floor(this.tick / 12) % 2 === 0 ? COLORS.snack : COLORS.text;
+            x = MIDDLE_BOX_X;
+            y = MIDDLE_BOX_Y;
         } else if (!this.snackMan.started && !this.snackMan.dead) {
             text = this.level > 1 ? "LEVEL " + this.level : "READY!";
         }
         if (text === null) {
             return;
         }
-        MDog.Draw.textImage(text, MESSAGE_X, MESSAGE_Y, color, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
+        MDog.Draw.textImage(text, x, y, color, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
     },
 
     // A button with two bars on it

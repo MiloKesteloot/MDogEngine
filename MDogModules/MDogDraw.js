@@ -167,8 +167,12 @@ class DrawingBoard {
             const viewport = Draw._getViewportSizeInDevicePixels();
             const deviceWidth = pixelSize * this.element.width;
             const deviceHeight = pixelSize * this.element.height;
-            const deviceLeft = Math.max(0, Math.floor((viewport.width - deviceWidth) / 2));
-            const deviceTop = Math.max(0, Math.floor((viewport.height - deviceHeight) / 2));
+            // On phones the visible area can be offset from where position: fixed measures from (the layout
+            // viewport), so center within the visible area. Rounded so the canvas still lands on a whole screen pixel.
+            const visibleLeft = Math.round((window.visualViewport?.offsetLeft ?? 0) * devicePixelRatio);
+            const visibleTop = Math.round((window.visualViewport?.offsetTop ?? 0) * devicePixelRatio);
+            const deviceLeft = visibleLeft + Math.max(0, Math.floor((viewport.width - deviceWidth) / 2));
+            const deviceTop = visibleTop + Math.max(0, Math.floor((viewport.height - deviceHeight) / 2));
 
             this.element.style.position = "fixed";
             this.element.style.left = deviceLeft / devicePixelRatio + "px";
@@ -197,6 +201,7 @@ class Draw extends Module {
         window.addEventListener('resize', function() {mainDrawingBoard._calculateSize(draw);}); // TODO adding a listener like this feels super wrong, should probably fix somehow // TODO in the calculation I should probably be able to calculate it manually with calc() so I don't have to keep recalculating it in js.
         // Phone browsers showing or hiding their address bar doesn't always fire a window resize
         window.visualViewport?.addEventListener('resize', function() {mainDrawingBoard._calculateSize(draw);});
+        window.visualViewport?.addEventListener('scroll', function() {mainDrawingBoard._calculateSize(draw);}); // offsetTop changed
         this.mainDrawingBoard.ctx.fillStyle = "#000000";
         this.mainDrawingBoard.ctx.fillRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
         document.body.appendChild(this.mainDrawingBoard.element);
