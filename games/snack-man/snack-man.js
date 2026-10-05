@@ -41,6 +41,10 @@ const DIRS = {
     right: {x: 1, y: 0}
 }
 
+// Shown in the corner of the title screen, so you can tell which version of the game you're running.
+// Bump it with every change.
+const VERSION = "1.1";
+
 // ---------- Tuning ----------
 
 const TICKS_PER_SECOND = 160; // MDog runs the active function at a fixed 160 ticks per second
@@ -1515,7 +1519,7 @@ const game = {
         this.sound.setBackground(null);
         const rank = this.scoreboard.entries.filter(entry => entry.score >= score).length + 1;
         this.entry = {mode: "name", score: score, rank: rank, message: null, takenName: null, existing: null};
-        this.nameInput.open(myName ?? "");
+        this.nameInput.open(myName ?? "", !this.controls.isTouch());
     },
 
     finishEntry() {
@@ -1572,7 +1576,7 @@ const game = {
                 entry.mode = "taken";
                 entry.takenName = result.name;
                 entry.existing = this.scoreboard.find(result.name) ?? {rank: null, score: result.score};
-                this.nameInput.open(result.name);
+                this.nameInput.open(result.name, !this.controls.isTouch());
             }
         } catch (e) {
             console.error(e);
@@ -1581,6 +1585,30 @@ const game = {
                 entry.takenName = name;
             }
         }
+    },
+
+    // Where the name field is drawn (in maze pixels)
+    nameFieldArea() {
+        const box = this.entryLayout();
+        return {x: MAZE_WIDTH / 2 - 60, y: box.y + 82 - 8, width: 120, height: 17};
+    },
+
+    // On touch screens, lays the invisible text box over the name field, so tapping the field opens the keyboard
+    placeNameInput() {
+        const canvas = document.querySelector("canvas");
+        if (canvas === null) {
+            return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const scale = rect.width / MDog.Draw.getScreenWidthInArtPixels();
+        const field = this.nameFieldArea();
+        const reach = 6; // a little bigger than the field, since fingers are big
+        this.nameInput.placeOver(
+            rect.left + (MAZE_X + field.x - reach) * scale,
+            rect.top + (MAZE_Y + field.y - reach) * scale,
+            (field.width + reach * 2) * scale,
+            (field.height + reach * 2) * scale
+        );
     },
 
     // Buttons used on touch screens in the name box (in maze pixels)
@@ -1612,7 +1640,9 @@ const game = {
         const enter = this.controls.pressed("enter");
         const cancel = this.controls.pressed("cancel");
 
-        if (!this.controls.isTouch()) {
+        if (this.controls.isTouch()) {
+            this.placeNameInput();
+        } else {
             this.nameInput.keepFocus();
         }
 
@@ -1965,6 +1995,8 @@ const game = {
         // Three groups (title, scores, what to do next) with even space between them, and even margins
         // above and below. The screen runs from -40 to 288 here.
         drawLogo("SNACK MAN", middle, -22);
+        // Bottom left corner of the screen
+        MDog.Draw.textImage("V" + VERSION, 2 - MAZE_X, MDog.Draw.getScreenHeightInArtPixels() - MAZE_Y - 2, COLORS.dim, font, {alignY: "bottom"});
         MDog.Draw.textImage("BY MILO KESTELOOT", middle, 16, COLORS.label, font, {alignX: "center", alignY: "center"});
         this.drawScoreboard(middle, 53);
 
@@ -2120,7 +2152,7 @@ const game = {
         if (name !== "") {
             MDog.Draw.textImage(name, left, centerY, COLORS.snack, font, {size: 2, alignY: "center"});
         }
-        if (cursorOn) {
+        if (cursorOn && (this.nameInput.hasFocus() || !this.controls.isTouch())) {
             MDog.Draw.rectangleFill(left + textWidth + 2, centerY - 4, 2, 10, COLORS.snack);
         }
     },

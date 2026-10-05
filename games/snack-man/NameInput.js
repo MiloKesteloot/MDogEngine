@@ -8,8 +8,10 @@
 import {cleanName, MAX_NAME_LENGTH} from "./Scoreboard.js";
 
 // An invisible text box on the page that the game draws in its own pixel font. A real text box is needed
-// so phones open their keyboard, and phones only do that when it's focused during a tap, so while it's
-// open, any tap on the screen focuses it.
+// so phones open their keyboard. Phones only open it when the player actually taps the text box (focusing
+// it from code doesn't count, and tapping the game and then focusing it gets undone when the phone sends
+// the tap on to the game as a click). So on touch screens, the game lays the invisible box right over the
+// name field it draws, and the player's tap lands on the real thing.
 class NameInput {
     constructor() {
         this.isOpen = false;
@@ -25,10 +27,12 @@ class NameInput {
         element.spellcheck = false;
         element.setAttribute("autocapitalize", "characters");
         element.setAttribute("enterkeyhint", "done");
-        // Invisible, but still focusable. 16px text stops iPhones from zooming in when it's focused.
+        // Invisible, but still there to tap and type into. (Not fully transparent, since some phones won't
+        // focus a box that is.) 16px text stops iPhones from zooming in when it's focused.
         Object.assign(element.style, {
-            position: "fixed", left: "0", top: "0", width: "1px", height: "1px",
-            opacity: "0", border: "0", padding: "0", fontSize: "16px", display: "none"
+            position: "fixed", left: "0", top: "0", width: "1px", height: "1px", zIndex: "10",
+            opacity: "0.01", color: "transparent", caretColor: "transparent", background: "transparent",
+            border: "0", outline: "none", padding: "0", fontSize: "16px", display: "none"
         });
         document.body.appendChild(element);
         this.element = element;
@@ -54,20 +58,24 @@ class NameInput {
                 this.submitted = true;
             }
         });
-
-        window.addEventListener("touchend", () => {
-            if (this.isOpen) {
-                element.focus();
-            }
-        });
     }
 
-    open(name) {
+    // focus: start typing straight away (computers). On touch screens, leave it for the player to tap.
+    open(name, focus) {
         this.isOpen = true;
         this.submitted = false;
         this.element.value = cleanName(name ?? "");
         this.element.style.display = "block";
-        this.element.focus(); // works straight away on computers; phones wait for a tap
+        if (focus) {
+            this.element.focus();
+        }
+    }
+
+    // Puts the invisible box over part of the page (in CSS pixels), so tapping there taps the box
+    placeOver(left, top, width, height) {
+        Object.assign(this.element.style, {
+            left: left + "px", top: top + "px", width: width + "px", height: height + "px"
+        });
     }
 
     close() {
