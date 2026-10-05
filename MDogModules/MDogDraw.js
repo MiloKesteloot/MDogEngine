@@ -195,6 +195,8 @@ class Draw extends Module {
         const mainDrawingBoard = this.mainDrawingBoard;
         const draw = this;
         window.addEventListener('resize', function() {mainDrawingBoard._calculateSize(draw);}); // TODO adding a listener like this feels super wrong, should probably fix somehow // TODO in the calculation I should probably be able to calculate it manually with calc() so I don't have to keep recalculating it in js.
+        // Phone browsers showing or hiding their address bar doesn't always fire a window resize
+        window.visualViewport?.addEventListener('resize', function() {mainDrawingBoard._calculateSize(draw);});
         this.mainDrawingBoard.ctx.fillStyle = "#000000";
         this.mainDrawingBoard.ctx.fillRect(0, 0, this.screenWidthInArtPixels, this.screenHeightInArtPixels);
         document.body.appendChild(this.mainDrawingBoard.element);

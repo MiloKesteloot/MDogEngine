@@ -44,8 +44,15 @@ function urlSetup() {
     document.body.style.display = "flex";
     document.body.style.justifyContent = "center";
     document.body.style.alignItems = "center";
+    // On phones 100vh is the height with the browser's address bar hidden, so while the bar is showing the
+    // page is taller than the screen and can be scrolled. 100dvh is the height that's actually visible.
     document.body.style.height = "100vh";
+    document.body.style.height = "100dvh"; // ignored by older browsers, which keep 100vh
     document.body.style.margin = "0px";
+    for (const element of [document.documentElement, document.body]) {
+        element.style.overflow = "hidden";
+        element.style.overscrollBehavior = "none"; // no rubber band bounce or pull to refresh
+    }
 }
 
 urlSetup();
