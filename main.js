@@ -51,8 +51,14 @@ function urlSetup() {
     document.body.style.margin = "0px";
     for (const element of [document.documentElement, document.body]) {
         element.style.overflow = "hidden";
-        element.style.overscrollBehavior = "none"; // no rubber band bounce or pull to refresh
+        element.style.overscrollBehavior = "none"; // no rubber band bounce or pull to refresh (not on iPhones)
+        // iPhones ignore the two lines above, but this tells the browser not to scroll, pull to refresh or zoom
+        // when a finger drags anywhere on the page. Taps still work.
+        element.style.touchAction = "none";
     }
+    // Backup for browsers that don't follow touch-action. iPhones only stop a drag if every touchmove in it is
+    // stopped, so this listens on the whole document rather than leaving it to each game.
+    document.addEventListener("touchmove", e => e.preventDefault(), {passive: false});
 }
 
 urlSetup();
