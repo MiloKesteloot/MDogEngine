@@ -1377,15 +1377,15 @@ const HINTS = {
         start: "TAP TO START",
         hud: "", // the pause button speaks for itself
         menu: "TAP AN OPTION",
-        help: "TAP HERE FOR HOW TO PLAY",
+        help: "HOW TO PLAY", // the button's label
         back: "TAP TO GO BACK",
         save: "", // buttons instead
         retry: ""
     }
 };
 
-// On touch screens, the "how to play" hint on the title screen is a button (in maze pixels)
-const HELP_BUTTON = {x: 32, y: 259, width: 160, height: 17};
+// On touch screens, "how to play" on the title screen is a button (in maze pixels)
+const HELP_BUTTON = {x: MAZE_WIDTH / 2 - 45, y: 256, width: 90, height: 17};
 
 // "1ST", "2ND", "3RD", "4TH"...
 function ordinal(n) {
@@ -1395,7 +1395,31 @@ function ordinal(n) {
 }
 
 // The pause button shown at the top of the screen on touch screens (in maze pixels)
-const PAUSE_BUTTON = {x: MAZE_WIDTH / 2 - 8, y: -31, size: 15};
+const PAUSE_BUTTON = {x: MAZE_WIDTH / 2 - 8, y: -32, size: 16};
+const BUTTON_COLORS = {
+    fill: "#0d0d55",
+    border: "#2121ff",
+    highlight: "#4a4aff", // the lit top edge
+    shadow: "#05052a" // the band underneath, so it looks raised
+};
+
+// An arcade-style button: dark blue, a rounded blue border, a lit top edge and a shadow underneath.
+// label is optional, and is drawn in the middle.
+function drawButton(x, y, width, height, label) {
+    const c = BUTTON_COLORS;
+    MDog.Draw.rectangleFill(x + 1, y + height, width - 2, 2, c.shadow);
+    MDog.Draw.rectangleFill(x + 1, y + 1, width - 2, height - 2, c.fill);
+    // Border, leaving the corner pixels out so the corners look rounded
+    MDog.Draw.rectangleFill(x + 1, y, width - 2, 1, c.border);
+    MDog.Draw.rectangleFill(x + 1, y + height - 1, width - 2, 1, c.border);
+    MDog.Draw.rectangleFill(x, y + 1, 1, height - 2, c.border);
+    MDog.Draw.rectangleFill(x + width - 1, y + 1, 1, height - 2, c.border);
+    MDog.Draw.rectangleFill(x + 2, y + 1, width - 4, 1, c.highlight);
+    if (label !== undefined && label !== "") {
+        MDog.Draw.textImage(label, x + Math.floor(width / 2), y + Math.floor(height / 2), COLORS.text, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
+    }
+}
+
 const PAUSE_BUTTON_REACH = 12; // taps this far outside the button still count, since fingers are big
 
 // Phone vibration patterns, in milliseconds (vibrate, pause, vibrate, ...)
@@ -1562,7 +1586,7 @@ const game = {
     // Buttons used on touch screens in the name box (in maze pixels)
     entryButtons() {
         const box = this.entryLayout();
-        const y = box.y + box.height - 22;
+        const y = box.y + box.height - 25;
         const labels = {name: ["SAVE", "SKIP"], taken: ["OK", "SKIP"], error: ["RETRY", "SKIP"]}[this.entry.mode];
         if (labels === undefined) {
             return [];
@@ -1570,7 +1594,7 @@ const game = {
         const width = 70;
         const gap = 12;
         const left = Math.floor(MAZE_WIDTH / 2 - width - gap / 2);
-        return labels.map((label, i) => ({label: label, x: left + i * (width + gap), y: y, width: width, height: 15}));
+        return labels.map((label, i) => ({label: label, x: left + i * (width + gap), y: y, width: width, height: 17}));
     },
 
     tappedButton() {
@@ -1947,12 +1971,15 @@ const game = {
         MDog.Draw.textImage("YOUR BEST: " + this.best, middle, 211, COLORS.label, font, {alignX: "center", alignY: "center"});
 
         const hints = this.hints();
-        MDog.Draw.textImage(hints.help, middle, 268, COLORS.dim, font, {alignX: "center", alignY: "center"});
-        if (this.controls.isTouch()) {
+        const touch = this.controls.isTouch();
+        if (touch) {
             this.drawHelpButton();
+        } else {
+            MDog.Draw.textImage(hints.help, middle, 268, COLORS.dim, font, {alignX: "center", alignY: "center"});
         }
+        // On touch screens the start message moves up a little, to leave room for the button under it
         if (Math.floor(this.tick / 40) % 2 === 0) {
-            MDog.Draw.textImage(hints.start, middle, 252, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
+            MDog.Draw.textImage(hints.start, middle, touch ? 238 : 252, COLORS.snack, font, {size: 2, alignX: "center", alignY: "center"});
         }
     },
 
@@ -1995,8 +2022,7 @@ const game = {
 
     drawHelpButton() {
         const b = HELP_BUTTON;
-        MDog.Draw.rectangle(b.x, b.y, b.width, b.height, COLORS.wall);
-        MDog.Draw.rectangle(b.x + 1, b.y + 1, b.width - 2, b.height - 2, COLORS.wall);
+        drawButton(b.x, b.y, b.width, b.height, this.hints().help);
     },
 
     drawHowTo() {
@@ -2068,9 +2094,7 @@ const game = {
 
         if (this.controls.isTouch()) {
             for (const button of this.entryButtons()) {
-                MDog.Draw.rectangle(button.x, button.y, button.width, button.height, COLORS.wall);
-                MDog.Draw.rectangle(button.x + 1, button.y + 1, button.width - 2, button.height - 2, COLORS.wall);
-                MDog.Draw.textImage(button.label, button.x + Math.floor(button.width / 2), button.y + 8, COLORS.text, font, {alignX: "center", alignY: "center"});
+                drawButton(button.x, button.y, button.width, button.height, button.label);
             }
         }
     },
@@ -2145,13 +2169,12 @@ const game = {
         MDog.Draw.textImage(text, MESSAGE_X, MESSAGE_Y, color, "fonts/marsfont.png", {alignX: "center", alignY: "center"});
     },
 
-    // Two bars in a box, like the maze walls
+    // A button with two bars on it
     drawPauseButton() {
         const b = PAUSE_BUTTON;
-        MDog.Draw.rectangle(b.x, b.y, b.size, b.size, COLORS.wall);
-        MDog.Draw.rectangle(b.x + 1, b.y + 1, b.size - 2, b.size - 2, COLORS.wall);
-        MDog.Draw.rectangleFill(b.x + 4, b.y + 4, 2, b.size - 8, COLORS.text);
-        MDog.Draw.rectangleFill(b.x + b.size - 6, b.y + 4, 2, b.size - 8, COLORS.text);
+        drawButton(b.x, b.y, b.size, b.size);
+        MDog.Draw.rectangleFill(b.x + 5, b.y + 4, 2, b.size - 8, COLORS.text);
+        MDog.Draw.rectangleFill(b.x + b.size - 7, b.y + 4, 2, b.size - 8, COLORS.text);
     },
 
     drawPauseMenu() {

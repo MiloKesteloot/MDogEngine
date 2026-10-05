@@ -337,7 +337,10 @@ class Draw extends Module {
     }
 
     // Set color of screen around game
+    // Set on <html> too: iPhone screens are often a fraction of a CSS pixel bigger than the page, and Safari
+    // can leave a white sliver at the right and bottom edges when only <body> has a color.
     setBackgroundColor(color) {
+        document.documentElement.style.backgroundColor = color;
         document.body.style.backgroundColor = color;
     }
 
