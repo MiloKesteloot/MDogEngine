@@ -19,11 +19,19 @@ class Keyboard {
         this.clickedKeys = [];
         this.typedKeys = [];
 
+        // The name each held key had when it was pressed, by physical key. Holding shift can change a key's name
+        // (like "1" to "!"), so this is used on keyup to remove the name it was pressed with. -CAI
+        this.keysByCode = {};
+
         window.addEventListener("keydown", e => {
 
             let key = e.key;
             if (key.length === 1) {
                 key = key.toLowerCase();
+            }
+
+            if (e.code) {
+                this.keysByCode[e.code] = key;
             }
 
             const downIndex = this.downKeys.indexOf(key);
@@ -40,18 +48,23 @@ class Keyboard {
             }
         });
 
-        // Bug: if shift is pressed or released while a key is held, e.key can be different on keyup than it was on keydown
-        // (like "1" then "!"), so the original key is never removed and stays down. Tracking e.code alongside it would fix this. -CAI
         window.addEventListener("keyup", e => {
             let key = e.key;
             if (key.length === 1) {
                 key = key.toLowerCase();
             }
 
-            const index = this.downKeys.indexOf(key);
-            if (index > -1) {
-                this.downKeys.splice(index, 1);
-            }
+            // Remove the name the key was pressed with, and the name it has now, in case they're different -CAI
+            const pressedKey = this.keysByCode[e.code];
+            delete this.keysByCode[e.code];
+            this.downKeys = this.downKeys.filter(k => k !== key && k !== pressedKey);
+        });
+
+        // Keys let go of while the game isn't focused (like after clicking somewhere else) never send a keyup,
+        // so everything counts as let go when focus leaves -CAI
+        window.addEventListener("blur", () => {
+            this.downKeys = [];
+            this.keysByCode = {};
         });
     }
 
@@ -79,8 +92,7 @@ class Mouse {
         this.newStyle = "default";
         this.element = Draw.mainDrawingBoard.element;
 
-        this.element.addEventListener("mousemove", e => {
-
+        const updatePosition = e => {
             const canvas =  Draw.mainDrawingBoard.element; // TODO this might be a little scuffed. I'm not sure I should access mainDrawingBoard like this.
             const rect = canvas.getBoundingClientRect();
 
@@ -92,14 +104,22 @@ class Mouse {
 
             this.x = pixelX;
             this.y = pixelY;
-        });
+        };
+
+        this.element.addEventListener("mousemove", updatePosition);
         this.element.addEventListener("mousedown", e => {
+            // Taps on phones don't always move the mouse first, so the position is updated here too -CAI
+            updatePosition(e);
             this.down[e.button] = true;
             this.clicked[e.button] = true;
         });
-        // Bug: mouseup is only listened for on the canvas, so if a button is released outside the game it stays "down". -CAI
-        this.element.addEventListener("mouseup", e => {
+        // Listened for on the whole window, so letting go of a button outside of the game still counts -CAI
+        window.addEventListener("mouseup", e => {
             this.down[e.button] = false;
+        });
+        // Buttons let go of while the game isn't focused never send a mouseup -CAI
+        window.addEventListener("blur", () => {
+            this.down = [false, false, false];
         });
         this.element.addEventListener("mouseout", e => {
             this.onScreen = false;
