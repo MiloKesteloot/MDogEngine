@@ -50,9 +50,8 @@ class Vector3 {
         return this;
     }
 
-    // Bug: the check below uses x_or_vector instead of x_or_vector3, so set() always throws a ReferenceError. -CAI
     set(x_or_vector3, y, z) {
-        if (x_or_vector instanceof Vector3) {
+        if (x_or_vector3 instanceof Vector3) {
             this.x = x_or_vector3.x;
             this.y = x_or_vector3.y;
             this.z = x_or_vector3.z;
@@ -70,8 +69,7 @@ class Vector3 {
     }
 
     // Add two values or a vector to this vector.
-    // Bug: z is missing from the parameters, so add(x, y, z) with numbers throws a ReferenceError. Adding a Vector3 works. -CAI
-    add(x_or_vector3, y) {
+    add(x_or_vector3, y, z) {
         if (x_or_vector3 instanceof Vector3) {
             this.x += x_or_vector3.x;
             this.y += x_or_vector3.y;

@@ -113,13 +113,14 @@ class RectangleGridInteractable extends Interactable {
         return new Vector(sx, sy);
     }
 
-    // Bug: RectangleGridInteractable doesn't have a getPoint() (only VectorGridInteractable does), so drawing one throws a TypeError. -CAI
-    _draw() {
-        for (let i = 0; i < this.width; i++) {
-            for (let j = 0; j < this.height; j++) {
-                const p00 = this.getPoint(i, j);
-
-                UI.Draw.point(p00.x, p00.y, "#ff0000");
+    // Puts a red dot on every grid corner on the screen. The grid goes on forever, so only the part on screen is drawn. -CAI
+    _draw(Draw) {
+        const first = this.screenToTile(0, 0);
+        const last = this.screenToTile(Draw.getScreenWidthInArtPixels(), Draw.getScreenHeightInArtPixels());
+        for (let i = first.x; i <= last.x + 1; i++) {
+            for (let j = first.y; j <= last.y + 1; j++) {
+                const corner = this.tileToScreen(i, j);
+                Draw.point(corner.x, corner.y, "#ff0000");
             }
         }
     }
@@ -133,16 +134,12 @@ class VectorGridInteractable extends RectangleGridInteractable {
         this.yv = new Vector(yx, yy);
     }
 
+    // Puts a red dot on every grid point -CAI
     _draw(Draw) {
         for (let i = 0; i < this.width; i++) {
             for (let j = 0; j < this.height; j++) {
                 const p00 = this.getPoint(i, j);
-                const p10 = this.getPoint(i+1, j);
-                const p01 = this.getPoint(i, j+1);
-
-                // Bug?: this draws a line from p00 to p00, which is just a dot, and p10/p01 are never used. It might have been
-                // meant to draw grid lines to p10 and p01. Also, the inherited screenToTile/tileToScreen ignore xv and yv. -CAI
-                Draw.line(p00.x, p00.y, p00.x, p00.y, "#ff0000");
+                Draw.point(p00.x, p00.y, "#ff0000");
             }
         }
     }
@@ -155,7 +152,21 @@ class VectorGridInteractable extends RectangleGridInteractable {
         return vec.add(xv).add(yv);
     }
 
-    // TODO do screen to point function
+    // The same as getPoint(). This replaces RectangleGridInteractable's version, which doesn't know about the grid's directions. -CAI
+    tileToScreen(x, y) {
+        return this.getPoint(x, y);
+    }
+
+    // Screen space to grid space, rounded down to the grid point the cell starts at. This undoes getPoint() by solving
+    // x * xv + y * yv = (screen position - grid position) for x and y. -CAI
+    screenToTile(x, y) {
+        const dx = x - this.x;
+        const dy = y - this.y;
+        const determinant = this.xv.x * this.yv.y - this.yv.x * this.xv.y;
+        const tx = (dx * this.yv.y - dy * this.yv.x) / determinant;
+        const ty = (dy * this.xv.x - dx * this.xv.y) / determinant;
+        return new Vector(Math.floor(tx), Math.floor(ty));
+    }
 }
 
 class TilemapInteractable extends Interactable {
@@ -289,9 +300,9 @@ class UI extends Module {
         UI.Draw = Draw;
         UI.Input = Input;
 
-        // Bug: TextInteractable isn't added here, so games can't make one through MDog.UI. -CAI
         this.Page = Page;
         this.Interactable = Interactable;
+        this.TextInteractable = TextInteractable;
         this.RectangleGridInteractable = RectangleGridInteractable;
         this.VectorGridInteractable = VectorGridInteractable;
         this.TilemapInteractable = TilemapInteractable;

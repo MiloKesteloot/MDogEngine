@@ -151,12 +151,15 @@ class Mouse {
         return this.y;
     }
 
+    // These request the style instead of setting it directly, since update() puts the requested style back every tick -CAI
     show() {
-        this.style("auto");
+        this.requestStyle("auto");
+        this.style();
     }
 
     hide() {
-        this.style("none");
+        this.requestStyle("none");
+        this.style();
     }
 
     requestStyle(style) {
@@ -167,8 +170,6 @@ class Mouse {
         return this.newStyle;
     }
 
-    // Bug: show() and hide() pass a style in, but style() ignores it and uses newStyle, so they don't do anything.
-    // update() also sets the cursor back to newStyle every tick. -CAI
     style() {
         this.element.style.cursor = this.getNewStyle();
     }
@@ -177,7 +178,7 @@ class Mouse {
         for (let i = 0; i < this.clicked.length; i++) {
             this.clicked[i] = false;
         }
-        this.style(this.newStyle);
+        this.style();
     }
 
     // TODO add ability to enable right click menu

@@ -16,9 +16,8 @@ class Animation {
                     largestFrame = frames[i];
                 }
             }
-            // Bug: largestFrame is the biggest frame index, so the frame count is one too low. MultipleFileAnimation._loadFrames also
-            // looks frames up through this.order, so with a custom order like [0, 1, 2, 1] only order[0] and order[1] get preloaded. -CAI
-            this.frames = largestFrame;
+            // Frames start at 0, so there's one more frame than the biggest frame number -CAI
+            this.frames = largestFrame + 1;
             this.order = frames;
         } else {
             this.frames = frames;
@@ -61,8 +60,7 @@ class MultipleFileAnimation extends Animation {
         const flipY = settings.flipY ?? false;
 
         const scale = settings.scale ?? 1;
-        // Bug: settings.layer isn't passed on, so animations always draw to the active layer (AnimationParticle's layer setting does nothing). Same in SpriteSheetAnimation._draw. -CAI
-        Draw.image(this.getImage(), x, y, {flipX: flipX, flipY: flipY, scale: scale});
+        Draw.image(this.getImage(), x, y, {flipX: flipX, flipY: flipY, scale: scale, layer: settings.layer});
         if (update) {
             this.time += 1;
         }
@@ -74,8 +72,10 @@ class MultipleFileAnimation extends Animation {
     }
 
     _loadFrames(Draw) {
+        // Loads every frame file directly, instead of going through the frame order, so frames that show up
+        // more than once (or late) in a custom order still get loaded -CAI
         for (let i = 0; i < this.frames; i++) {
-            Draw.image(this.getImage(i), -1000, -1000);
+            Draw.image(this.fileName.replace("?", i + 1), -1000, -1000);
         }
     }
 }
@@ -94,13 +94,13 @@ class SpriteSheetAnimation extends Animation {
         const flipX = settings.flipX ?? false;
         const flipY = settings.flipY ?? false;
         const scale = settings.scale ?? 1;
-        // Bug: settings.layer isn't passed on, so animations always draw to the active layer. -CAI
         Draw.image(this.fileName, x, y,
             {
                 flipX: flipX, flipY: flipY,
                 width: this.spriteWidth,
                 offsetX: this.spriteWidth * (this.getFrame()),
-                scale: scale
+                scale: scale,
+                layer: settings.layer
             }
         );
         if (update) {
@@ -380,11 +380,11 @@ class Draw extends Module {
         }
         const drawingBoard = this._getDrawingBoard(layer);
 
+        // The layer is erased first so a color like "transparent" clears it back to empty. Both use -offset,
+        // since the layer's drawing is already shifted by its offset (like the clearRect above). -CAI
+        drawingBoard.ctx.clearRect(-drawingBoard.offset.getX(), -drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
         drawingBoard.ctx.fillStyle = color;
-        // Bug: the layer's context is already translated by its offset, so this should be -offset (like the clearRect above).
-        // With a translated layer, part of the layer doesn't get cleared. Also, filling with "transparent" doesn't erase anything,
-        // so there's no way to clear a single layer back to empty. A clearRect before the fillRect would fix that. -CAI
-        drawingBoard.ctx.fillRect(drawingBoard.offset.getX(), drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
+        drawingBoard.ctx.fillRect(-drawingBoard.offset.getX(), -drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
 
         // TODO test running clear with a layer specified
 
@@ -569,9 +569,8 @@ class Draw extends Module {
         const lineHeight = settings.lineHeight ?? 1;
         const letterSpacing = settings.letterSpacing ?? 1;
 
-        // Bug: the cache key doesn't include alignX, lineHeight, or letterSpacing, so drawing the same text with different
-        // values for those reuses whichever version was drawn first. -CAI
-        const pathName = "generated/" + text + color + font;
+        // Everything that changes how the saved text looks is part of its name, so different versions are saved separately -CAI
+        const pathName = "generated/" + text + color + font + "|" + alignX + "|" + lineHeight + "|" + letterSpacing;
 
         let textCanvas = this.imageCache.get(pathName);
 
@@ -717,17 +716,16 @@ class Draw extends Module {
 
         drawingBoard.ctx.save();
 
-        // Bug: the shifts use width/height, but the drawn size is width*scaleX and height*scaleY, so flipped images with a
-        // scale other than 1 are drawn in the wrong place. -CAI
+        // The shifts use the drawn size (with the scale), so scaled images flip in place -CAI
         let xShift = 0;
         if (flipX) {
             drawingBoard.ctx.scale(-1, 1);
-            xShift = -x*2 - width;
+            xShift = -x*2 - width * scaleX;
         }
         let yShift = 0;
         if (flipY) {
             drawingBoard.ctx.scale(1, -1);
-            yShift = -y*2 - height;
+            yShift = -y*2 - height * scaleY;
         }
 
         if (tint === undefined) {
