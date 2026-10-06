@@ -28,7 +28,7 @@ function gameTick() {
     const z = Math.sqrt(inSqrt);
 
     const rotVec = anchToMouse.clone()
-    rotVec.rotate(-90);
+    rotVec.rotate(90);
     rotVec.setLength(z);
 
     const finalVec = anch.clone().add(halfAnchToMouse).add(rotVec);

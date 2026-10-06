@@ -98,7 +98,8 @@ class Vector {
             //this.multiply(length / this.length())
     }
 
-    // Bug: rotate() and getAngle() go opposite directions. rotate(90) on (1, 0) gives (0, -1), whose getAngle() is -90, not 90. -CAI
+    // Positive angles turn clockwise on screen (since y goes down), the same direction getAngle() counts in.
+    // So rotate(90) on (1, 0) gives (0, 1), whose getAngle() is 90. -CAI
     rotate(angleDegrees) {
         // Convert angle from degrees to radians
         const angleRadians = angleDegrees * (Math.PI / 180);
@@ -107,8 +108,8 @@ class Vector {
         const y = this.y;
 
         // Calculate the rotated vector components
-        this.x = x * Math.cos(angleRadians) + y * Math.sin(angleRadians);
-        this.y = x * -Math.sin(angleRadians) + y * Math.cos(angleRadians);
+        this.x = x * Math.cos(angleRadians) - y * Math.sin(angleRadians);
+        this.y = x * Math.sin(angleRadians) + y * Math.cos(angleRadians);
 
         // Return the rotated vector
         return this;
