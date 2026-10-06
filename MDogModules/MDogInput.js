@@ -40,6 +40,8 @@ class Keyboard {
             }
         });
 
+        // Bug: if shift is pressed or released while a key is held, e.key can be different on keyup than it was on keydown
+        // (like "1" then "!"), so the original key is never removed and stays down. Tracking e.code alongside it would fix this. -CAI
         window.addEventListener("keyup", e => {
             let key = e.key;
             if (key.length === 1) {

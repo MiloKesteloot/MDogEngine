@@ -382,7 +382,8 @@ class Draw extends Module {
 
         drawingBoard.ctx.fillStyle = color;
         // Bug: the layer's context is already translated by its offset, so this should be -offset (like the clearRect above).
-        // With a translated layer, part of the layer doesn't get cleared. -CAI
+        // With a translated layer, part of the layer doesn't get cleared. Also, filling with "transparent" doesn't erase anything,
+        // so there's no way to clear a single layer back to empty. A clearRect before the fillRect would fix that. -CAI
         drawingBoard.ctx.fillRect(drawingBoard.offset.getX(), drawingBoard.offset.getY(), this.screenWidthInArtPixels, this.screenHeightInArtPixels);
 
         // TODO test running clear with a layer specified
