@@ -42,6 +42,20 @@ class ThreeDeeScene {
         this.objects.push(object);
     }
 
+    // Takes an object out of the scene, so it isn't drawn anymore. Returns true if the object was in the scene. -CAI
+    removeObject(object) {
+        const index = this.objects.indexOf(object);
+        if (index === -1) {
+            return false;
+        }
+        this.objects.splice(index, 1);
+        // So it can be added to a different scene later -CAI
+        if (object.scene === this) {
+            object.scene = null;
+        }
+        return true;
+    }
+
     threeDeeToTwoDee(Draw, vector3_or_x, y, z) {
         if (vector3_or_x instanceof Vector3) {
             return this.threeDeeToTwoDeeVector3(Draw, vector3_or_x);
