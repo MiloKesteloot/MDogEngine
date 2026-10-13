@@ -6128,8 +6128,8 @@ function drawLightStrips(lights, dark, dim) {
 function drawTitle() {
     MDog.Draw.rectangleFill(0, 26, SCREEN_WIDTH, 70, "rgba(10, 16, 10, 0.55)");
     drawText("KNIGHT KNIGHT", 48, "#ffd84a", 3);
-    drawText("BY MILO KESTELOOT AND TRENT SCHROER", 74, "#ffffff", 1);
-    drawText("ART BY JAMES MILESTONE", 86, "#ffffff", 1);
+    drawText("BY MILO KESTELOOT, TRENT SCHROER,", 74, "#ffffff", 1);
+    drawText("AND JAMES MILESTONE", 86, "#ffffff", 1);
     if (Math.floor(liveTicks / 50) % 2 === 0) {
         drawText("PRESS SPACE OR ENTER TO START", 122, "#ffffff", 1);
     }
