@@ -1,7 +1,6 @@
-// Match settings, changed from the pause menu and remembered in the browser.
+// Match settings, changed from the title screen's settings menu and remembered in the browser.
 
 const STORAGE_KEY = "knight-knight-settings";
-const OLD_STORAGE_KEY = "sir-james-settings"; // what the game used to be called
 
 export const ROUNDS_CHOICES = [3, 5, 7, 10];
 export const BOULDER_CHOICES = ["OFF", "FEW", "NORMAL", "LOTS"];
@@ -27,7 +26,7 @@ class Settings {
     constructor() {
         this.values = JSON.parse(JSON.stringify(DEFAULTS));
         try {
-            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(OLD_STORAGE_KEY) ?? "{}");
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
             Object.assign(this.values, saved);
         } catch (e) {
             // Blocked or broken storage just means the defaults
@@ -51,6 +50,12 @@ class Settings {
     cycle(key, choices, direction) {
         const index = choices.indexOf(this.values[key]);
         this.set(key, choices[(index + direction + choices.length) % choices.length]);
+    }
+
+    // Everything back how it started (including every power-up on)
+    reset() {
+        this.values = JSON.parse(JSON.stringify(DEFAULTS));
+        this.save();
     }
 
     isPowerupOn(type) {

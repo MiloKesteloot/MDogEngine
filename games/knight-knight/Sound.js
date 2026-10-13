@@ -2,7 +2,6 @@
 // Browsers only allow sound after the player presses something, so nothing plays until the first key.
 
 const MUTED_KEY = "knight-knight-muted";
-const OLD_MUTED_KEY = "sir-james-muted"; // what the game used to be called
 const VOLUME = 0.25;
 const DUCKED = 0.25; // how loud it is while paused
 
@@ -15,7 +14,7 @@ class Sound {
         this.muted = false;
         this.ducked = false;
         try {
-            this.muted = (localStorage.getItem(MUTED_KEY) ?? localStorage.getItem(OLD_MUTED_KEY)) === "true";
+            this.muted = localStorage.getItem(MUTED_KEY) === "true";
         } catch (e) {
             // Storage can be blocked, sound just starts on
         }
@@ -149,7 +148,7 @@ class Sound {
             filter.type = "bandpass";
             filter.frequency.value = 2500;
             filter.Q.value = 0.4;
-            gain.gain.setTargetAtTime(0.18, now, 0.5);
+            gain.gain.setTargetAtTime(0.1, now, 0.5);
         } else {
             // Wind howls up and down: a slow wobble on the filter
             filter.type = "lowpass";
@@ -162,7 +161,7 @@ class Sound {
             wobble.connect(wobbleSize).connect(filter.frequency);
             wobble.start(now);
             source.addEventListener("ended", () => wobble.stop());
-            gain.gain.setTargetAtTime(0.35, now, 0.5);
+            gain.gain.setTargetAtTime(0.22, now, 0.5);
         }
         source.connect(filter).connect(gain).connect(this.master);
         source.start(now);
@@ -179,7 +178,7 @@ class Sound {
     // ---------- Sound effects ----------
 
     swing() {
-        this.noise(0.13, "bandpass", 700, 2600, 0.5);
+        this.noise(0.13, "bandpass", 700, 2600, 1.9);
     }
 
     // A sword swishing through tall grass
@@ -191,16 +190,16 @@ class Sound {
     // A soft step. Crunchier on snow.
     step(snow) {
         if (snow) {
-            this.noise(0.06, "bandpass", 2500, 1500, 0.12);
+            this.noise(0.06, "bandpass", 2500, 1500, 0.2);
         } else {
-            this.noise(0.04, "lowpass", 700, 300, 0.08);
+            this.noise(0.04, "lowpass", 700, 300, 0.2);
         }
     }
 
     gunshot() {
-        this.noise(0.04, "highpass", 3000, 1500, 1);
-        this.noise(0.5, "lowpass", 2500, 100, 1);
-        this.tone(0.2, "square", 220, 50, 0.2);
+        this.noise(0.04, "highpass", 3000, 1500, 0.7);
+        this.noise(0.5, "lowpass", 2500, 100, 0.7);
+        this.tone(0.2, "square", 220, 50, 0.14);
     }
 
     // A bullet hitting a rock
@@ -242,14 +241,14 @@ class Sound {
     }
 
     sizzle() {
-        this.noise(0.6, "highpass", 4000, 7000, 0.4);
-        this.noise(0.3, "lowpass", 600, 200, 0.4);
+        this.noise(0.6, "highpass", 4000, 7000, 0.28);
+        this.noise(0.3, "lowpass", 600, 200, 0.28);
     }
 
     // The ground cracking before a hole opens
     crack() {
-        this.noise(0.12, "bandpass", 1200, 400, 0.5);
-        this.noise(0.1, "bandpass", 900, 300, 0.4, 0.15);
+        this.noise(0.12, "bandpass", 1200, 400, 0.8);
+        this.noise(0.1, "bandpass", 900, 300, 0.64, 0.15);
     }
 
     // Falling into a hole: a whistle going down
@@ -307,9 +306,9 @@ class Sound {
 
     // A barrel blowing up: a big boom with a long rumble
     explosion() {
-        this.noise(0.06, "highpass", 2000, 800, 1);
-        this.noise(1.4, "lowpass", 2600, 40, 1);
-        this.tone(1, "sine", 80, 25, 0.7);
+        this.noise(0.06, "highpass", 2000, 800, 0.7);
+        this.noise(1.4, "lowpass", 2600, 40, 0.7);
+        this.tone(1, "sine", 80, 25, 0.5);
     }
 
     cluck() {
@@ -349,8 +348,8 @@ class Sound {
 
     // A teasing "nyah nyah"
     taunt() {
-        this.tone(0.14, "square", 660, 620, 0.08);
-        this.tone(0.2, "square", 523, 500, 0.08, 0.16);
+        this.tone(0.14, "square", 660, 620, 0.13);
+        this.tone(0.2, "square", 523, 500, 0.13, 0.16);
     }
 
     // A crowd cheering when someone scores
@@ -401,18 +400,18 @@ class Sound {
             this.noise(1.1, "lowpass", 160, 50, 1);
             this.tone(1, "sine", 55, 35, 0.4);
         } else {
-            this.noise(0.6, "lowpass", 220, 90, 0.9);
+            this.noise(0.6, "lowpass", 220, 90, 1.4);
         }
     }
 
     pickup() {
-        [660, 880, 1320].forEach((frequency, i) => this.tone(0.12, "triangle", frequency, frequency, 0.18, i * 0.05));
+        [660, 880, 1320].forEach((frequency, i) => this.tone(0.12, "triangle", frequency, frequency, 0.25, i * 0.05));
     }
 
     // A shield bubble popping
     shatter() {
-        this.noise(0.3, "highpass", 6000, 2000, 0.6);
-        this.tone(0.3, "triangle", 1800, 600, 0.15);
+        this.noise(0.3, "highpass", 6000, 2000, 0.38);
+        this.tone(0.3, "triangle", 1800, 600, 0.1);
     }
 
     // A big hit: a deep boom under the normal one
@@ -430,7 +429,7 @@ class Sound {
 
     // Lightning about to strike: a rising crackle
     charge() {
-        this.tone(0.7, "sawtooth", 200, 1200, 0.05);
+        this.tone(0.7, "sawtooth", 200, 1200, 0.12);
     }
 
     grow() {
@@ -455,21 +454,21 @@ class Sound {
     }
 
     ready() {
-        this.tone(0.12, "square", 440, 440, 0.1);
+        this.tone(0.12, "square", 440, 440, 0.14);
     }
 
     fight() {
-        this.tone(0.25, "square", 880, 880, 0.12);
+        this.tone(0.25, "square", 880, 880, 0.2);
     }
 
     roundWin() {
-        [523, 659, 784].forEach((frequency, i) => this.tone(0.15, "square", frequency, frequency, 0.08, i * 0.09));
+        [523, 659, 784].forEach((frequency, i) => this.tone(0.15, "square", frequency, frequency, 0.14, i * 0.09));
     }
 
     matchWin() {
         [523, 659, 784, 1047, 784, 1047].forEach((frequency, i) => {
             const length = i === 5 ? 0.5 : 0.14;
-            this.tone(length, "square", frequency, frequency, 0.08, i * 0.12);
+            this.tone(length, "square", frequency, frequency, 0.13, i * 0.12);
         });
     }
 }

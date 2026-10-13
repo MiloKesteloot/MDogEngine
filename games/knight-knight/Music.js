@@ -2,7 +2,7 @@
 // Each song is 4 bars of 16 steps: a lead tune, a bass line and drums, looped. Notes are MIDI numbers
 // (60 is middle C), and null is a rest.
 
-const VOLUME = 0.12;
+const VOLUME = 0.075; // under the sound effects, so the swords cut through
 const DUCKED = 0.35; // how loud it is while paused
 const LOOKAHEAD = 0.15; // seconds of notes scheduled ahead of time, so they don't stutter
 
@@ -11,6 +11,7 @@ const _ = null;
 const SONGS = {
     // The meadow and the river: a bouncy A minor tune
     battle: {
+        volume: 1,
         bpm: 138,
         lead: "square",
         bass: "triangle",
@@ -26,6 +27,7 @@ const SONGS = {
     },
     // The forest at night: slower and spookier, in D minor
     night: {
+        volume: 1.3,
         bpm: 104,
         lead: "triangle",
         bass: "triangle",
@@ -41,6 +43,7 @@ const SONGS = {
     },
     // The volcano: fast and driving
     volcano: {
+        volume: 0.6, // a sawtooth tune over a square bass is a lot louder than the rest
         bpm: 156,
         lead: "sawtooth",
         bass: "square",
@@ -56,6 +59,7 @@ const SONGS = {
     },
     // The showdown: a twangy western tune in E minor, with a galloping bass
     showdown: {
+        volume: 1,
         bpm: 116,
         lead: "square",
         bass: "triangle",
@@ -71,6 +75,7 @@ const SONGS = {
     },
     // The pirate ship: a rollicking shanty in D minor
     shanty: {
+        volume: 1,
         bpm: 128,
         lead: "square",
         bass: "triangle",
@@ -86,6 +91,7 @@ const SONGS = {
     },
     // The snowfield: light and twinkly, in G major
     snow: {
+        volume: 1.2,
         bpm: 120,
         lead: "sine",
         bass: "triangle",
@@ -130,6 +136,7 @@ class Music {
         this.song = name === null ? null : SONGS[name];
         this.step = 0;
         this.nextStepTime = 0;
+        this.updateVolume();
     }
 
     setIntense(intense) {
@@ -143,7 +150,8 @@ class Music {
 
     updateVolume() {
         if (this.output !== null) {
-            const volume = !this.enabled ? 0 : this.ducked ? VOLUME * DUCKED : VOLUME;
+            const full = VOLUME * (this.song?.volume ?? 1);
+            const volume = !this.enabled ? 0 : this.ducked ? full * DUCKED : full;
             this.output.gain.setTargetAtTime(volume, this.sound.context.currentTime, 0.1);
         }
     }

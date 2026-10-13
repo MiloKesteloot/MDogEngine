@@ -215,7 +215,6 @@ const GRASS_CUT_REACH = 2; // how far past the sword's edge tall grass gets cut
 const JOUST_ACCEL = 0.012; // how hard holding a direction speeds up a horse
 const JOUST_FRICTION = 0.995; // horses coast a long way
 const JOUST_SAFETY_SPEED = 4; // only so nothing can pass through a fence (or another rider) in one tick
-const JOUST_GALLOP_SPEED = 1.8; // knocking someone down going faster than this is a "FULL GALLOP"
 const JOUST_SPUR = 1.2; // the kick of speed from spurring (the swing button)
 const LANCE_REACH_ACROSS = 20; // how far in front of a horse the lance tip is, going sideways...
 const LANCE_REACH_UP_DOWN = 12; // ...and going up or down the screen
@@ -259,7 +258,6 @@ const POWERUP_TYPES = ["shield", "speed", "thunder", "grow", "avalanche", "freez
 // Freeze was taken out (its icon is still in the image, so the others stay in place)
 const SPAWNING_POWERUPS = POWERUP_TYPES.filter(type => type !== "gun" && type !== "freeze");
 // Sword power-ups don't do anything in a showdown
-const SHOWDOWN_SKIPS = ["throw", "fury"];
 const SHADOW_COLOR = "rgba(0, 0, 0, 0.22)";
 const SPRITE_SIZE = 20;
 const ROCK_WIDTH = 16;
@@ -2096,7 +2094,8 @@ class Knight {
         const HEART = ["x.x", "xxx", ".x."];
         const spacing = 5;
         const left = Math.round(this.getGroundX() - (this.maxLives * spacing - 2) / 2);
-        const top = Math.round(this.getTopY() - 10);
+        // Above his crown, if he's wearing one
+        const top = Math.min(Math.round(this.getTopY() - 10), isLeading(this) ? this.getCrownTop() - 6 : Infinity);
         for (let i = 0; i < this.maxLives; i++) {
             const color = i < this.lives ? "#e8303c" : "rgba(40, 20, 24, 0.7)";
             HEART.forEach((row, y) => {
@@ -2192,15 +2191,20 @@ class Knight {
     // Whoever's winning wears a little crown over his plume
     drawCrown() {
         const size = Math.max(1, Math.round(this.scale));
-        const corner = this.scaledPoint(7, -1);
-        const left = Math.round(corner.x);
-        const top = Math.round(corner.y) - this.getRiderLift() + (Math.floor(this.trailTimer / 40) % 2);
+        const left = Math.round(this.scaledPoint(7, -1).x);
+        // Bobbing a pixel up and down
+        const top = this.getCrownTop() + (Math.floor(this.trailTimer / 40) % 2);
         const pixel = (x, y, width, color) => MDog.Draw.rectangleFill(left + x * size, top + y * size, width * size, size, color);
         pixel(0, 0, 1, "#ffd84a");
         pixel(2, 0, 1, "#ffd84a");
         pixel(4, 0, 1, "#ffd84a");
         pixel(0, 1, 5, "#ffd84a");
         pixel(0, 2, 5, "#c8961e");
+    }
+
+    // The top of his crown (before it bobs)
+    getCrownTop() {
+        return Math.round(this.scaledPoint(7, -1).y) - this.getRiderLift();
     }
 
     // Little bars under his feet for the power-ups that run out, and dots for shots and throws left
@@ -3710,7 +3714,7 @@ class Track {
     drawWarning(blink) {
         if (this.warning > 0) {
             const x = this.dir > 0 ? 12 : SCREEN_WIDTH - 12;
-            MDog.Draw.textImage("!", x, this.y - 8, blink ? "#ffffff" : "#c0c0d0", FONT, {alignX: "center", alignY: "center", size: 2});
+            drawBang(x, this.y - 8, blink ? "#ffffff" : "#c0c0d0");
         }
     }
 }
@@ -4063,7 +4067,7 @@ class Tornado {
             sound.flames();
         }
         if (this.ticks % 90 === 0) {
-            sound.rumble(true);
+            sound.rumble(false);
         }
         // The ground shakes when a knight's near it
         if (knights.some(knight => !knight.dead && Math.hypot(knight.getGroundX() - this.x, knight.getGroundY() - this.y) < TORNADO_RADIUS)) {
@@ -4539,7 +4543,7 @@ class Popup {
     }
 
     update() {
-        this.y -= 0.12;
+        this.y = Math.max(16, this.y - 0.12);
         this.life--;
     }
 
@@ -4808,7 +4812,8 @@ function getSolids() {
     return [...rocks, ...trees, ...crates, ...getWaterBoxes(), ...getFeatureSolids()];
 }
 
-function startMatch() {
+// quiet: no round-start beep (for the title screen's match, which nobody's playing)
+function startMatch(quiet = false) {
     scores = {};
     stats = {};
     worstDeficit = {};
@@ -4825,7 +4830,7 @@ function startMatch() {
     roundsUntilJoust = Math.floor(random(4, 7));
     marks.clear();
     killCam.clear();
-    startRound();
+    startRound(quiet);
 }
 
 // Picks the arena for the next round: the one in the settings, or a different one each round, with a showdown
@@ -4899,7 +4904,7 @@ function setArena(name) {
     music.setSong(arena.music);
 }
 
-function startRound() {
+function startRound(quiet = false) {
     roundNumber++;
     roundModifier = pickRoundModifier();
     setArena(pickArena());
@@ -4957,7 +4962,9 @@ function startRound() {
     slowmo = 0;
     music.setIntense(isMatchPoint());
     setPhase("ready");
-    sound.ready();
+    if (!quiet) {
+        sound.ready();
+    }
 }
 
 function setPhase(newPhase) {
@@ -5032,8 +5039,8 @@ function findClearSpot(knightDistance) {
 
 function updatePowerups() {
     // There's always one on the field: a new one comes soon after the last one's gone
-    // (none at all in a calm arena, like the jousting yard)
-    const allowed = arena.calm ? [] : SPAWNING_POWERUPS.filter(type => settings.isPowerupOn(type) && !(arena.guns && SHOWDOWN_SKIPS.includes(type)));
+    // (none at all in a calm arena, like the jousting yard, or in a showdown, where it's just guns)
+    const allowed = arena.calm || arena.guns ? [] : SPAWNING_POWERUPS.filter(type => settings.isPowerupOn(type));
     if (phase === "playing" && powerups.length === 0 && allowed.length > 0) {
         powerupWait--;
         if (powerupWait <= 0) {
@@ -5607,7 +5614,6 @@ function getCoolReason(hits, winner) {
         [hit.target.tauntTicks > 0, "TAUNT PUNISHED"],
         [gameTime - hit.target.lastFling < COOL_RECENT_TICKS, "TORNADO"],
         [hit.cause === "minecart", "RUN OVER"],
-        [hit.cause === "joust" && Math.hypot(killer.vx, killer.vy) > JOUST_GALLOP_SPEED, "FULL GALLOP"],
         [hit.cause === "explosion", "KABOOM"],
         [hit.cause === "fire", "DRAGON FIRE"],
         [hit.cause === "bear", "MAULED"],
@@ -5625,6 +5631,10 @@ function getCoolReason(hits, winner) {
 }
 
 function replay(reason) {
+    // Never in a joust: the round just ends
+    if (arena.joust) {
+        return;
+    }
     replayBlowTick = liveTicks;
     replayReason = reason;
 }
@@ -5731,7 +5741,7 @@ function updateAftermath() {
 
 // The title screen: the knights stand around on the meadow (now and then swinging at the air) until someone starts
 function showTitle() {
-    startMatch();
+    startMatch(true);
     setPhase("title");
     const [red, blue] = knights;
     red.brain = new DemoBrain(red, blue);
@@ -5863,10 +5873,13 @@ function drawScore() {
     for (const player of PLAYERS) {
         for (let i = 0; i < rounds; i++) {
             const x = player.scoreSide < 0 ? 6 + i * 8 : SCREEN_WIDTH - 11 - i * 8;
+            // A dark edge round each, so they show up on water, banners and anything else
+            MDog.Draw.rectangle(x - 1, 5, 7, 7, "rgba(0, 0, 0, 0.45)");
             if (i < scores[player.color]) {
                 MDog.Draw.rectangleFill(x, 6, 5, 5, player.textColor);
             } else {
-                MDog.Draw.rectangle(x, 6, 5, 5, arena.dark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.35)");
+                MDog.Draw.rectangleFill(x, 6, 5, 5, "rgba(0, 0, 0, 0.25)");
+                MDog.Draw.rectangle(x, 6, 5, 5, "rgba(255, 255, 255, 0.35)");
             }
         }
     }
@@ -5890,6 +5903,20 @@ function drawStats() {
     });
 }
 
+// A warning "!" (or a few side by side) centered on a spot, with a dark edge so it shows up on anything
+function drawBang(x, y, color, count = 1) {
+    const width = count * 4 - 2;
+    const left = Math.round(x - width / 2);
+    const top = Math.round(y - 5);
+    for (let i = 0; i < count; i++) {
+        const bangX = left + i * 4;
+        MDog.Draw.rectangleFill(bangX - 1, top - 1, 4, 8, "rgba(20, 20, 20, 0.6)");
+        MDog.Draw.rectangleFill(bangX - 1, top + 8, 4, 4, "rgba(20, 20, 20, 0.6)");
+        MDog.Draw.rectangleFill(bangX, top, 2, 6, color);
+        MDog.Draw.rectangleFill(bangX, top + 9, 2, 2, color);
+    }
+}
+
 function drawWarnings() {
     const blink = Math.floor(ticks / 10) % 2 === 0;
     for (const coming of incoming) {
@@ -5901,8 +5928,7 @@ function drawWarnings() {
         // An avalanche's boulders blink in the color of the knight who sent them
         const owner = coming.boulder.owner;
         const color = blink ? "#ffffff" : (owner !== null ? owner.player.textColor : "#ffcc33");
-        const text = coming.boulder.giant ? "!!" : "!";
-        MDog.Draw.textImage(text, Math.round(spot.x), Math.round(spot.y), color, FONT, {alignX: "center", alignY: "center", size: 2});
+        drawBang(spot.x, spot.y, color, coming.boulder.giant ? 2 : 1);
     }
     for (const feature of features) {
         feature.drawWarning?.(blink);
@@ -5910,7 +5936,7 @@ function drawWarnings() {
     for (const horse of horses) {
         if (!horse.isActive()) {
             const spot = horse.getWarningSpot();
-            MDog.Draw.textImage("!", spot.x, spot.y, blink ? "#ffffff" : "#c08040", FONT, {alignX: "center", alignY: "center", size: 2});
+            drawBang(spot.x, spot.y, blink ? "#ffffff" : "#c08040");
         }
     }
 }
@@ -6016,7 +6042,10 @@ function drawTitle() {
 
 function drawUI() {
     if (phase === "title") {
-        drawTitle();
+        // With the settings open, just the arena shows behind them
+        if (!isPaused()) {
+            drawTitle();
+        }
         return;
     }
     drawScore();
@@ -6054,6 +6083,10 @@ function drawUI() {
     }
 
     if (resultText !== null && !killCam.playing) {
+        // At the end of the match, a dark band behind it all so it reads over the field (like the title's)
+        if (phase === "matchOver") {
+            MDog.Draw.rectangleFill(0, 26, SCREEN_WIDTH, 112, "rgba(10, 16, 10, 0.55)");
+        }
         drawText(resultText.text, 40, resultText.color, 2);
         if (commentary !== null && Math.floor(phaseTicks / 30) % 4 !== 3) {
             drawText(commentary, 58, "#ffcc33", 1);
@@ -6231,6 +6264,7 @@ function makePauseMenu() {
 
 function makeSettingsMenu() {
     const toggle = (label, key, after) => ({
+        onOff: true,
         label: () => label + ": " + onOff(settings.get(key)),
         change: () => { settings.toggle(key); after?.(); },
     });
@@ -6238,6 +6272,25 @@ function makeSettingsMenu() {
         label: () => label + ": " + settings.get(key),
         change: direction => { settings.cycle(key, choices, direction); after?.(); },
     });
+    // Asks first, so it can't be hit by accident: the first press only arms it
+    let resetArmed = false;
+    const resetItem = {
+        label: () => resetArmed ? "PRESS AGAIN TO RESET" : "RESET TO DEFAULTS",
+        pick: () => {
+            if (!resetArmed) {
+                resetArmed = true;
+                sound.menuMove();
+                return;
+            }
+            resetArmed = false;
+            settings.reset();
+            music.setEnabled(settings.get("music"));
+            if (phase === "title") {
+                showTitle();
+            }
+            sound.menuSelect();
+        },
+    };
     return new Menu("SETTINGS", [
         cycle("ROUNDS TO WIN", "roundsToWin", ROUNDS_CHOICES),
         cycle("ARENA", "arena", ARENA_CHOICES, () => {
@@ -6254,13 +6307,15 @@ function makeSettingsMenu() {
         toggle("JUGGERNAUT ROUNDS", "juggernaut"),
         cycle("KILL CAM", "killCam", KILL_CAM_CHOICES),
         toggle("MUSIC", "music", () => music.setEnabled(settings.get("music"))),
-        {label: () => "SOUND: " + onOff(!sound.muted), change: () => sound.toggleMute()},
+        {onOff: true, label: () => "SOUND: " + onOff(!sound.muted), change: () => sound.toggleMute()},
+        resetItem,
         {label: () => "BACK", pick: () => backMenu()},
-    ], "ARENA AND WEATHER CHANGE NEXT ROUND");
+    ]);
 }
 
 function makePowerupMenu() {
     const items = SPAWNING_POWERUPS.map(type => ({
+        onOff: true,
         label: () => POWERUP_MENU_NAMES[type] + ": " + onOff(settings.isPowerupOn(type)),
         change: () => settings.togglePowerup(type),
     }));
@@ -6317,10 +6372,11 @@ function updateMenu() {
         item.change(clicked(["d", "ArrowRight"]) ? 1 : -1);
         sound.menuMove();
     }
+    // Space or Enter flips an ON/OFF setting, but does nothing on one with a list of choices (that's left and right)
     if (clicked([" ", "Enter"])) {
         if (item.pick !== undefined) {
             item.pick();
-        } else if (item.change !== undefined) {
+        } else if (item.onOff === true) {
             item.change(1);
             sound.menuMove();
         }
@@ -6329,7 +6385,7 @@ function updateMenu() {
 
 function drawMenu() {
     const menu = menus[menus.length - 1];
-    MDog.Draw.rectangleFill(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, "rgba(10, 20, 10, 0.7)");
+    MDog.Draw.rectangleFill(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, "rgba(8, 14, 8, 0.85)");
     const top = menu.isPauseMenu ? 34 : 14;
     drawText(menu.title, top, "#ffffff", 2);
 
