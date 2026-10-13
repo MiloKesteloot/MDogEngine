@@ -5,7 +5,7 @@ const OLD_STORAGE_KEY = "sir-james-settings"; // what the game used to be called
 
 export const ROUNDS_CHOICES = [3, 5, 7, 10];
 export const BOULDER_CHOICES = ["OFF", "FEW", "NORMAL", "LOTS"];
-export const ARENA_CHOICES = ["MIXED", "MEADOW", "RIVER", "SNOW", "VOLCANO", "FOREST", "MINE", "DESERT", "LIGHTHOUSE", "BRIDGE", "GRAVEYARD", "RING", "STORM", "SUMO", "SHIP", "SHOWDOWN"];
+export const ARENA_CHOICES = ["MIXED", "MEADOW", "RIVER", "SNOW", "VOLCANO", "FOREST", "MINE", "DESERT", "LIGHTHOUSE", "BRIDGE", "LAVALAKE", "RING", "STORM", "SUMO", "SHIP", "SHOWDOWN", "JOUST"];
 // COOL KILLS replays knockdowns where something cool happened, and always the one that wins the match
 export const KILL_CAM_CHOICES = ["COOL KILLS", "FINAL BLOW", "OFF"];
 

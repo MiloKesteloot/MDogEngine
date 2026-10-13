@@ -366,10 +366,6 @@ class Sound {
         source.stop(now + 1.4);
     }
 
-    dash() {
-        this.noise(0.16, "bandpass", 1400, 300, 0.6);
-    }
-
     // Swords hitting each other
     clang() {
         this.tone(0.35, "square", 1480, 1400, 0.12);
@@ -429,11 +425,6 @@ class Sound {
     // Lightning about to strike: a rising crackle
     charge() {
         this.tone(0.7, "sawtooth", 200, 1200, 0.05);
-    }
-
-    freeze() {
-        [1568, 2093, 2637].forEach((frequency, i) => this.tone(0.5, "sine", frequency, frequency, 0.12, i * 0.04));
-        this.noise(0.3, "highpass", 5000, 8000, 0.3);
     }
 
     grow() {

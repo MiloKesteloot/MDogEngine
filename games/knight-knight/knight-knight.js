@@ -9,20 +9,24 @@ import Marks from "./Marks.js";
 import KillCam from "./KillCam.js";
 
 // Knight Knight: a two player knight duel. One hit knocks a knight down, and the first to win 5 rounds wins.
-// Swords that meet clang off each other (a parry). Dashing makes a knight impossible to hit for a moment, and
-// swinging out of a dash lunges a long way. Boulders roll through that can be hit back at the other knight,
+// Swords that meet clang off each other (a parry). Boulders roll through that can be hit back at the other knight,
 // giant boulders smash through everything, and there's always a power-up somewhere on the field:
-//   Shield: a bubble that blocks one hit       Speed: faster walking, and dash comes back sooner
+//   Shield: a bubble that blocks one hit       Speed: faster walking
 //   Thunder: lightning strikes the other knight  Big: twice as big, with twice the reach (and twice the target)
 //   Avalanche: boulders roll in at the other knight, and can't hurt you
-//   Freeze: the other knight is frozen in ice   Fury: swing almost twice as fast
+//   Fury: swing almost twice as fast
 //   Throw sword: your next swing throws your sword, really fast. Then you have to go pick it up.
 //   Reverse: the other knight's controls are backwards
 // Every few rounds there's a showdown instead: no swords, just guns that never run out, with crates to hide behind.
 // Sumo rounds are on a platform in the
 // water, where hits only shove and the loser is whoever gets pushed in. Chickens show up when nobody's been hit for
 // a minute. Each knight can taunt, which leaves him stuck in place for a second. Every few rounds is a juggernaut
-// round, where whoever's behind is huge and slow, with 3 hearts.
+// round, where whoever's behind is huge and slow, with 3 hearts. Now and then there's a joust instead: both
+// knights on horseback with momentum, and when they collide the faster one wins.
+//
+// A match builds up: round 1 is a plain sword fight (just boulders and power-ups), round 2 adds one twist (like
+// wind or lightning), and from round 3 on anything goes, with the arena's hazards (and boulders) picked at random
+// each round, like the weather.
 // Rounds are fought in different arenas (see Arenas.js), with weather, hazards like horses and catapults, and
 // ground that cracks open. Esc pauses, and the pause menu has the settings.
 
@@ -50,11 +54,6 @@ const CLASH_STUN_TICKS = 26; // how long both knights can't do anything after th
 const DEATH_KNOCKBACK = 2.8;
 const ROCK_RECOIL = 1.2; // the bounce back when a sword hits a rock
 
-const DASH_SPEED = 2.6; // the push a dash starts with, which carries him about 18 pixels
-const DASH_TICKS = 24; // how long a dash lasts, and how long swords and boulders go right through him
-const DASH_COOLDOWN_TICKS = 120;
-const DASH_SLASH_WINDOW = 20; // swinging this soon after a dash starts turns it into a lunging slash
-const DASH_SLASH_LUNGE = 3.4;
 const TRAIL_SPEED = 1.1; // moving faster than this leaves fading copies behind
 const TRAIL_TICKS = 18; // how long each copy takes to fade
 
@@ -89,8 +88,11 @@ const BOULDER_MAX_SPEED = 160 / TICKS_PER_SECOND; // they get faster each time t
 const BOULDER_DEFLECT_SPEEDUP = 1.5;
 const BOULDER_WARNING_TICKS = TICKS_PER_SECOND; // the "!" shows this long before a boulder rolls in
 const BOULDER_FIRST_WAIT = 2 * TICKS_PER_SECOND;
-const BOULDER_MIN_WAIT = 3 * TICKS_PER_SECOND;
-const BOULDER_MAX_WAIT = 5.5 * TICKS_PER_SECOND;
+const BOULDER_MIN_WAIT = 5 * TICKS_PER_SECOND;
+const BOULDER_MAX_WAIT = 9 * TICKS_PER_SECOND;
+const BOULDER_ROUND_CHANCE = 0.45; // from round 3, how often a round has boulders at all
+const HAZARD_ROUND_CHANCE = 0.4; // from round 3, how often each of the arena's hazards is on for a round...
+const MAX_ROUND_HAZARDS = 2; // ...with no more than this many at once
 const BOULDER_SETTING_WAIT = {OFF: Infinity, FEW: 1.8, NORMAL: 1, LOTS: 0.5}; // times the wait, from the settings
 // The longer a round goes, the more boulders come, so nobody can just wait it out
 const BOULDER_RUSH_TICKS = 40 * TICKS_PER_SECOND; // by this far into a round...
@@ -104,7 +106,7 @@ const GIANT_SPEED = 0.7; // giants roll this much as fast
 const POWERUP_RESPAWN_TICKS = 1.5 * TICKS_PER_SECOND;
 const POWERUP_LIFE_TICKS = 12 * TICKS_PER_SECOND; // how long one sits there before it's gone
 const SPEED_BOOST_TICKS = 7 * TICKS_PER_SECOND;
-const SPEED_BOOST = 1.5; // walking speed, and how fast dash comes back
+const SPEED_BOOST = 1.5; // walking speed
 const SHIELD_KNOCKBACK = 2.4;
 const SHIELD_STUN_TICKS = 16;
 const SHIELD_GRACE_TICKS = 40; // can't be hit for a moment after the shield breaks
@@ -116,11 +118,10 @@ const THUNDER_RADIUS = 13;
 const AVALANCHE_COUNT = 8;
 const AVALANCHE_GAP_TICKS = 0.25 * TICKS_PER_SECOND; // between each boulder
 const AVALANCHE_SPREAD = 26; // how far off from the knight each one can be lined up
-const FREEZE_TICKS = 1.6 * TICKS_PER_SECOND;
 const FURY_TICKS = 7 * TICKS_PER_SECOND;
 const FURY_SWING_SPEED = 26; // instead of SWING_SPEED
 const REVERSE_TICKS = 5 * TICKS_PER_SECOND;
-const THROW_SPEED = 2.8; // pixels per tick: fast, but you can step out of the way or dash through it
+const THROW_SPEED = 2.8; // pixels per tick: fast, but you can step out of the way
 const THROW_RANGE = 160; // how far it flies before it drops
 const NEW_SWORD_TICKS = 2 * TICKS_PER_SECOND; // a sword lost in water or lava comes back from the sky after this
 const GUN_AMMO = 3;
@@ -191,6 +192,7 @@ const MINECART_SPEED = 2.6;
 const QUICKSAND_TICKS = 2.5 * TICKS_PER_SECOND; // standing still in quicksand this long swallows you
 const QUICKSAND_SLOW = 0.5;
 const LIGHTHOUSE_TURN_SPEED = Math.PI * 2 / (7 * TICKS_PER_SECOND); // once around every 7 seconds
+const LIGHTHOUSE_BEAM_WIDTH = 1.5; // how much wider than a plain light trail the beams are
 const TORNADO_TICKS = 9 * TICKS_PER_SECOND;
 const TORNADO_SPEED = 0.3;
 const TORNADO_RADIUS = 50;
@@ -200,13 +202,26 @@ const JUGGERNAUT_LIVES = 3;
 const JUGGERNAUT_SCALE = 1.75;
 const JUGGERNAUT_SPEED = 0.75;
 const JUGGERNAUT_GRACE_TICKS = 70; // can't lose another heart right away
+const JUGGERNAUT_WINDUP_TICKS = 0.25 * TICKS_PER_SECOND; // he holds his wind-up this long before the swing comes
+const JUGGERNAUT_TURN_TICKS = 0.25 * TICKS_PER_SECOND; // and takes this long to turn round
 const JUGGERNAUT_MIN_ROUNDS = 5; // a juggernaut round comes up every this many rounds...
 const JUGGERNAUT_MAX_ROUNDS = 7; // ...to this many
+const JOUST_ACCEL = 0.035; // how hard holding a direction speeds up a horse
+const JOUST_FRICTION = 0.985; // horses coast a long way
+const JOUST_MAX_SPEED = 1.5;
+const JOUST_SPUR = 1.2; // the kick of speed from spurring (the swing button)
+const JOUST_SPUR_TOP = 1.5; // how much faster than his top speed a spurred horse can go, for a moment
+const JOUST_SPUR_TICKS = 50;
+const JOUST_SPUR_COOLDOWN_TICKS = 2 * TICKS_PER_SECOND;
+const JOUST_TIE = 0.3; // riders going within this much of each other's speed both bounce off
+const JOUST_MIN_ROUNDS = 5; // a joust comes up every this many rounds...
+const JOUST_MAX_ROUNDS = 8; // ...to this many, when the arena's mixed
+const JOUST_SKIPS = ["throw", "fury", "grow"]; // power-ups that don't make sense on horseback
 const STORM_MIN_WAIT_TICKS = 2.2 * TICKS_PER_SECOND;
 const STORM_MAX_WAIT_TICKS = 4 * TICKS_PER_SECOND;
 
 // The kill cam only replays cool knockdowns (and always the one that wins the match)
-const COOL_RECENT_TICKS = 2.5 * TICKS_PER_SECOND; // a parry, dodge and so on this recent makes the knockdown cool
+const COOL_RECENT_TICKS = 2.5 * TICKS_PER_SECOND; // a parry, deflect and so on this recent makes the knockdown cool
 const COOL_SNIPE_DISTANCE = 100; // a shot from this far is cool...
 const COOL_SNIPE_DISTANCE_SHOWDOWN = 170; // ...except in a showdown, where every knockdown is a shot
 
@@ -233,7 +248,8 @@ const LIGHTHOUSE_IMAGE = "knight-knight/lighthouse.png";
 const POWERUP_SIZE = 9;
 const POWERUP_TYPES = ["shield", "speed", "thunder", "grow", "avalanche", "freeze", "fury", "throw", "reverse", "gun"]; // in the order they are in the image
 // The gun isn't found lying around any more, it's what everyone uses in a showdown
-const SPAWNING_POWERUPS = POWERUP_TYPES.filter(type => type !== "gun");
+// Freeze was taken out (its icon is still in the image, so the others stay in place)
+const SPAWNING_POWERUPS = POWERUP_TYPES.filter(type => type !== "gun" && type !== "freeze");
 // Sword power-ups don't do anything in a showdown
 const SHOWDOWN_SKIPS = ["throw", "fury"];
 const SHADOW_COLOR = "rgba(0, 0, 0, 0.22)";
@@ -259,8 +275,8 @@ const PLAYERS = [
         textColor: "#d04848",
         lightTextColor: "#ffa8a8", // for instructions, so they read on any background
         plumeColor: [172, 50, 50],
-        // Movement is by key name, swing and dash by physical key (see wasPressed)
-        keys: {south: "s", east: "d", north: "w", west: "a", swing: ["Space"], dash: ["ShiftLeft"], taunt: ["KeyE"]},
+        // Movement is by key name, swing and taunt by physical key (see wasPressed)
+        keys: {south: "s", east: "d", north: "w", west: "a", swing: ["Space"], taunt: ["KeyE"]},
         startX: 50,
         facing: "east",
         scoreSide: -1, // pips go along the left
@@ -270,7 +286,7 @@ const PLAYERS = [
         textColor: "#6a96ea",
         lightTextColor: "#b4ccff",
         plumeColor: [50, 90, 190],
-        keys: {south: "ArrowDown", east: "ArrowRight", north: "ArrowUp", west: "ArrowLeft", swing: ["Enter", "NumpadEnter"], dash: ["ShiftRight"], taunt: ["Slash"]},
+        keys: {south: "ArrowDown", east: "ArrowRight", north: "ArrowUp", west: "ArrowLeft", swing: ["Enter", "NumpadEnter"], taunt: ["Slash"]},
         startX: 190,
         facing: "west",
         scoreSide: 1, // pips go along the right
@@ -610,6 +626,27 @@ class GrassRow {
         this.right = right;
         this.y = y;
         this.dark = dark;
+        this.cut = new Map(); // blades a sword has cut down: x -> how tall the stub is
+    }
+
+    naturalHeight(x) {
+        return 6 + ((x * 7 + this.y * 13) % 4);
+    }
+
+    // A sword sweeping through cuts down any blades it touches
+    cutBox(box) {
+        for (let x = this.left; x < this.right; x += 2) {
+            if (this.cut.has(x) || x < box.left || x > box.right) {
+                continue;
+            }
+            const height = this.naturalHeight(x);
+            if (box.top < this.y + 2 && box.bottom > this.y - height) {
+                this.cut.set(x, 2);
+                if (Math.random() < 0.5) {
+                    particles.clippings(x, this.y - height / 2, 1);
+                }
+            }
+        }
     }
 
     getSortY() {
@@ -624,7 +661,12 @@ class GrassRow {
         const blade = this.dark ? "#2f5a2a" : "#3f7a34";
         const tip = this.dark ? "#4a7a40" : "#7cbc5a";
         for (let x = this.left; x < this.right; x += 2) {
-            const height = 6 + ((x * 7 + this.y * 13) % 4);
+            if (this.cut.has(x)) {
+                // Just a stub left
+                MDog.Draw.rectangleFill(x, this.y, 1, this.cut.get(x), blade);
+                continue;
+            }
+            const height = this.naturalHeight(x);
             const sway = Math.round(Math.sin(roundTicks / 50 + x / 9 + this.y / 5) * 0.8);
             MDog.Draw.rectangleFill(x, this.y - height + 2, 1, height, blade);
             MDog.Draw.rectangleFill(x + sway, this.y - height, 1, 2, tip);
@@ -755,7 +797,7 @@ class Boulder {
         settings = settings ?? {};
         this.owner = settings.owner ?? null;
         // Giant ones are twice as big, slower, can't be hit back, and smash right through rocks
-        this.giant = this.owner === null && Math.random() < GIANT_CHANCE;
+        this.giant = this.owner === null && getRoundStage() > 0 && Math.random() < GIANT_CHANCE;
         this.scale = this.giant ? GIANT_SCALE : 1;
         this.size = BOULDER_SIZE * this.scale;
         this.speed = BOULDER_SPEED * (this.giant ? GIANT_SPEED : 1);
@@ -779,6 +821,10 @@ class Boulder {
         this.deflectCooldown = 0;
         this.deflectedBy = null;
         this.broken = false;
+        // Boulders come in through the air (they're thrown in from off to the side), so one that starts out over the
+        // sea or a canyon doesn't fall straight in. It lands on the first solid ground it reaches, and only after that
+        // can it fall into water or holes.
+        this.landed = false;
         this.trackTimer = 0;
         this.closeCalls = new Map();
     }
@@ -812,19 +858,26 @@ class Boulder {
 
         // Flattens a line in the grass behind it
         this.trackTimer += speed;
-        if (this.trackTimer > 3) {
+        if (this.trackTimer > 3 && this.landed) {
             this.trackTimer = 0;
             const center = boxCenter(this.getBox());
             marks.track(center.x, this.y + this.size - 2 * this.scale, this.size * 0.5, this.dx !== 0, "rgba(0, 0, 0, 0.07)");
         }
 
         const center = boxCenter(this.getBox());
-        if (isInWater(center.x, center.y)) {
+        const hole = holes.find(hole => hole.contains(center.x, center.y));
+        const overGround = !isInWater(center.x, center.y) && hole === undefined;
+        if (!this.landed) {
+            if (overGround) {
+                // Thud
+                this.landed = true;
+                particles.dust(center.x, this.y + this.size, 4);
+                sound.thunk();
+            }
+        } else if (isInWater(center.x, center.y)) {
             this.sink("ice");
             return;
-        }
-        const hole = holes.find(hole => hole.contains(center.x, center.y));
-        if (hole !== undefined) {
+        } else if (hole !== undefined) {
             this.sink(hole.style);
             return;
         }
@@ -932,7 +985,9 @@ class Boulder {
     }
 
     draw() {
-        MDog.Draw.animation(this.animation, Math.round(this.x), Math.round(this.y), {update: false, scale: this.scale});
+        // Up in the air until it lands, bobbing like it's bouncing in
+        const height = this.landed ? 0 : 6 + Math.round(Math.abs(Math.sin(this.x / 10 + this.y / 10)) * 4);
+        MDog.Draw.animation(this.animation, Math.round(this.x), Math.round(this.y) - height, {update: false, scale: this.scale});
     }
 
     drawHitboxes() {
@@ -1099,7 +1154,7 @@ class Knight {
         const start = arena.starts?.[PLAYERS.indexOf(player)] ?? {x: player.startX, y: 96};
         this.x = start.x - SPRITE_SIZE / 2;
         this.y = start.y - FEET_Y;
-        // Pushed by lunges, dashes and knockback
+        // Pushed by lunges and knockback
         this.vx = 0;
         this.vy = 0;
         this.facing = player.facing;
@@ -1114,7 +1169,6 @@ class Knight {
         this.graceTicks = 0; // can't be hit, after his shield breaks
         this.growTicks = 0; // time left being big
         this.scale = 1; // grows and shrinks smoothly toward GROW_SCALE or 1
-        this.freezeTicks = 0; // frozen in ice
         this.furyTicks = 0;
         this.reverseTicks = 0; // controls are backwards
         this.gunAmmo = 0;
@@ -1124,16 +1178,15 @@ class Knight {
         this.newSwordTicks = 0; // counting down to a new sword, after losing his
         this.noSwordCooldown = 0;
 
-        this.dashTicks = 0; // while this is counting down he's dashing, and can't be hit
-        this.dashCooldown = 0;
-        this.ticksSinceDash = Infinity;
+        this.windupTicks = 0; // a juggernaut holding his wind-up before the swing comes
+        this.turnTicks = 0; // a juggernaut turning round
 
         // Fading copies of him left behind when he moves fast
         this.trail = [];
         this.trailTimer = 0;
 
-        // So each swing only shows "DODGE!" or hits a rock once, and knows if it nearly hit
-        this.swingDodged = false;
+        // So each swing only hits once (and stops once it's blocked), hits a rock once, and knows if it nearly hit
+        this.swingSpent = false;
         this.swingHitRock = false;
         this.swingNear = null;
 
@@ -1149,6 +1202,11 @@ class Knight {
         this.maxLives = 1;
         this.baseScale = 1;
         this.speedFactor = 1;
+        this.mounted = false; // on horseback, for a joust
+        this.spurTicks = 0;
+        this.spurCooldown = 0;
+        this.gallop = 0; // how far the horse has run, for its legs
+        this.brain = null; // plays him on the title screen, instead of the keyboard
         this.tauntTicks = 0; // stuck taunting
         this.tauntFacing = this.facing;
         this.grabTicks = 0; // a hand from a grave has his ankle
@@ -1159,11 +1217,9 @@ class Knight {
 
         // When he last did something cool, for deciding if a knockdown is worth a replay
         this.lastParry = -Infinity;
-        this.lastDodge = -Infinity;
         this.lastDeflect = -Infinity;
         this.lastBlock = -Infinity;
         this.lastCloseCall = -Infinity;
-        this.dashSlash = false; // if his last swing came out of a dash
 
         this.animations = {
             idle: makeAnimations(player.color, "idle", 2, 2),
@@ -1184,6 +1240,9 @@ class Knight {
 
     // The way the movement keys point, like {x: 1, y: -1} for up and right. Backwards while reversed.
     getMoveInput() {
+        if (this.brain !== null) {
+            return {...this.brain.move};
+        }
         const move = {x: 0, y: 0};
         for (const dir in DIRS) {
             if (Keyboard.isDown(this.keys[dir])) {
@@ -1198,11 +1257,15 @@ class Knight {
         return move;
     }
 
+    // Is the move (like {x: 1, y: -1}) going at least partly this way?
+    isMovingToward(dir, move) {
+        return (DIRS[dir].x !== 0 && DIRS[dir].x === move.x) || (DIRS[dir].y !== 0 && DIRS[dir].y === move.y);
+    }
+
     faceToward(move) {
         // Keep facing the same way while still moving that way, so walking diagonally doesn't flicker
-        const movingToward = dir => (DIRS[dir].x !== 0 && DIRS[dir].x === move.x) || (DIRS[dir].y !== 0 && DIRS[dir].y === move.y);
-        if (!movingToward(this.facing)) {
-            this.facing = Object.keys(DIRS).find(movingToward);
+        if (!this.isMovingToward(this.facing, move)) {
+            this.facing = Object.keys(DIRS).find(dir => this.isMovingToward(dir, move));
         }
     }
 
@@ -1225,29 +1288,20 @@ class Knight {
             return;
         }
 
-        // The wind pushes him around, unless he's mid-dash
-        if (this.dashTicks === 0) {
-            this.vx += weather.getWind() + getTilt() * TILT_PUSH;
-        }
+        // The wind and the tipping deck push him around
+        this.vx += weather.getWind() + getTilt() * TILT_PUSH;
 
         this.think(world, canAct);
 
-        // Animations move on here, instead of when they're drawn, so they keep time with the game
-        if (!this.isFrozen() && this.stunTicks === 0) {
+        // Animations move on here, instead of when they're drawn, so they keep time with the game (and a
+        // juggernaut's held still while he winds up)
+        if (this.stunTicks === 0 && this.windupTicks === 0) {
             this.getAnimation().time++;
         }
     }
 
     think(world, canAct) {
         this.updateTimers();
-
-        if (this.freezeTicks > 0) {
-            this.freezeTicks--;
-            if (this.freezeTicks === 0) {
-                this.thaw();
-            }
-            return;
-        }
 
         if (this.stunTicks > 0) {
             this.stunTicks--;
@@ -1258,13 +1312,27 @@ class Knight {
         if (this.tauntTicks > 0) {
             return;
         }
-        if (canAct && wasPressed(this.keys.taunt) && this.state !== "swing" && this.dashTicks === 0) {
+        const tauntPressed = this.brain !== null ? this.brain.takeTaunt() : canAct && wasPressed(this.keys.taunt);
+        if (tauntPressed && this.state !== "swing") {
             this.taunt();
             return;
         }
 
-        const swingPressed = canAct && wasPressed(this.keys.swing);
-        const dashPressed = canAct && wasPressed(this.keys.dash);
+        const swingPressed = this.brain !== null ? this.brain.takeSwing() : canAct && wasPressed(this.keys.swing);
+
+        if (this.mounted) {
+            this.ride(canAct, swingPressed);
+            return;
+        }
+
+        // A juggernaut holds his wind-up for a moment, then swings
+        if (this.windupTicks > 0) {
+            this.windupTicks--;
+            if (this.windupTicks === 0) {
+                this.release();
+            }
+            return;
+        }
 
         if (this.state === "swing") {
             // Can't move until the whole swing has played, but a swing pressed near the end comes right after it
@@ -1277,7 +1345,7 @@ class Knight {
                 return;
             }
             if (this.swingBuffer > 0 && canAct && this.hasSword) {
-                this.startSwing(false);
+                this.startSwing();
                 return;
             }
         } else if (swingPressed) {
@@ -1286,19 +1354,20 @@ class Knight {
             }
         }
 
-        // A dash can't be steered once it's started
-        if (this.dashTicks > 0) {
-            return;
-        }
-
         const move = canAct ? this.getMoveInput() : {x: 0, y: 0};
 
-        if (dashPressed && this.dashCooldown === 0) {
-            this.startDash(move);
-            return;
+        let moving = move.x !== 0 || move.y !== 0;
+        // A juggernaut takes a moment to turn round, standing still while he does
+        if (moving && this.maxLives > 1 && !this.isMovingToward(this.facing, move)) {
+            this.turnTicks++;
+            if (this.turnTicks < JUGGERNAUT_TURN_TICKS) {
+                moving = false;
+            } else {
+                this.turnTicks = 0;
+            }
+        } else {
+            this.turnTicks = 0;
         }
-
-        const moving = move.x !== 0 || move.y !== 0;
         if (moving) {
             this.faceToward(move);
 
@@ -1398,19 +1467,6 @@ class Knight {
             }
         }
 
-        if (this.dashCooldown > 0) {
-            // Comes back faster with speed boots
-            this.dashCooldown = Math.max(0, this.dashCooldown - (this.speedTicks > 0 ? SPEED_BOOST : 1));
-            if (this.dashCooldown === 0) {
-                // A twinkle on his helmet says he can dash again
-                const helmet = this.scaledPoint(SPRITE_SIZE / 2, 5);
-                particles.glint(helmet.x, helmet.y);
-            }
-        }
-        if (this.dashTicks > 0) {
-            this.dashTicks--;
-        }
-        this.ticksSinceDash++;
     }
 
     // The swing button: shoots if he has a gun, throws his sword if he has a throw, or swings. Returns if it did
@@ -1434,19 +1490,68 @@ class Knight {
             this.throwSword();
             return true;
         }
-        // Swinging out of a dash turns it into a long lunging slash
-        this.startSwing(this.ticksSinceDash <= DASH_SLASH_WINDOW);
+        this.startSwing();
         return true;
     }
 
-    // Lunges, dashes and knockback slide him, even when he's down
+    // On horseback: holding a direction speeds the horse up that way, and it keeps going after you let go. The swing
+    // button spurs it on, for a burst of speed.
+    ride(canAct, spurPressed) {
+        if (this.spurCooldown > 0) this.spurCooldown--;
+        if (this.spurTicks > 0) this.spurTicks--;
+        const move = canAct ? this.getMoveInput() : {x: 0, y: 0};
+        const boost = this.speedTicks > 0 ? SPEED_BOOST : 1;
+
+        if (spurPressed && this.spurCooldown === 0) {
+            this.spurCooldown = JOUST_SPUR_COOLDOWN_TICKS;
+            this.spurTicks = JOUST_SPUR_TICKS;
+            const speed = Math.hypot(this.vx, this.vy);
+            const dir = speed > 0.1 ? {x: this.vx / speed, y: this.vy / speed} : DIRS[this.facing];
+            this.vx += dir.x * JOUST_SPUR;
+            this.vy += dir.y * JOUST_SPUR;
+            popup("CHARGE!", this.getGroundX(), this.getTopY() - 12, this.player.lightTextColor);
+            particles.dust(this.getGroundX(), this.getGroundY(), 5);
+            sound.neigh();
+        }
+        if (move.x !== 0 || move.y !== 0) {
+            const length = Math.hypot(move.x, move.y);
+            this.vx += move.x / length * JOUST_ACCEL * boost;
+            this.vy += move.y / length * JOUST_ACCEL * boost;
+            // The horse faces left or right, whichever way he's steering
+            if (move.x !== 0) {
+                this.facing = move.x > 0 ? "east" : "west";
+            }
+        }
+        // Over top speed (after a spur), it eases back down
+        const most = JOUST_MAX_SPEED * boost * (this.spurTicks > 0 ? JOUST_SPUR_TOP : 1);
+        const speed = Math.hypot(this.vx, this.vy);
+        if (speed > most) {
+            const ease = Math.max(most / speed, 0.97);
+            this.vx *= ease;
+            this.vy *= ease;
+        }
+        const before = Math.floor(this.gallop / 12);
+        this.gallop += speed;
+        if (speed > 0.5 && Math.floor(this.gallop / 12) !== before) {
+            sound.hoof();
+            particles.dust(this.getGroundX() - Math.sign(this.vx) * 8, this.getGroundY(), 1);
+        }
+        this.setState("idle");
+    }
+
+    makeMounted() {
+        this.mounted = true;
+        this.hasSword = false;
+    }
+
+    // Lunges and knockback slide him, even when he's down
     slide(world) {
         if (this.vx === 0 && this.vy === 0) {
             return;
         }
         this.tryMove(this.vx, 0, world);
         this.tryMove(0, this.vy, world);
-        const friction = arena.slippery ? ICE_FRICTION : FRICTION;
+        const friction = this.mounted && !this.dead ? JOUST_FRICTION : arena.slippery ? ICE_FRICTION : FRICTION;
         this.vx *= friction;
         this.vy *= friction;
         if (Math.abs(this.vx) < 0.002) this.vx = 0;
@@ -1481,28 +1586,7 @@ class Knight {
         });
     }
 
-    startDash(move) {
-        if (this.grabTicks > 0) {
-            this.grabTicks = 0;
-            popup("BROKE FREE!", this.getGroundX(), this.getTopY() - 4, "#9cbf88");
-        }
-        let dir = DIRS[this.facing];
-        if (move.x !== 0 || move.y !== 0) {
-            this.faceToward(move);
-            const length = Math.sqrt(move.x * move.x + move.y * move.y);
-            dir = {x: move.x / length, y: move.y / length};
-        }
-        this.vx = dir.x * DASH_SPEED;
-        this.vy = dir.y * DASH_SPEED;
-        this.dashTicks = DASH_TICKS;
-        this.dashCooldown = DASH_COOLDOWN_TICKS;
-        this.ticksSinceDash = 0;
-        this.setState("walk");
-        particles.dust(this.getGroundX(), this.getGroundY(), 3);
-        sound.dash();
-    }
-
-    startSwing(dashSlash) {
+    startSwing() {
         this.checkSwingNearMiss();
         this.setState("swing");
         // A new swing right after another one is still a swing, so it needs starting over by hand. Fury makes it
@@ -1512,20 +1596,9 @@ class Knight {
             this.animations.swing[dir].animationSpeed = this.furyTicks > 0 ? FURY_SWING_SPEED : SWING_SPEED;
         }
         this.swingBuffer = 0;
-        this.swingDodged = false;
+        this.swingSpent = false;
         this.swingHitRock = false;
         this.swingNear = null;
-        this.dashSlash = dashSlash;
-
-        const dir = DIRS[this.facing];
-        if (dashSlash) {
-            // The dash's speed all goes into the slash, the way he's facing
-            this.vx = dir.x * DASH_SLASH_LUNGE;
-            this.vy = dir.y * DASH_SLASH_LUNGE;
-        } else {
-            this.vx += dir.x * LUNGE;
-            this.vy += dir.y * LUNGE;
-        }
 
         // The sword catches the light as he winds up, so the other player can see it coming
         const glint = this.scaledPoint(SWING_GLINTS[this.facing][0], SWING_GLINTS[this.facing][1]);
@@ -1533,13 +1606,27 @@ class Knight {
         if (this.furyTicks > 0) {
             particles.embers(glint.x, glint.y + 4, 3);
         }
+
+        // A juggernaut's swing is slow: he holds the wind-up (which can't hit anything) before it comes
+        if (this.maxLives > 1) {
+            this.windupTicks = JUGGERNAUT_WINDUP_TICKS;
+            return;
+        }
+        this.release();
+    }
+
+    // The swing actually coming round: a step forward and a whoosh
+    release() {
+        const dir = DIRS[this.facing];
+        this.vx += dir.x * LUNGE;
+        this.vy += dir.y * LUNGE;
         particles.dust(this.getGroundX(), this.getGroundY(), 2);
         sound.swing();
     }
 
     // If his swing just missed someone by a hair, that's a close call for them
     checkSwingNearMiss() {
-        if (this.swingNear !== null && !this.swingDodged && !this.swingNear.dead) {
+        if (this.swingNear !== null && !this.swingSpent && !this.swingNear.dead) {
             closeCall(this.swingNear);
         }
         this.swingNear = null;
@@ -1589,6 +1676,13 @@ class Knight {
             // Knights can't walk through each other (but can walk over one that's down)
             || world.knights.some(other => other !== this && !other.dead && !this.dead && boxesOverlap(feet, other.getFeetBox()));
         if (blocked) {
+            if (this.mounted && !this.dead) {
+                // A horse bounces off the fence
+                if (dx !== 0) this.vx = -this.vx * 0.5;
+                if (dy !== 0) this.vy = -this.vy * 0.5;
+                particles.dust(this.getGroundX(), this.getGroundY(), 2);
+                return false;
+            }
             // Stops a push into a wall, so it doesn't keep pushing
             if (dx !== 0) this.vx = 0;
             if (dy !== 0) this.vy = 0;
@@ -1699,35 +1793,9 @@ class Knight {
         particles.dust(this.getGroundX(), this.getGroundY(), 4);
     }
 
-    // Swords and boulders go right through him while he's dashing
-    isDodging() {
-        return this.dashTicks > 0;
-    }
-
+    // For a moment after his shield breaks (and so on) nothing can hit him
     isInvulnerable() {
-        return this.isDodging() || this.graceTicks > 0;
-    }
-
-    // Frozen in ice by the other knight. A shield takes it instead.
-    freeze() {
-        if (this.shield) {
-            this.breakShield(0, 0);
-            return;
-        }
-        this.freezeTicks = FREEZE_TICKS;
-        this.setState("idle");
-        popup("FROZEN!", this.getGroundX(), this.getTopY() - 4, "#aad4ff");
-        particles.shards(this.getGroundX(), this.getGroundY(), 8);
-        sound.freeze();
-    }
-
-    thaw() {
-        particles.shards(this.getGroundX(), this.getGroundY(), 14);
-        sound.shatter();
-    }
-
-    isFrozen() {
-        return this.freezeTicks > 0;
+        return this.graceTicks > 0;
     }
 
     // His shield takes the hit instead of him
@@ -1780,6 +1848,10 @@ class Knight {
     }
 
     getBodyBox() {
+        if (this.mounted && !this.dead) {
+            // The horse and rider together
+            return {left: this.getGroundX() - 11, right: this.getGroundX() + 11, top: this.getGroundY() - 22, bottom: this.getGroundY()};
+        }
         return this.scaledBox(BODY_BOXES[this.facing]);
     }
 
@@ -1806,7 +1878,7 @@ class Knight {
 
     swordReaches(other) {
         const swordBox = this.getSwordBox();
-        if (other.dead || this.swingDodged || swordBox === null) {
+        if (other.dead || this.swingSpent || swordBox === null) {
             return false;
         }
         const reaches = boxesOverlap(swordBox, other.getBodyBox());
@@ -1890,10 +1962,6 @@ class Knight {
         this.checkSwingNearMiss();
         this.dead = true;
         this.deadTicks = 0;
-        if (this.isFrozen()) {
-            this.freezeTicks = 0;
-            particles.shards(this.getGroundX(), this.getGroundY(), 14);
-        }
         this.shield = false;
         this.speedTicks = 0;
         this.furyTicks = 0;
@@ -1911,7 +1979,7 @@ class Knight {
             drawOval(this.getGroundX() - 1, this.getGroundY() + 1, this.bloodPool * 0.6, this.bloodPool * 0.25, "rgba(150, 20, 20, 0.6)");
         }
         if (this.fallHole === null) {
-            drawShadow(this.getGroundX(), this.getGroundY(), Math.round((this.dead ? 13 : 10) * this.scale));
+            drawShadow(this.getGroundX(), this.getGroundY(), this.mounted && !this.dead ? 22 : Math.round((this.dead ? 13 : 10) * this.scale));
         }
     }
 
@@ -1953,16 +2021,21 @@ class Knight {
         }
 
         const animation = this.getAnimation();
-        MDog.Draw.animation(animation, x, y, {update: false, scale: scale});
-        const overlay = tint => this.drawFrame(animation.fileName, animation.getFrame(), x, y, tint, scale);
+        // On horseback he sits up on the horse
+        if (this.mounted) {
+            this.drawHorse();
+        }
+        const riderY = this.mounted ? y - 9 : y;
+        MDog.Draw.animation(animation, x, riderY, {update: false, scale: scale});
+        const overlay = tint => this.drawFrame(animation.fileName, animation.getFrame(), x, riderY, tint, scale);
+        if (this.mounted) {
+            this.drawLance();
+        }
 
-        if (this.isFrozen()) {
-            overlay("rgba(170, 220, 255, 0.55)");
-            this.drawIce();
-        } else if (this.stunTicks > 0 && Math.floor(this.stunTicks / 4) % 2 === 0) {
+        if (this.stunTicks > 0 && Math.floor(this.stunTicks / 4) % 2 === 0) {
             // Flickers while stunned
             overlay("rgba(255, 255, 255, 0.6)");
-        } else if (this.isDodging() || (this.graceTicks > 0 && Math.floor(this.graceTicks / 4) % 2 === 0)) {
+        } else if (this.graceTicks > 0 && Math.floor(this.graceTicks / 4) % 2 === 0) {
             // Washed out while he can't be hit
             overlay("rgba(255, 255, 255, 0.4)");
         } else if (this.furyTicks > 0) {
@@ -2021,6 +2094,27 @@ class Knight {
         }
     }
 
+    // His horse, galloping faster the faster it goes
+    drawHorse() {
+        const speed = Math.hypot(this.vx, this.vy);
+        const frame = speed < 0.1 ? 0 : Math.floor(this.gallop / 6) % 4;
+        MDog.Draw.image(HORSE_IMAGE, Math.round(this.getGroundX() - HORSE_WIDTH / 2), Math.round(this.getGroundY() - HORSE_HEIGHT), {
+            width: HORSE_WIDTH, offsetX: HORSE_WIDTH * frame, flipX: this.facing === "west",
+        });
+    }
+
+    // His lance, pointing the way he's going
+    drawLance() {
+        const speed = Math.hypot(this.vx, this.vy);
+        const dir = speed > 0.15 ? {x: this.vx / speed, y: this.vy / speed} : {x: this.facing === "west" ? -1 : 1, y: 0};
+        const startX = this.getGroundX() + dir.x * 3;
+        const startY = this.getGroundY() - 14;
+        const endX = startX + dir.x * 16;
+        const endY = startY + dir.y * 10;
+        MDog.Draw.line(startX, startY, endX, endY, "#8a5a2c");
+        MDog.Draw.rectangleFill(Math.round(endX), Math.round(endY), 1, 1, "#e0e0e8");
+    }
+
     // A little musket in his hands
     drawGun() {
         const [start, end] = GUN_LINES[this.facing];
@@ -2054,19 +2148,6 @@ class Knight {
         const shine = this.scaledPoint(SPRITE_SIZE / 2 - 6, 4);
         MDog.Draw.rectangleFill(Math.round(shine.x), Math.round(shine.y), 2, 1, "rgba(255, 255, 255, 0.8)");
         MDog.Draw.rectangleFill(Math.round(shine.x) - 1, Math.round(shine.y) + 1, 1, 1, "rgba(255, 255, 255, 0.8)");
-    }
-
-    // A block of ice around his body, with a shine on it
-    drawIce() {
-        const body = this.getBodyBox();
-        const left = Math.round(body.left) - 2;
-        const top = Math.round(body.top) - 2;
-        const width = Math.round(body.right) - left + 2;
-        const height = Math.round(body.bottom) - top + 1;
-        MDog.Draw.rectangleFill(left, top, width, height, "rgba(190, 230, 255, 0.25)");
-        MDog.Draw.rectangle(left, top, width, height, "rgba(225, 245, 255, 0.85)");
-        MDog.Draw.rectangleFill(left + 2, top + 2, 1, 3, "rgba(255, 255, 255, 0.9)");
-        MDog.Draw.rectangleFill(left + 3, top + 2, 1, 1, "rgba(255, 255, 255, 0.9)");
     }
 
     // Whoever's winning wears a little crown over his plume
@@ -2714,7 +2795,7 @@ class Canyon {
 
     update() {
         for (const knight of knights) {
-            if (!knight.dead && !knight.isDodging()) {
+            if (!knight.dead) {
                 this.weigh(knight.getGroundX(), knight.getGroundY(), knight.scale);
             }
         }
@@ -2822,7 +2903,7 @@ class Grave {
             this.cooldown--;
         }
         if (this.state === "hidden") {
-            const victim = knights.find(knight => !knight.dead && !knight.isDodging() && Math.hypot(knight.getGroundX() - this.x, knight.getGroundY() - this.y) < 11);
+            const victim = knights.find(knight => !knight.dead && Math.hypot(knight.getGroundX() - this.x, knight.getGroundY() - this.y) < 11);
             if (victim !== undefined && this.cooldown === 0 && phase === "playing") {
                 this.state = "rising";
                 this.ticks = 0;
@@ -2832,7 +2913,7 @@ class Grave {
             }
         } else if (this.state === "rising" && this.ticks >= HAND_RISE_TICKS) {
             const target = this.target;
-            if (!target.dead && !target.isDodging() && Math.hypot(target.getGroundX() - this.x, target.getGroundY() - this.y) < 15) {
+            if (!target.dead && Math.hypot(target.getGroundX() - this.x, target.getGroundY() - this.y) < 15) {
                 target.grab();
                 this.state = "holding";
             } else {
@@ -3147,7 +3228,7 @@ class Chicken {
                 this.move(0, dy / length * CHICKEN_SPEED);
             }
             // Peck!
-            if (this.peckCooldown === 0 && boxesOverlap(this.getBox(), target.getBodyBox()) && !target.isInvulnerable() && !target.isFrozen()) {
+            if (this.peckCooldown === 0 && boxesOverlap(this.getBox(), target.getBodyBox()) && !target.isInvulnerable()) {
                 target.peck(dx / length, dy / length);
                 this.peckCooldown = PECK_COOLDOWN_TICKS;
             }
@@ -3490,8 +3571,10 @@ class Bear {
 
 // Lightning striking on its own, at random places and near the knights
 class Storm {
-    constructor() {
-        this.wait = random(STORM_MIN_WAIT_TICKS, STORM_MAX_WAIT_TICKS);
+    // slower makes the strikes further apart
+    constructor(slower) {
+        this.slower = slower ?? 1;
+        this.wait = random(STORM_MIN_WAIT_TICKS, STORM_MAX_WAIT_TICKS) * this.slower;
     }
 
     update() {
@@ -3500,7 +3583,7 @@ class Storm {
         }
         this.wait--;
         if (this.wait <= 0) {
-            this.wait = random(STORM_MIN_WAIT_TICKS, STORM_MAX_WAIT_TICKS);
+            this.wait = random(STORM_MIN_WAIT_TICKS, STORM_MAX_WAIT_TICKS) * this.slower;
             const near = pick(knights.filter(knight => !knight.dead));
             let spot = null;
             if (near !== undefined && Math.random() < 0.5) {
@@ -3705,7 +3788,7 @@ class Quicksand {
             if (knight.dead) {
                 continue;
             }
-            if (!knight.isDodging() && this.contains(knight.getGroundX(), knight.getGroundY())) {
+            if (this.contains(knight.getGroundX(), knight.getGroundY())) {
                 knight.inSand = 2; // still in it next tick
                 // Struggling slows the sinking, but doesn't stop it
                 const before = knight.sinkTicks;
@@ -3792,32 +3875,44 @@ class TumbleweedSpawner {
 
 // ----- The lighthouse -----
 
-// Its beam sweeps around the island, lighting up everything it passes
+// Two beams, pointing opposite ways, sweep around the island from the lamp at the top of the tower. They're the
+// only light there is. They start out pointing at the two knights, who start on opposite sides of the lamp.
 class LighthouseBeam {
-    constructor(x, y) {
-        this.x = x; // the lamp
-        this.y = y;
-        this.angle = random(0, Math.PI * 2);
+    constructor(lampX, lampY) {
+        this.x = lampX;
+        this.y = lampY;
+        // Pointing at blue's start (and the other beam at red's). Beams are squashed up and down, like the ground.
+        const start = arena.starts[1];
+        this.angle = Math.atan2((start.y - 6 - lampY) / 0.7, start.x - lampX);
     }
 
     update() {
         this.angle += LIGHTHOUSE_TURN_SPEED;
     }
 
-    getLights() {
-        const lights = [{x: this.x, y: this.y, r: 12}];
-        for (let distance = 18; distance < 190; distance += 12) {
-            lights.push({x: this.x + Math.cos(this.angle) * distance, y: this.y + Math.sin(this.angle) * distance * 0.7, r: 5 + distance * 0.2});
+    // The spots along both beams, from near the tower out past the edge of the island
+    getBeamSpots() {
+        const spots = [];
+        for (const angle of [this.angle, this.angle + Math.PI]) {
+            for (let distance = 10; distance < 190; distance += 10) {
+                spots.push({
+                    x: this.x + Math.cos(angle) * distance,
+                    y: this.y + Math.sin(angle) * distance * 0.7,
+                    r: (5 + distance * 0.2) * LIGHTHOUSE_BEAM_WIDTH,
+                });
+            }
         }
-        return lights;
+        return spots;
     }
 
-    // A faint warm glow along the beam, over the darkness
+    getLights() {
+        return this.getBeamSpots();
+    }
+
+    // A faint warm glow along the beams, and the lamp itself shining
     drawSky() {
-        for (let distance = 18; distance < 190; distance += 12) {
-            const x = this.x + Math.cos(this.angle) * distance;
-            const y = this.y + Math.sin(this.angle) * distance * 0.7;
-            drawOval(x, y, 3 + distance * 0.12, (3 + distance * 0.12) * 0.7, "rgba(255, 240, 180, 0.07)");
+        for (const spot of this.getBeamSpots()) {
+            drawOval(spot.x, spot.y, spot.r * 0.6, spot.r * 0.42, "rgba(255, 240, 180, 0.06)");
         }
         drawOval(this.x, this.y, 3, 2, "rgba(255, 250, 200, 0.9)");
     }
@@ -3863,7 +3958,7 @@ class Tornado {
         for (const knight of knights) {
             const cooldown = this.caught.get(knight) ?? 0;
             this.caught.set(knight, Math.max(0, cooldown - 1));
-            if (knight.dead || knight.isDodging()) {
+            if (knight.dead) {
                 continue;
             }
             const dx = this.x - knight.getGroundX();
@@ -3918,6 +4013,247 @@ class Tornado {
     }
 }
 
+// ----- The lava lake -----
+
+// Two rock shores with a lake of lava between them, and stone rafts drifting back and forth across it. Anyone
+// standing on a raft is carried along. Anywhere that isn't a shore or a raft is lava.
+class LavaLake {
+    constructor(shores, rafts) {
+        this.shores = shores.map(([left, top, right, bottom]) => ({left, top, right, bottom}));
+        this.rafts = rafts.map(raft => ({...raft, box: null}));
+        this.style = "lava";
+        this.cracked = false;
+        this.ticks = 0;
+        for (const raft of this.rafts) {
+            raft.box = this.raftBox(raft);
+        }
+    }
+
+    // Where a raft is now: it drifts back and forth along its axis
+    raftBox(raft) {
+        const offset = Math.sin(this.ticks * raft.speed + raft.phase) * raft.range;
+        const x = raft.x + (raft.axis === "x" ? offset : 0);
+        const y = raft.y + (raft.axis === "y" ? offset : 0);
+        return {left: x - raft.w / 2, right: x + raft.w / 2, top: y - raft.h / 2, bottom: y + raft.h / 2};
+    }
+
+    isOnShore(x, y) {
+        return this.shores.some(box => x >= box.left && x < box.right && y >= box.top && y < box.bottom);
+    }
+
+    raftAt(x, y) {
+        return this.rafts.find(raft => x >= raft.box.left && x < raft.box.right && y >= raft.box.top && y < raft.box.bottom);
+    }
+
+    contains(x, y) {
+        return !this.isOnShore(x, y) && this.raftAt(x, y) === undefined;
+    }
+
+    // Only the shores count as safe for putting things down, since the rafts move away
+    isNear(x, y, margin) {
+        return [[x, y], [x - margin, y], [x + margin, y], [x, y - margin], [x, y + margin]].some(([px, py]) => !this.isOnShore(px, py));
+    }
+
+    getFallSpot(x, y) {
+        return {x, y};
+    }
+
+    update() {
+        this.ticks++;
+        for (const raft of this.rafts) {
+            const before = raft.box;
+            const after = this.raftBox(raft);
+            const dx = after.left - before.left;
+            const dy = after.top - before.top;
+            // Carries whoever's standing on it (unless they're on the shore it's touching)
+            for (const knight of knights) {
+                const x = knight.getGroundX();
+                const y = knight.getGroundY();
+                if (!knight.dead && !this.isOnShore(x, y) && x >= before.left && x < before.right && y >= before.top && y < before.bottom) {
+                    knight.x += dx;
+                    knight.y += dy;
+                }
+            }
+            raft.box = after;
+        }
+        if (Math.random() < 0.08) {
+            particles.embers(random(40, 200), random(20, SCREEN_HEIGHT), 1);
+        }
+    }
+
+    draw() {
+        // Bubbles popping in the lava
+        for (let i = 0; i < 6; i++) {
+            const phase = (this.ticks / 50 + i * 0.37) % 1;
+            if (phase < 0.5) {
+                const x = 50 + (i * 53) % 140;
+                const y = 20 + (i * 71) % 150;
+                MDog.Draw.rectangleFill(x, y, phase < 0.25 ? 1 : 2, 1, "#ffe080");
+            }
+        }
+        for (const raft of this.rafts) {
+            const box = raft.box;
+            const left = Math.round(box.left);
+            const top = Math.round(box.top);
+            const width = Math.round(box.right - box.left);
+            const height = Math.round(box.bottom - box.top);
+            MDog.Draw.rectangleFill(left - 1, top + 1, width + 2, height, "#f08a30"); // glowing edge
+            MDog.Draw.rectangleFill(left, top, width, height, "#4a3a3c");
+            MDog.Draw.rectangleFill(left, top, width, 1, "#6c5a5a");
+            MDog.Draw.rectangleFill(left, top + height - 1, width, 1, "#2e2224");
+            MDog.Draw.rectangleFill(left + Math.round(width * 0.3), top + 3, 1, height - 6, "#2e2224");
+            MDog.Draw.rectangleFill(left + Math.round(width * 0.65), top + 2, 1, Math.max(1, height - 8), "#2e2224");
+        }
+    }
+}
+
+// ----- The title screen's knights -----
+
+// Plays a knight on the title screen: circling, rushing in to swing, backing off, wandering, now and then taunting
+class DemoBrain {
+    constructor(knight, other) {
+        this.knight = knight;
+        this.other = other;
+        this.mode = "circle";
+        this.timer = random(60, 160);
+        this.turn = Math.random() < 0.5 ? 1 : -1;
+        this.move = {x: 0, y: 0};
+        this.swing = false;
+        this.taunt = false;
+        this.spot = null;
+    }
+
+    update() {
+        const knight = this.knight;
+        const dx = this.other.getGroundX() - knight.getGroundX();
+        const dy = this.other.getGroundY() - knight.getGroundY();
+        const distance = Math.hypot(dx, dy) || 1;
+        this.timer--;
+        if (this.timer <= 0) {
+            this.pickMode(distance);
+        }
+
+        let wantX = 0;
+        let wantY = 0;
+        if (this.mode === "circle") {
+            // Around the other knight, keeping about 40 pixels away
+            const inOut = Math.max(-1, Math.min(1, (distance - 40) / 20));
+            wantX = (dx / distance) * inOut - (dy / distance) * this.turn;
+            wantY = (dy / distance) * inOut + (dx / distance) * this.turn;
+        } else if (this.mode === "attack") {
+            wantX = dx / distance;
+            wantY = dy / distance;
+            if (distance < 16) {
+                this.swing = true;
+                this.mode = "retreat";
+                this.timer = random(40, 70);
+            }
+        } else if (this.mode === "retreat") {
+            wantX = -dx / distance;
+            wantY = -dy / distance;
+        } else if (this.mode === "wander") {
+            const toX = this.spot.x - knight.getGroundX();
+            const toY = this.spot.y - knight.getGroundY();
+            const length = Math.hypot(toX, toY) || 1;
+            if (length < 6) {
+                this.timer = 0;
+            }
+            wantX = toX / length;
+            wantY = toY / length;
+        }
+        // Like pressing arrow keys: each way is on or off
+        this.move = {x: Math.abs(wantX) > 0.38 ? Math.sign(wantX) : 0, y: Math.abs(wantY) > 0.38 ? Math.sign(wantY) : 0};
+    }
+
+    pickMode(distance) {
+        const roll = Math.random();
+        if (roll < 0.35) {
+            this.mode = "circle";
+            this.turn = Math.random() < 0.5 ? 1 : -1;
+            this.timer = random(80, 180);
+        } else if (roll < 0.7) {
+            this.mode = "attack";
+            this.timer = random(90, 160);
+        } else if (roll < 0.85) {
+            this.mode = "wander";
+            this.spot = {x: random(30, SCREEN_WIDTH - 30), y: random(50, SCREEN_HEIGHT - 20)};
+            this.timer = random(100, 200);
+        } else if (roll < 0.95 || distance < 40) {
+            this.mode = "retreat";
+            this.timer = random(40, 80);
+        } else {
+            this.taunt = true;
+            this.mode = "circle";
+            this.timer = random(120, 200);
+        }
+    }
+
+    takeSwing() {
+        const swing = this.swing;
+        this.swing = false;
+        return swing;
+    }
+
+    takeTaunt() {
+        const taunt = this.taunt;
+        this.taunt = false;
+        return taunt;
+    }
+}
+
+// ----- Jousting -----
+
+// Two jousting knights colliding: if they're going about as fast as each other, they both bounce off. Otherwise the
+// faster one unhorses the slower one (which checkHits sees through findDanger).
+function checkJousts() {
+    if (!arena.joust) {
+        return;
+    }
+    const [a, b] = knights;
+    if (a.dead || b.dead || !boxesOverlap(a.getBodyBox(), b.getBodyBox())) {
+        return;
+    }
+    const speedA = Math.hypot(a.vx, a.vy);
+    const speedB = Math.hypot(b.vx, b.vy);
+    if (Math.abs(speedA - speedB) > JOUST_TIE) {
+        return;
+    }
+    // Even: lances clash and both are thrown back
+    const awayX = a.getGroundX() - b.getGroundX();
+    const awayY = a.getGroundY() - b.getGroundY();
+    const length = Math.hypot(awayX, awayY) || 1;
+    const bounce = Math.max(speedA, speedB) + 0.8;
+    for (const [knight, sign] of [[a, 1], [b, -1]]) {
+        knight.vx = sign * awayX / length * bounce;
+        knight.vy = sign * awayY / length * bounce;
+        knight.stunTicks = 20;
+        stats[knight.player.color].parries++;
+        knight.lastParry = gameTime;
+    }
+    const spot = {x: (a.getGroundX() + b.getGroundX()) / 2, y: (a.getGroundY() + b.getGroundY()) / 2 - 10};
+    particles.sparks(spot.x, spot.y, 18);
+    popup("CLANG!", spot.x, spot.y - 6, "#ffe680");
+    addShake(4);
+    hitstop = Math.max(hitstop, HITSTOP_CLASH);
+    sound.clang();
+}
+
+// The faster jousting knight, if he's running this one down
+function findJoustDanger(target) {
+    if (!arena.joust) {
+        return null;
+    }
+    const targetSpeed = Math.hypot(target.vx, target.vy);
+    const rider = knights.find(knight => knight !== target && !knight.dead && knight.mounted
+        && boxesOverlap(knight.getBodyBox(), target.getBodyBox())
+        && Math.hypot(knight.vx, knight.vy) > targetSpeed + JOUST_TIE);
+    if (rider === undefined) {
+        return null;
+    }
+    const speed = Math.hypot(rider.vx, rider.vy) || 1;
+    return {cause: "joust", push: {x: rider.vx / speed, y: rider.vy / speed}, source: rider};
+}
+
 // The arena's own features, made fresh each round
 function makeArenaFeatures() {
     const made = [];
@@ -3934,10 +4270,15 @@ function makeArenaFeatures() {
         made.push(new LighthouseBeam(arena.lighthouse.x + 9, arena.lighthouse.y + 3));
     }
     // Things that attack on their own are hazards, which can be turned off in the settings
-    if (settings.get("hazards")) {
+    // (and wait until round 3, since the first rounds are kept simple)
+    if (settings.get("hazards") && getRoundStage() === 2) {
         if (arena.bear !== undefined) made.push(new Bear(arena.bear.x, arena.bear.y));
         if (arena.storm) made.push(new Storm());
         for (const track of arena.tracks ?? []) made.push(new Track(track.y));
+    }
+    if (roundModifier === "lightning") {
+        // Round 2's lightning: like the storm, but not as often
+        made.push(new Storm(1.6));
     }
     return made;
 }
@@ -4152,13 +4493,57 @@ let showHitboxes = false;
 let replayBlowTick = null; // when the kill cam should play back a blow, the tick it happened
 let roundsUntilShowdown = 0;
 let roundsUntilJuggernaut = 0;
+let roundsUntilJoust = 0;
+let roundModifier = null; // round 2's one twist: wind, rain, lightning, holes, horse or catapult
+let roundHazards = []; // which of the arena's hazards are on this round
+let roundBoulders = true; // whether boulders roll in this round
+
+// 0 for the plain first round, 1 for the second round with one twist, 2 for everything after that
+function getRoundStage() {
+    return roundNumber <= 1 ? 0 : roundNumber === 2 ? 1 : 2;
+}
+
+const MODIFIER_LABELS = {lightning: "LIGHTNING STORM", holes: "SHAKY GROUND", horse: "RUNAWAY HORSES", catapult: "CATAPULT FIRE"};
+
+// Which hazards (and whether boulders) are on this round. The first two rounds are set: boulders, and round 2's
+// twist if it's a horse or catapult. After that it's random, like the weather.
+function pickRoundHazards() {
+    roundBoulders = getRoundStage() < 2 || Math.random() < BOULDER_ROUND_CHANCE;
+    roundHazards = [];
+    if (!settings.get("hazards")) {
+        return;
+    }
+    if (getRoundStage() < 2) {
+        if (roundModifier === "horse" || roundModifier === "catapult") {
+            roundHazards = [roundModifier];
+        }
+        return;
+    }
+    const kinds = [...new Set(arena.hazards)].filter(() => Math.random() < HAZARD_ROUND_CHANCE);
+    while (kinds.length > MAX_ROUND_HAZARDS) {
+        kinds.splice(Math.floor(Math.random() * kinds.length), 1);
+    }
+    roundHazards = kinds;
+}
+
+// Round 2's twist, from whatever the settings allow
+function pickRoundModifier() {
+    if (roundNumber !== 2) {
+        return null;
+    }
+    const options = [];
+    if (settings.get("weather")) options.push("wind", "rain");
+    if (settings.get("hazards")) options.push("lightning", "horse", "catapult");
+    if (settings.get("shiftingGround")) options.push("holes");
+    return options.length > 0 ? pick(options) : null;
+}
 let juggernaut = null; // the knight who's the juggernaut this round, if anyone
 let calmTicks = 0; // since anyone got hit, for the chickens
 let replayReason = null; // why the knockdown being replayed was cool
 let aftermath = false; // after the match's replay: everything holds still except the blood
 let gameTime = 0; // ticks the game has moved on, for how long ago things happened
 
-// Swing and dash are read by physical key (so left and right shift are different keys), and are kept until the
+// Swing and taunt are read by physical key (so they work the same on any keyboard layout), and are kept until the
 // game uses them, so a press during hitstop isn't lost
 const pressedCodes = new Set();
 window.addEventListener("keydown", e => {
@@ -4193,7 +4578,7 @@ function startMatch() {
     worstDeficit = {};
     for (const player of PLAYERS) {
         scores[player.color] = 0;
-        stats[player.color] = {parries: 0, dodges: 0, deflects: 0, powerups: 0, taunts: 0};
+        stats[player.color] = {parries: 0, deflects: 0, powerups: 0, taunts: 0};
         worstDeficit[player.color] = 0;
     }
     roundNumber = 0;
@@ -4201,6 +4586,7 @@ function startMatch() {
     streak = 0;
     roundsUntilShowdown = Math.floor(random(SHOWDOWN_MIN_ROUNDS, SHOWDOWN_MAX_ROUNDS + 1));
     roundsUntilJuggernaut = Math.floor(random(3, 6));
+    roundsUntilJoust = Math.floor(random(4, 7));
     marks.clear();
     killCam.clear();
     startRound();
@@ -4210,18 +4596,26 @@ function startMatch() {
 // every few rounds
 function pickArena() {
     const choice = settings.get("arena");
-    if (choice !== "MIXED" && ARENAS[choice] !== undefined) {
+    if (choice !== "MIXED" && ARENAS[choice] !== undefined && !ARENAS[choice].disabled) {
         return choice;
     }
     if (roundNumber === 1) {
         return "MEADOW";
+    }
+    if (roundNumber === 2) {
+        return pick(["MEADOW", "RIVER"]);
     }
     roundsUntilShowdown--;
     if (roundsUntilShowdown <= 0) {
         roundsUntilShowdown = Math.floor(random(SHOWDOWN_MIN_ROUNDS, SHOWDOWN_MAX_ROUNDS + 1));
         return "SHOWDOWN";
     }
-    return pick(Object.keys(ARENAS).filter(name => name !== arenaName && !ARENAS[name].special));
+    roundsUntilJoust--;
+    if (roundsUntilJoust <= 0) {
+        roundsUntilJoust = Math.floor(random(JOUST_MIN_ROUNDS, JOUST_MAX_ROUNDS + 1));
+        return "JOUST";
+    }
+    return pick(Object.keys(ARENAS).filter(name => name !== arenaName && !ARENAS[name].special && !ARENAS[name].disabled));
 }
 
 function setArena(name) {
@@ -4247,12 +4641,23 @@ function setArena(name) {
     if (arena.platform !== undefined) {
         holes.push(new Platform(arena.platform));
     }
+    if (arena.rafts !== undefined) {
+        holes.push(new LavaLake(arena.shores, arena.rafts));
+    }
     features = makeArenaFeatures();
     critters = [];
     for (let i = 0; i < (CRITTER_COUNT[arena.critters] ?? 0); i++) {
         critters.push(new Critter(arena.critters));
     }
-    const kind = settings.get("weather") ? pick(arena.weathers) : "clear";
+    // Clear for the first round, only round 2's twist if that's wind or rain, then whatever the arena has
+    let kind = "clear";
+    if (settings.get("weather")) {
+        if (getRoundStage() === 2) {
+            kind = pick(arena.weathers);
+        } else if (roundModifier === "wind" || roundModifier === "rain") {
+            kind = roundModifier;
+        }
+    }
     weather = new Weather(kind, SCREEN_WIDTH, SCREEN_HEIGHT, arena.slippery ? 0.25 : 1);
     sound.setAmbience(weather.getAmbience());
     music.setSong(arena.music);
@@ -4260,7 +4665,9 @@ function setArena(name) {
 
 function startRound() {
     roundNumber++;
+    roundModifier = pickRoundModifier();
     setArena(pickArena());
+    pickRoundHazards();
     knights = PLAYERS.map(player => new Knight(player));
     if (arena.guns) {
         // A showdown: guns instead of swords, and they never run out
@@ -4269,12 +4676,18 @@ function startRound() {
             knight.gunAmmo = Infinity;
         }
     }
+    if (arena.joust) {
+        // A joust: both on horseback, with lances instead of swords
+        for (const knight of knights) {
+            knight.makeMounted();
+        }
+    }
     // Every few rounds, whoever's behind is the juggernaut (but not in a showdown or sumo, and it waits for the
     // next round if it lands on one)
     juggernaut = null;
-    if (settings.get("juggernaut") && roundNumber > 1) {
+    if (settings.get("juggernaut") && getRoundStage() === 2) {
         roundsUntilJuggernaut--;
-        if (roundsUntilJuggernaut <= 0 && !arena.guns && !arena.sumo) {
+        if (roundsUntilJuggernaut <= 0 && !arena.guns && !arena.sumo && !arena.joust) {
             roundsUntilJuggernaut = Math.floor(random(JUGGERNAUT_MIN_ROUNDS, JUGGERNAUT_MAX_ROUNDS + 1));
             const [red, blue] = knights;
             juggernaut = scores.red < scores.blue ? red : scores.blue < scores.red ? blue : pick(knights);
@@ -4333,7 +4746,7 @@ function nextBoulderWait() {
 }
 
 function updateBoulders() {
-    if (phase === "playing" && !arena.noBoulders) {
+    if (phase === "playing" && roundBoulders && !arena.noBoulders) {
         boulderWait--;
         if (boulderWait <= 0) {
             const boulder = new Boulder();
@@ -4383,7 +4796,8 @@ function findClearSpot(knightDistance) {
 
 function updatePowerups() {
     // There's always one on the field: a new one comes soon after the last one's gone
-    const allowed = SPAWNING_POWERUPS.filter(type => settings.isPowerupOn(type) && !(arena.guns && SHOWDOWN_SKIPS.includes(type)));
+    const allowed = SPAWNING_POWERUPS.filter(type => settings.isPowerupOn(type) && !(arena.guns && SHOWDOWN_SKIPS.includes(type))
+        && !(arena.joust && JOUST_SKIPS.includes(type)));
     if (phase === "playing" && powerups.length === 0 && allowed.length > 0) {
         powerupWait--;
         if (powerupWait <= 0) {
@@ -4414,11 +4828,12 @@ function updatePowerups() {
 }
 
 function updateHazards(walls) {
-    if (phase === "playing" && settings.get("hazards")) {
+    // Only the ones picked for this round
+    if (phase === "playing" && roundHazards.length > 0) {
         hazardWait--;
         if (hazardWait <= 0) {
             hazardWait = random(HAZARD_MIN_WAIT, HAZARD_MAX_WAIT);
-            const kind = pick(arena.hazards);
+            const kind = pick(roundHazards);
             if (kind === "horse") {
                 horses.push(new Horse());
             } else if (kind === "dragon") {
@@ -4439,7 +4854,7 @@ function updateHazards(walls) {
     }
 
     // The ground cracking open
-    if (phase === "playing" && settings.get("shiftingGround") && !arena.solidGround) {
+    if (phase === "playing" && settings.get("shiftingGround") && !arena.solidGround && (getRoundStage() === 2 || roundModifier === "holes")) {
         holeWait--;
         if (holeWait <= 0) {
             holeWait = random(HOLE_MIN_WAIT, HOLE_MAX_WAIT);
@@ -4465,8 +4880,8 @@ function updateHazards(walls) {
         strike.update();
     }
 
-    // Chickens, when nobody's been hit for a while
-    if (phase === "playing" && settings.get("hazards")) {
+    // Chickens, when nobody's been hit for a while (from round 3 on)
+    if (phase === "playing" && settings.get("hazards") && getRoundStage() === 2) {
         calmTicks++;
         if (calmTicks >= CHICKEN_FIRST_TICKS && (calmTicks - CHICKEN_FIRST_TICKS) % CHICKEN_EVERY_TICKS === 0) {
             spawnChicken();
@@ -4534,7 +4949,6 @@ const POWERUP_NAMES = {
     thunder: ["THUNDER!", "#ffe680", [255, 240, 140]],
     grow: ["BIG!", "#ff8070", [224, 80, 64]],
     avalanche: ["AVALANCHE!", "#d8d4e0", [176, 172, 184]],
-    freeze: ["FREEZE!", "#aad4ff", [170, 210, 250]],
     fury: ["FURY!", "#ff8a30", [255, 138, 48]],
     throw: ["THROW SWORD!", "#e8e8f0", [230, 230, 240]],
     reverse: ["REVERSE!", "#c890f0", [190, 110, 230]],
@@ -4568,10 +4982,6 @@ function givePowerup(knight, type) {
     } else if (type === "thunder") {
         for (const other of others) {
             strikes.push(new Strike(other, knight));
-        }
-    } else if (type === "freeze") {
-        for (const other of others) {
-            other.freeze();
         }
     } else if (type === "reverse") {
         for (const other of others) {
@@ -4633,7 +5043,15 @@ function checkSwords() {
             feature.onSword?.(knight, swordBox);
         }
 
-        // Cutting the grass
+        // Cutting the grass: tall grass gets chopped down, and on grassy ground the sword shaves a lighter streak
+        for (const row of grassRows) {
+            row.cutBox(swordBox);
+        }
+        if (arena.grassy && Math.random() < 0.6) {
+            const groundY = Math.max(knight.getGroundY() - 3, Math.min(knight.getGroundY() + 4, swordBox.bottom));
+            const color = Math.random() < 0.6 ? "rgba(160, 210, 120, 0.6)" : "rgba(40, 80, 30, 0.4)";
+            marks.dot(random(swordBox.left, swordBox.right), groundY + random(-1, 1), 1, 1, color);
+        }
         if (Math.random() < (isInTallGrass(knight.getGroundX(), knight.getGroundY()) ? 0.8 : 0.3)) {
             const spot = boxCenter(swordBox);
             particles.clippings(spot.x, spot.y + 3, 1);
@@ -4701,6 +5119,10 @@ function checkSwords() {
 
 // What would hit this knight right now, if anything: {cause, push, source}
 function findDanger(target) {
+    const joust = findJoustDanger(target);
+    if (joust !== null) {
+        return joust;
+    }
     const attacker = knights.find(attacker => attacker !== target && attacker.swordReaches(target));
     if (attacker !== undefined) {
         return {cause: "sword", push: DIRS[attacker.facing], source: attacker};
@@ -4744,7 +5166,7 @@ function getKnockdownWord(hit) {
     const words = {
         thrown: "BULLSEYE!", boulder: "CRUSHED!", horse: "TRAMPLED!", lightning: "ZAPPED!", rock: "SQUASHED!",
         fireball: "TOASTED!", explosion: "KABOOM!", fire: "TOASTED!", bear: "MAULED!", minecart: "RUN OVER!",
-        quicksand: "SWALLOWED!",
+        quicksand: "SWALLOWED!", joust: "UNHORSED!",
     };
     if (hit.cause === "fall" && arena.sumo) {
         return "RING OUT!";
@@ -4761,7 +5183,7 @@ function getKnockdownWord(hit) {
 // Whatever hit a shield or a juggernaut's heart is used up
 function useUp(danger) {
     if (danger.cause === "sword") {
-        danger.source.swingDodged = true;
+        danger.source.swingSpent = true;
     } else if (danger.cause === "boulder") {
         danger.source.crash();
     } else if (danger.cause === "bullet") {
@@ -4802,8 +5224,8 @@ function checkHits() {
             continue;
         }
 
-        // Falling in (but not while dashing, since that's in the air)
-        const hole = target.isDodging() ? undefined : holes.find(hole => hole.contains(target.getGroundX(), target.getGroundY()));
+        // Falling in
+        const hole = holes.find(hole => hole.contains(target.getGroundX(), target.getGroundY()));
         if (hole !== undefined) {
             hits.push({target, cause: "fall", push: {x: 0, y: 0}, source: hole});
             continue;
@@ -4814,16 +5236,6 @@ function checkHits() {
             continue;
         }
 
-        if (target.isDodging()) {
-            // Went right through him
-            if (danger.cause === "sword" && !danger.source.swingDodged) {
-                danger.source.swingDodged = true;
-                stats[target.player.color].dodges++;
-                target.lastDodge = gameTime;
-                popup("DODGE!", target.getGroundX(), target.y, "#ffffff");
-            }
-            continue;
-        }
         if (target.isInvulnerable()) {
             continue;
         }
@@ -4832,7 +5244,7 @@ function checkHits() {
             // The shield takes it, and whatever hit it is used up
             target.breakShield(danger.push.x, danger.push.y);
             if (danger.cause === "sword") {
-                danger.source.swingDodged = true;
+                danger.source.swingSpent = true;
             } else if (danger.cause === "boulder") {
                 danger.source.crash();
             } else if (danger.cause === "bullet") {
@@ -4850,7 +5262,7 @@ function checkHits() {
             // In sumo nothing knocks you down, it just shoves you (hopefully into the water)
             target.shove(danger.push);
             if (danger.cause === "sword") {
-                danger.source.swingDodged = true;
+                danger.source.swingSpent = true;
             } else if (danger.cause === "boulder") {
                 danger.source.crash();
             } else if (danger.cause === "bullet") {
@@ -4934,6 +5346,9 @@ function getKiller(hit) {
     if (hit.cause === "explosion" || hit.cause === "bear") {
         return hit.source.owner ?? null;
     }
+    if (hit.cause === "joust") {
+        return hit.source;
+    }
     return null;
 }
 
@@ -4953,6 +5368,7 @@ function getCoolReason(hits, winner) {
         [hit.target.maxLives > 1, "GIANT SLAYER"],
         [gameTime - hit.target.lastFling < COOL_RECENT_TICKS, "TORNADO"],
         [hit.cause === "minecart", "RUN OVER"],
+        [hit.cause === "joust" && Math.hypot(killer.vx, killer.vy) > JOUST_MAX_SPEED, "FULL GALLOP"],
         [hit.cause === "explosion", "KABOOM"],
         [hit.cause === "fire", "DRAGON FIRE"],
         [hit.cause === "bear", "MAULED"],
@@ -4964,16 +5380,13 @@ function getCoolReason(hits, winner) {
         [hit.cause === "boulder" && hit.source.deflectedBy === killer && killer !== null, "DEFLECTED BOULDER"],
         [hit.cause === "boulder" && hit.source.owner !== null, "AVALANCHE"],
         [hit.target.reverseTicks > 0, "REVERSED"],
-        [hit.target.isFrozen(), "FROZEN SOLID"],
         [killer !== null && killer.growTicks > 0, "GIANT"],
         [killer !== null && killer.furyTicks > 0, "FURY"],
-        [hit.cause === "sword" && killer.dashSlash, "DASH SLASH"],
         // The arena
         [hit.cause === "horse", "TRAMPLED"],
         [hit.cause === "rock" || hit.cause === "fireball", "FROM ABOVE"],
         // Something the winner just pulled off
         [winner !== null && recent(winner.lastParry), "PARRY COUNTER"],
-        [winner !== null && recent(winner.lastDodge), "DODGE COUNTER"],
         [winner !== null && recent(winner.lastBlock), "SHIELD SAVE"],
         [winner !== null && recent(winner.lastDeflect), "DEFLECT"],
         [winner !== null && recent(winner.lastCloseCall), "CLOSE CALL"],
@@ -5088,20 +5501,28 @@ function updateAftermath() {
 function showTitle() {
     startMatch();
     setPhase("title");
+    const [red, blue] = knights;
+    red.brain = new DemoBrain(red, blue);
+    blue.brain = new DemoBrain(blue, red);
 }
 
 function updateTitle() {
     phaseTicks++;
     const world = {solids: getSolids(), knights};
     for (const knight of knights) {
-        knight.update(world, false);
+        knight.brain?.update();
+        knight.update(world, true);
     }
-    if (phaseTicks % 220 === 110) {
-        knights[Math.floor(phaseTicks / 220) % 2].startSwing(false);
-    }
+    // Their swords clang when they meet (but nobody gets knocked down here)
+    checkSwords();
     for (const critter of critters) {
-        critter.update([]);
+        critter.update(knights.map(knight => ({x: knight.getGroundX(), y: knight.getGroundY()})));
     }
+    for (const effect of [...popups, ...slashes]) {
+        effect.update();
+    }
+    popups = popups.filter(popup => popup.life > 0);
+    marks.update();
     weather.update();
     particles.update();
     if (wasPressed(["Space", "Enter", "NumpadEnter"])) {
@@ -5148,6 +5569,9 @@ function update() {
     updateHazards(walls);
     updateProjectiles(walls);
     checkSwords();
+    if (phase === "playing") {
+        checkJousts();
+    }
     // Once the round's decided, nobody else can go down
     if (phase === "playing") {
         checkHits();
@@ -5212,7 +5636,7 @@ function drawText(text, y, color, size, x) {
 
 // How each knight did, side by side: red's number, what it is, blue's number
 function drawStats() {
-    const rows = [["PARRIES", "parries"], ["DODGES", "dodges"], ["DEFLECTS", "deflects"], ["POWER-UPS", "powerups"], ["TAUNTS", "taunts"]];
+    const rows = [["PARRIES", "parries"], ["DEFLECTS", "deflects"], ["POWER-UPS", "powerups"], ["TAUNTS", "taunts"]];
     rows.forEach(([label, key], i) => {
         const y = 92 + i * 11;
         drawText(label, y, "#ffffff", 1);
@@ -5247,15 +5671,32 @@ function drawWarnings() {
 }
 
 // In the dark forest everything's dark except near the knights and anything that glows. Drawn as strips: dark
-// away from all the lights, dim near them, and clear right by them.
+// away from all the lights, dim near them, and clear right by them. On the lighthouse's island only the beams light
+// anything up, and away from them it's pitch black.
 function drawDarkness() {
     const lights = [];
+    for (const feature of features) {
+        lights.push(...(feature.getLights?.() ?? []));
+    }
+    if (!arena.beamOnly) {
+        addGlowingLights(lights);
+    }
+
+    // A lightning flash lights up everything for a moment
+    const strength = 1 - Math.min(1, flash / (FLASH_TICKS * 0.5));
+    if (strength <= 0) {
+        return;
+    }
+    const dark = `rgba(4, 8, 20, ${(arena.beamOnly ? 1 : 0.8) * strength})`;
+    const dim = `rgba(4, 8, 20, ${(arena.beamOnly ? 0.7 : 0.42) * strength})`;
+    drawLightStrips(lights, dark, dim);
+}
+
+// Everything that gives off a little light of its own: the knights, power-ups, fireflies...
+function addGlowingLights(lights) {
     for (const knight of knights) {
         const glow = arena.knightLight ?? 34;
         lights.push({x: knight.getGroundX(), y: knight.getGroundY() - 8 * knight.scale, r: knight.dead ? glow * 0.5 : glow * Math.max(1, knight.scale * 0.8)});
-    }
-    for (const feature of features) {
-        lights.push(...(feature.getLights?.() ?? []));
     }
     for (const powerup of powerups) lights.push({x: powerup.x, y: powerup.y - 6, r: 14});
     for (const sword of thrownSwords) lights.push({x: sword.x, y: sword.y - sword.z, r: 9});
@@ -5265,68 +5706,66 @@ function drawDarkness() {
     }
     for (const strike of strikes) lights.push({x: strike.x, y: strike.y, r: 16});
     for (const skyRock of skyRocks) lights.push({x: skyRock.x, y: skyRock.y, r: skyRock.style === "fireball" ? 22 : 14});
+}
 
-    // A lightning flash lights up everything for a moment
-    const strength = 1 - Math.min(1, flash / (FLASH_TICKS * 0.5));
-    if (strength <= 0) {
-        return;
-    }
-    const dark = `rgba(4, 8, 20, ${0.8 * strength})`;
-    const dim = `rgba(4, 8, 20, ${0.42 * strength})`;
-
+// Covers the screen in darkness, a strip at a time, leaving the lights clear
+function drawLightStrips(lights, dark, dim) {
+    const clamp = x => Math.max(0, Math.min(SCREEN_WIDTH, Math.round(x)));
     for (let y = 0; y < SCREEN_HEIGHT; y += 2) {
-        // Where each light's dim and bright parts cross this row
-        const spans = [];
+        // Where each light's dim (level 1) and bright (level 2) parts start and stop along this row
+        const events = [];
         for (const light of lights) {
             const dy = (y + 1 - light.y) / 0.8; // a little squashed, like it's lighting up the ground
             for (const [radius, level] of [[light.r, 1], [light.r * 0.6, 2]]) {
                 if (Math.abs(dy) < radius) {
                     const half = Math.sqrt(radius * radius - dy * dy);
-                    spans.push([light.x - half, light.x + half, level]);
+                    const a = clamp(light.x - half);
+                    const b = clamp(light.x + half);
+                    if (b > a) {
+                        events.push([a, level, 1], [b, level, -1]);
+                    }
                 }
             }
         }
-        const edges = [0, SCREEN_WIDTH];
-        for (const [a, b] of spans) {
-            edges.push(Math.max(0, Math.min(SCREEN_WIDTH, Math.round(a))), Math.max(0, Math.min(SCREEN_WIDTH, Math.round(b))));
-        }
-        const sorted = [...new Set(edges)].sort((a, b) => a - b);
-        // Each piece between edges gets the brightest light covering it, and pieces in a row that match are
-        // drawn together
+        events.sort((a, b) => a[0] - b[0]);
+
+        // Goes along the row once, keeping count of how many lights of each level it's inside. Each stretch is as
+        // bright as the brightest light covering it, and only the dark and dim stretches need drawing.
+        const inside = [0, 0, 0];
         let runStart = 0;
-        let runLevel = -1;
-        for (let i = 0; i < sorted.length - 1; i++) {
-            const middle = (sorted[i] + sorted[i + 1]) / 2;
-            let level = 0;
-            for (const [a, b, spanLevel] of spans) {
-                if (middle > a && middle < b && spanLevel > level) {
-                    level = spanLevel;
-                }
+        let runLevel = 0;
+        let i = 0;
+        while (i <= events.length) {
+            const x = i < events.length ? events[i][0] : SCREEN_WIDTH;
+            for (; i < events.length && events[i][0] === x; i++) {
+                inside[events[i][1]] += events[i][2];
             }
-            if (level !== runLevel) {
-                if (runLevel === 0 || runLevel === 1) {
-                    MDog.Draw.rectangleFill(runStart, y, sorted[i] - runStart, 2, runLevel === 0 ? dark : dim);
+            const level = inside[2] > 0 ? 2 : inside[1] > 0 ? 1 : 0;
+            if (level !== runLevel || x === SCREEN_WIDTH) {
+                if (x > runStart && runLevel < 2) {
+                    MDog.Draw.rectangleFill(runStart, y, x - runStart, 2, runLevel === 0 ? dark : dim);
                 }
-                runStart = sorted[i];
+                runStart = x;
                 runLevel = level;
             }
-        }
-        if (runLevel === 0 || runLevel === 1) {
-            MDog.Draw.rectangleFill(runStart, y, SCREEN_WIDTH - runStart, 2, runLevel === 0 ? dark : dim);
+            if (i >= events.length && x === SCREEN_WIDTH) {
+                break;
+            }
         }
     }
 }
 
 function drawTitle() {
-    MDog.Draw.rectangleFill(0, 26, SCREEN_WIDTH, 62, "rgba(10, 16, 10, 0.55)");
+    MDog.Draw.rectangleFill(0, 26, SCREEN_WIDTH, 70, "rgba(10, 16, 10, 0.55)");
     drawText("KNIGHT KNIGHT", 48, "#ffd84a", 3);
     drawText("BY MILO KESTELOOT AND TRENT SCHROER", 74, "#ffffff", 1);
+    drawText("ART BY JAMES MILESTONE", 86, "#d8d8d8", 1);
     if (Math.floor(liveTicks / 50) % 2 === 0) {
         drawText("PRESS SPACE OR ENTER TO START", 122, "#ffffff", 1);
     }
     MDog.Draw.rectangleFill(0, 139, SCREEN_WIDTH, 37, "rgba(10, 16, 10, 0.6)");
-    drawText("RED: WASD, SPACE SWING, L-SHIFT DASH, E TAUNT", 146, PLAYERS[0].lightTextColor, 1);
-    drawText("BLUE: ARROWS, ENTER SWING, R-SHIFT DASH, / TAUNT", 156, PLAYERS[1].lightTextColor, 1);
+    drawText("RED: WASD MOVE, SPACE SWING, E TAUNT", 146, PLAYERS[0].lightTextColor, 1);
+    drawText("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", 156, PLAYERS[1].lightTextColor, 1);
     drawText("ESC IN A MATCH: PAUSE AND SETTINGS", 170, "#c8d4c0", 1);
 }
 
@@ -5340,8 +5779,8 @@ function drawUI() {
 
     if (phase === "ready") {
         drawText(roundNumber === 1 ? "READY" : "ROUND " + roundNumber, 56, "#ffffff", 2);
-        const weatherLabel = weather.getLabel();
-        drawText(arena.title + (weatherLabel !== null ? " - " + weatherLabel : ""), 74, "#e8f0e0", 1);
+        const label = weather.getLabel() ?? MODIFIER_LABELS[roundModifier] ?? null;
+        drawText(arena.title + (label !== null ? " - " + label : ""), 74, "#e8f0e0", 1);
         if (isMatchPoint()) {
             drawText("MATCH POINT", 86, "#ffcc33", 1);
         }
@@ -5351,15 +5790,19 @@ function drawUI() {
         if (arena.sumo) {
             drawText("PUSH THEM INTO THE WATER!", 100, "#ffcc33", 1);
         }
+        if (arena.joust) {
+            drawText("JOUST! THE FASTER RIDER WINS", 100, "#ffcc33", 1);
+            drawText("HOLD A WAY TO GALLOP, SWING TO SPUR", 110, "#ffffff", 1);
+        }
         if (juggernaut !== null) {
             drawText(juggernaut.player.color.toUpperCase() + " IS THE JUGGERNAUT!", 100, juggernaut.player.lightTextColor, 1);
             drawText("HUGE AND SLOW, WITH 3 HEARTS", 110, "#ffcc33", 1);
         }
         if (roundNumber === 1) {
             MDog.Draw.rectangleFill(0, 133, SCREEN_WIDTH, 39, "rgba(10, 16, 10, 0.6)");
-            drawText("RED: WASD, SPACE SWING, L-SHIFT DASH, E TAUNT", 140, PLAYERS[0].lightTextColor, 1);
-            drawText("BLUE: ARROWS, ENTER SWING, R-SHIFT DASH, / TAUNT", 150, PLAYERS[1].lightTextColor, 1);
-            drawText("DASH THEN SWING TO LUNGE.  ESC TO PAUSE", 164, "#ffffff", 1);
+            drawText("RED: WASD MOVE, SPACE SWING, E TAUNT", 140, PLAYERS[0].lightTextColor, 1);
+            drawText("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", 150, PLAYERS[1].lightTextColor, 1);
+            drawText("SWING WHEN THEY SWING TO PARRY.  ESC TO PAUSE", 164, "#ffffff", 1);
         }
     } else if (phase === "playing" && phaseTicks < FIGHT_TEXT_TICKS) {
         drawText("FIGHT!", 60, "#ffffff", 2);
@@ -5525,7 +5968,7 @@ function onOff(on) {
 }
 
 const POWERUP_MENU_NAMES = {
-    shield: "SHIELD", speed: "SPEED", thunder: "THUNDER", grow: "BIG", avalanche: "AVALANCHE", freeze: "FREEZE",
+    shield: "SHIELD", speed: "SPEED", thunder: "THUNDER", grow: "BIG", avalanche: "AVALANCHE",
     fury: "FURY", throw: "THROW SWORD", reverse: "REVERSE", gun: "GUN",
 };
 
@@ -5654,8 +6097,8 @@ function drawMenu() {
     });
 
     if (menu === menus[0]) {
-        drawText("RED: WASD, SPACE SWING, L-SHIFT DASH, E TAUNT", 136, PLAYERS[0].lightTextColor, 1);
-        drawText("BLUE: ARROWS, ENTER SWING, R-SHIFT DASH, / TAUNT", 146, PLAYERS[1].lightTextColor, 1);
+        drawText("RED: WASD MOVE, SPACE SWING, E TAUNT", 136, PLAYERS[0].lightTextColor, 1);
+        drawText("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", 146, PLAYERS[1].lightTextColor, 1);
         drawText("ESC: RESUME", 162, "#c8d4c0", 1);
     } else {
         drawText(menu.hint ?? "LEFT AND RIGHT TO CHANGE.  ESC: BACK", 170, "#8a9a88", 1);
@@ -5690,7 +6133,7 @@ function gameTick() {
 
     if (isPaused()) {
         updateMenu();
-        // Swings and dashes pressed in the menu don't happen when it closes
+        // Swings and taunts pressed in the menu don't happen when it closes
         pressedCodes.clear();
         if (lastTickOfFrame) {
             if (killCam.playing) {

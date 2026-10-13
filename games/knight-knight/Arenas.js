@@ -10,10 +10,12 @@
 //   solidGround: no holes cracking open
 //   special: only comes up now and then, instead of being one of the usual picks
 //   tint: a color laid over everything, fog: drifting fog
+//   disabled: left out of the game for now
 
 const ARENAS = {
     MEADOW: {
         title: "MEADOW",
+        grassy: true, // swords leave cuts in the grass
         field: "knight-knight/field.png",
         fieldColor: "#4a8a3c",
         rockImage: "knight-knight/rock.png",
@@ -30,6 +32,7 @@ const ARENAS = {
     },
     RIVER: {
         title: "RIVER",
+        grassy: true,
         field: "knight-knight/field-river.png",
         fieldColor: "#4a8a3c",
         rockImage: "knight-knight/rock.png",
@@ -56,7 +59,7 @@ const ARENAS = {
         footprint: "rgba(110, 130, 170, 0.5)",
         critters: null,
         weathers: ["snow", "snow", "clear", "wind"],
-        hazards: ["horse", "catapult", "tornado"],
+        hazards: ["catapult", "tornado"],
         music: "snow",
     },
     VOLCANO: {
@@ -72,11 +75,12 @@ const ARENAS = {
         footprint: "rgba(20, 12, 12, 0.35)",
         critters: "embers",
         weathers: ["ash", "ash", "clear", "wind"],
-        hazards: ["fireball", "fireball", "horse"],
+        hazards: ["fireball", "dragon"],
         music: "volcano",
     },
     FOREST: {
         title: "DARK FOREST",
+        grassy: true,
         field: "knight-knight/field-forest.png",
         fieldColor: "#2e5a2c",
         rockImage: "knight-knight/rock.png",
@@ -115,7 +119,7 @@ const ARENAS = {
         footprint: "rgba(120, 90, 50, 0.35)",
         critters: null,
         weathers: ["clear", "clear", "wind"],
-        hazards: ["horse"],
+        hazards: ["catapult"],
         music: "showdown",
     },
     // A dark mine lit by lanterns, with minecarts racing along two tracks
@@ -153,21 +157,43 @@ const ARENAS = {
         footprint: "rgba(150, 110, 60, 0.4)",
         critters: null,
         weathers: ["clear", "wind", "wind"],
-        hazards: ["horse", "tornado", "dragon", "catapult"],
+        hazards: ["tornado", "dragon", "catapult"],
         music: "showdown",
     },
-    // A rocky island at night. The lighthouse's beam sweeping round is most of the light, and the sea is all around.
+    // The jousting yard: an open dirt field inside a fence, for joust rounds (which come up now and then, like the
+    // showdown). Both knights are on horseback.
+    JOUST: {
+        title: "JOUSTING YARD",
+        field: "knight-knight/field-joust.png",
+        fieldColor: "#b09264",
+        rockImage: "knight-knight/rock.png",
+        rocks: [],
+        starts: [{x: 40, y: 96}, {x: 200, y: 96}],
+        bounds: {left: 12, top: 12, right: 228, bottom: 162}, // inside the fence
+        joust: true,
+        special: "joust",
+        solidGround: true,
+        tallGrass: [],
+        holeStyle: "dirt",
+        footprint: "rgba(120, 90, 50, 0.35)",
+        critters: null,
+        weathers: ["clear", "wind"],
+        hazards: [],
+        music: "battle",
+    },
+    // A rocky island at night with the sea all around. The lighthouse's two beams sweeping round are the only light.
     LIGHTHOUSE: {
         title: "LIGHTHOUSE",
         field: "knight-knight/field-lighthouse.png",
         fieldColor: "#16284a",
         rockImage: "knight-knight/rock.png",
-        rocks: [{x: 60, y: 50}, {x: 164, y: 140}, {x: 170, y: 52}, {x: 52, y: 132}],
-        starts: [{x: 60, y: 98}, {x: 180, y: 98}],
+        rocks: [{x: 28, y: 90}, {x: 164, y: 140}, {x: 178, y: 46}, {x: 52, y: 132}],
+        // Opposite each other through the lamp (at 118, 75), so the two beams start on them
+        starts: [{x: 60, y: 56}, {x: 176, y: 94}],
         platform: {x: 120, y: 98, rx: 104, ry: 70}, // the island: off it is the sea
         lighthouse: {x: 109, y: 72},
         dark: true,
-        knightLight: 14,
+        beamOnly: true, // nothing else gives off light: away from the beams it's pitch black
         noBoulders: true,
         solidGround: true,
         tallGrass: [],
@@ -177,6 +203,35 @@ const ARENAS = {
         weathers: ["clear", "rain", "wind"],
         hazards: ["catapult", "tornado"],
         music: "night",
+    },
+    // A lake of lava between two rock shores, with stone rafts drifting back and forth across it that carry whoever's on
+    // them. Rafts are placed by their middle, and drift `range` pixels either way along their axis.
+    LAVALAKE: {
+        title: "LAVA LAKE",
+        field: "knight-knight/field-lavalake.png",
+        fieldColor: "#d6541c",
+        rockImage: "knight-knight/rock-volcano.png",
+        rocks: [],
+        starts: [{x: 20, y: 96}, {x: 220, y: 96}],
+        shores: [[0, 0, 40, 180], [200, 0, 240, 180]],
+        rafts: [
+            {x: 76, y: 50, w: 30, h: 18, axis: "x", range: 30, speed: 0.0056, phase: 0},
+            {x: 164, y: 50, w: 30, h: 18, axis: "x", range: 30, speed: 0.0056, phase: Math.PI},
+            {x: 120, y: 96, w: 26, h: 26, axis: "y", range: 34, speed: 0.0045, phase: 0},
+            {x: 60, y: 96, w: 26, h: 16, axis: "x", range: 14, speed: 0.007, phase: 1},
+            {x: 180, y: 96, w: 26, h: 16, axis: "x", range: 14, speed: 0.007, phase: 1 + Math.PI},
+            {x: 76, y: 142, w: 30, h: 18, axis: "x", range: 30, speed: 0.0056, phase: Math.PI},
+            {x: 164, y: 142, w: 30, h: 18, axis: "x", range: 30, speed: 0.0056, phase: 0},
+        ],
+        noBoulders: true,
+        solidGround: true,
+        tallGrass: [],
+        holeStyle: "lava",
+        footprint: "rgba(20, 12, 12, 0.35)",
+        critters: "embers",
+        weathers: ["ash", "clear"],
+        hazards: ["fireball"],
+        music: "volcano",
     },
     // Two cliffs with plank bridges over a canyon. Planks break if they're stood on too long.
     BRIDGE: {
@@ -201,6 +256,8 @@ const ARENAS = {
     // Tombstones to hide behind, and hands that reach out of the graves for your ankles
     GRAVEYARD: {
         title: "GRAVEYARD",
+        grassy: true,
+        disabled: true, // taken out for now: never picked. Remove this line (and add it back to ARENA_CHOICES) to bring it back.
         field: "knight-knight/field-graveyard.png",
         fieldColor: "#344e34",
         rockImage: "knight-knight/rock.png",
@@ -259,6 +316,7 @@ const ARENAS = {
     // A hilltop in a thunderstorm: lightning keeps striking all round
     STORM: {
         title: "STORM",
+        grassy: true,
         field: "knight-knight/field-storm.png",
         fieldColor: "#5c6e54",
         rockImage: "knight-knight/rock.png",
