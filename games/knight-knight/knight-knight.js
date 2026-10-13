@@ -174,6 +174,8 @@ const BARREL_CHAIN_TICKS = 10; // a barrel caught in a blast goes up this soon a
 const CHICKEN_FIRST_TICKS = 60 * TICKS_PER_SECOND; // the first chicken comes after this long with nobody hit...
 const CHICKEN_EVERY_TICKS = 20 * TICKS_PER_SECOND; // ...and another this often after that
 const CHICKEN_SPEED = 0.42; // a little faster than walking, so you can't just outrun them
+const CHICKEN_REPATH_TICKS = 8; // how often a chicken works out its way to whoever it's chasing again
+const PATH_CELL = 4; // the size of the squares things find their way round the field on
 const PECK_STUN_TICKS = 40;
 const PECK_COOLDOWN_TICKS = 70;
 const DRAGON_SPEED = 2.4;
@@ -3245,6 +3247,79 @@ class Explosion {
     }
 }
 
+// ----- Finding the way -----
+
+// The way from one spot to another round rocks, trees, water and holes, worked out on a grid of squares over the
+// field (a breadth-first search, going diagonally only past open corners). feet is the size of whatever's going
+// (half its width, and its height). Returns the middles of the squares to walk through, the first one next, or null
+// if there's no way there at all.
+function findPath(from, to, feet) {
+    const columns = Math.ceil(SCREEN_WIDTH / PATH_CELL);
+    const rows = Math.ceil(SCREEN_HEIGHT / PATH_CELL);
+    const solids = getSolids();
+    const bounds = getBounds();
+    const cellOf = (x, y) => ({column: Math.max(0, Math.min(columns - 1, Math.floor(x / PATH_CELL))), row: Math.max(0, Math.min(rows - 1, Math.floor(y / PATH_CELL)))});
+    const start = cellOf(from.x, from.y);
+    const goal = cellOf(to.x, to.y);
+    const goalIndex = goal.row * columns + goal.column;
+
+    // Which squares it can stand in the middle of, with a pixel to spare all round (so the way never runs exactly
+    // along an edge, where it could get caught on it), worked out as they're needed
+    const open = new Int8Array(columns * rows).fill(-1);
+    const isOpen = index => {
+        if (index === goalIndex) {
+            return true;
+        }
+        if (open[index] === -1) {
+            const x = (index % columns + 0.5) * PATH_CELL;
+            const y = (Math.floor(index / columns) + 0.5) * PATH_CELL;
+            const box = {left: x - feet.halfWidth - 1, right: x + feet.halfWidth + 1, top: y - feet.height - 1, bottom: y + 1};
+            const inside = box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
+            // Safe ground all over it, not just in the middle (so it doesn't hang over the edge of a bridge, say)
+            const safe = [[x, y], [box.left, box.top], [box.right, box.top], [box.left, box.bottom], [box.right, box.bottom]]
+                .every(([px, py]) => !isUnsafeGround(px, py, true));
+            open[index] = inside && safe && !solids.some(solid => boxesOverlap(box, solid.getBox())) ? 1 : 0;
+        }
+        return open[index] === 1;
+    };
+
+    const cameFrom = new Int32Array(columns * rows).fill(-1);
+    const startIndex = start.row * columns + start.column;
+    cameFrom[startIndex] = startIndex;
+    const queue = [startIndex];
+    for (let head = 0; head < queue.length; head++) {
+        const index = queue[head];
+        if (index === goalIndex) {
+            // Back from the goal to the start, then turned round
+            const path = [];
+            for (let at = goalIndex; at !== startIndex; at = cameFrom[at]) {
+                path.push({x: (at % columns + 0.5) * PATH_CELL, y: (Math.floor(at / columns) + 0.5) * PATH_CELL});
+            }
+            return path.reverse();
+        }
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+            const c = column + dc;
+            const r = row + dr;
+            if (c < 0 || c >= columns || r < 0 || r >= rows) {
+                continue;
+            }
+            const next = r * columns + c;
+            if (cameFrom[next] !== -1 || !isOpen(next)) {
+                continue;
+            }
+            // No cutting corners
+            if (dc !== 0 && dr !== 0 && (!isOpen(row * columns + c) || !isOpen(r * columns + column))) {
+                continue;
+            }
+            cameFrom[next] = index;
+            queue.push(next);
+        }
+    }
+    return null;
+}
+
 // ----- Chickens -----
 
 // Angry chickens show up when nobody's been hit for a while, and chase whoever's closest. A peck stuns.
@@ -3256,6 +3331,8 @@ class Chicken {
         this.peckCooldown = 0;
         this.flip = false;
         this.done = false;
+        this.path = null; // the squares it's walking through to get to whoever it's chasing
+        this.pathTicks = 0;
     }
 
     getBox() {
@@ -3279,10 +3356,28 @@ class Chicken {
             const dx = target.getGroundX() - this.x;
             const dy = target.getGroundY() - this.y;
             const length = Math.hypot(dx, dy) || 1;
+            // Finds its way round anything in the way (every so often, since whoever it's chasing keeps moving)
+            this.pathTicks--;
+            if (this.pathTicks <= 0) {
+                this.path = findPath({x: this.x, y: this.y}, {x: target.getGroundX(), y: target.getGroundY()}, {halfWidth: 3, height: 3});
+                // With no way there at all (he's across the water, say), it looks again less often, since that's the
+                // slowest search
+                this.pathTicks = this.path === null ? CHICKEN_REPATH_TICKS * 5 : CHICKEN_REPATH_TICKS;
+            }
+            // Heads for the next square on the way, or straight at him once he's close (or there's no way round)
+            while (this.path !== null && this.path.length > 1 && Math.hypot(this.path[0].x - this.x, this.path[0].y - this.y) < 1.5) {
+                this.path.shift();
+            }
+            const close = length < PATH_CELL * 2;
+            const goal = this.path !== null && this.path.length > 0 && !close ? this.path[0] : {x: target.getGroundX(), y: target.getGroundY()};
+            const gx = goal.x - this.x;
+            const gy = goal.y - this.y;
+            const goalLength = Math.hypot(gx, gy) || 1;
             if (length > 3) {
                 this.flip = dx < 0;
-                this.move(dx / length * CHICKEN_SPEED, 0);
-                this.move(0, dy / length * CHICKEN_SPEED);
+                const step = Math.min(CHICKEN_SPEED, goalLength);
+                this.move(gx / goalLength * step, 0);
+                this.move(0, gy / goalLength * step);
             }
             // Peck!
             if (this.peckCooldown === 0 && boxesOverlap(this.getBox(), target.getBodyBox()) && !target.isInvulnerable()) {
@@ -3290,7 +3385,8 @@ class Chicken {
                 this.peckCooldown = PECK_COOLDOWN_TICKS;
             }
         }
-        this.x += getTilt() * TILT_PUSH * 4;
+        // The tipped deck slides it about (but not into the masts, or off the deck)
+        this.move(getTilt() * TILT_PUSH * 4, 0);
         if (this.ticks % 140 === 0) {
             sound.cluck();
         }
@@ -3309,10 +3405,15 @@ class Chicken {
         }
     }
 
+    // Moves unless something's in the way, it'd go off the field, or it'd walk into water, lava or a hole. (Anything
+    // it's somehow already in doesn't count, and it can always head back onto the field, so it can never get stuck.)
     move(dx, dy) {
         const feet = this.getFeet();
         const moved = {left: feet.left + dx, right: feet.right + dx, top: feet.top + dy, bottom: feet.bottom + dy};
-        if (!getSolids().some(solid => boxesOverlap(moved, solid.getBox()))) {
+        const bounds = getBounds();
+        const offField = box => Math.max(0, bounds.left - box.left) + Math.max(0, box.right - bounds.right) + Math.max(0, bounds.top - box.top) + Math.max(0, box.bottom - bounds.bottom);
+        const intoDanger = isUnsafeGround(this.x + dx, this.y + dy, true) && !isUnsafeGround(this.x, this.y, true);
+        if (offField(moved) <= offField(feet) && !intoDanger && !getSolids().some(solid => boxesOverlap(moved, solid.getBox()) && !boxesOverlap(feet, solid.getBox()))) {
             this.x += dx;
             this.y += dy;
         }
@@ -4324,6 +4425,11 @@ class LavaLake {
                 sword.y += dy;
             }
         }
+        for (const chicken of features.filter(feature => feature instanceof Chicken)) {
+            const {dx, dy} = carry(chicken.x, chicken.y);
+            chicken.x += dx;
+            chicken.y += dy;
+        }
         if (Math.random() < 0.08) {
             particles.embers(random(0, SCREEN_WIDTH), random(20, SCREEN_HEIGHT), 1);
         }
@@ -4607,14 +4713,31 @@ function makeArenaFeatures() {
     return made;
 }
 
-// A chicken comes in from the edge of the arena
+// A chicken comes in from the edge of the arena: the first clear ground in from a spot on the edge (so not in the
+// sea round the lighthouse, say), or anywhere clear if the edges are all water
 function spawnChicken() {
     const bounds = getBounds();
-    const side = Math.floor(Math.random() * 4);
-    const x = side === 0 ? bounds.left + 6 : side === 1 ? bounds.right - 6 : random(bounds.left + 10, bounds.right - 10);
-    const y = side === 2 ? Math.max(bounds.top + 20, 30) : side === 3 ? bounds.bottom - 4 : random(Math.max(bounds.top + 20, 30), bounds.bottom - 4);
-    features.push(new Chicken(x, y));
-    popup("BAWK!", x, y - 14, "#ffffff");
+    const top = Math.max(bounds.top + 20, 30);
+    let spot = null;
+    for (let tries = 0; tries < 30 && spot === null; tries++) {
+        const side = Math.floor(Math.random() * 4);
+        let x = side === 0 ? bounds.left + 6 : side === 1 ? bounds.right - 6 : random(bounds.left + 10, bounds.right - 10);
+        let y = side === 2 ? top : side === 3 ? bounds.bottom - 4 : random(top, bounds.bottom - 4);
+        const inward = [{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1}][side];
+        for (let step = 0; step < 30 && spot === null; step++) {
+            if (isClearSpot(x, y, 30)) {
+                spot = {x, y};
+            }
+            x += inward.x * 4;
+            y += inward.y * 4;
+        }
+    }
+    spot = spot ?? findClearSpot(30);
+    if (spot === null) {
+        return;
+    }
+    features.push(new Chicken(spot.x, spot.y));
+    popup("BAWK!", spot.x, spot.y - 14, "#ffffff");
     sound.bawk();
 }
 
