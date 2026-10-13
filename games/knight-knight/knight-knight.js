@@ -185,7 +185,15 @@ const BEAR_WINDUP_TICKS = 0.5 * TICKS_PER_SECOND;
 const BEAR_CHARGE_TICKS = 1.3 * TICKS_PER_SECOND;
 const BEAR_SPEED = 0.9;
 const BEAR_SELF_WAKE_TICKS = 15 * TICKS_PER_SECOND; // a sleeping bear wakes up on its own after this long
+// Anything loud or rough this close to a sleeping bear wakes it
+const BEAR_WAKE_BLAST = 16; // past the edge of a lightning strike, a landing boulder or an explosion
+const BEAR_WAKE_CLANG = 40; // swords clashing
+const BEAR_WAKE_TAUNT = 36; // someone taunting right next to it
+const BEAR_WAKE_FIRE = 12; // past the edge of the dragon's fire
+const BEAR_WAKE_TORNADO = 45; // the tornado's middle
 const BEAR_REST_TICKS = 0.5 * TICKS_PER_SECOND;
+const BEAR_LOOK_AHEAD = 24; // how far ahead it checks the way is clear before it charges
+const BEAR_SLIDE_TURN = 45; // a charge that only clips something turns up to this many degrees to slide past it
 // A minecart comes along one of the mine's tracks about every 2 seconds
 const MINECART_MIN_WAIT_TICKS = 1.6 * TICKS_PER_SECOND;
 const MINECART_MAX_WAIT_TICKS = 2.4 * TICKS_PER_SECOND;
@@ -2598,6 +2606,7 @@ class SkyRock {
         }
         if (this.ticks === Math.round(SKY_FALL_TICKS)) {
             this.firedNow = true;
+            disturbBears(this.x, this.y, SKY_RADIUS + BEAR_WAKE_BLAST, null);
             addShake(6);
             sound.impact();
             if (this.style === "fireball") {
@@ -3156,6 +3165,7 @@ class Explosion {
         this.ticks = 0;
         this.firedNow = true; // it hurts on the tick it goes off
         this.done = false;
+        disturbBears(x, y, EXPLOSION_RADIUS + BEAR_WAKE_BLAST, owner);
 
         addShake(10);
         flash = FLASH_TICKS;
@@ -3460,6 +3470,15 @@ class FirePatch {
 
 // ----- The bear -----
 
+// Wakes any sleeping bear within reach of something that just happened here (by is whoever caused it, if anyone)
+function disturbBears(x, y, reach, by) {
+    for (const bear of features.filter(feature => feature instanceof Bear)) {
+        if (Math.hypot(bear.x - x, bear.y - 6 - y) < reach) {
+            bear.wake(by);
+        }
+    }
+}
+
 // A sleeping bear. Hit it and it wakes up angry, and charges at whoever's closest until it calms down.
 class Bear {
     constructor(x, y) {
@@ -3529,6 +3548,21 @@ class Bear {
                 this.wake(sword.owner);
                 return;
             }
+            // So does being taunted right in its ear...
+            const taunter = knights.find(knight => !knight.dead && knight.tauntTicks > 0
+                && Math.hypot(knight.getGroundX() - this.x, knight.getGroundY() - this.y) < BEAR_WAKE_TAUNT);
+            if (taunter !== undefined) {
+                this.wake(taunter);
+                return;
+            }
+            // ...a horse running into it, the dragon's fire reaching it, or the tornado coming right up to it
+            const near = (x, y, reach) => Math.hypot(x - this.x, y - this.y) < reach;
+            if (horses.some(horse => horse.canHitBox(this.getBox()))
+                || features.some(feature => (feature instanceof FirePatch && near(feature.x, feature.y, DRAGON_FIRE_RADIUS + BEAR_WAKE_FIRE))
+                    || (feature instanceof Tornado && near(feature.x, feature.y, BEAR_WAKE_TORNADO)))) {
+                this.wake(null);
+                return;
+            }
             // And it won't sleep forever
             if (phase === "playing") {
                 this.sleepTicks++;
@@ -3550,7 +3584,9 @@ class Bear {
                 const dx = target.getGroundX() - this.x;
                 const dy = target.getGroundY() - this.y;
                 const length = Math.hypot(dx, dy) || 1;
-                this.dir = {x: dx / length, y: dy / length};
+                // Straight at him, unless that's straight into something: then the nearest way that's clear, so it
+                // goes round rocks instead of thumping into the same one again and again
+                this.dir = this.findClearWay({x: dx / length, y: dy / length});
             }
             if (this.ticks % 10 === 0) {
                 particles.dust(this.x - this.dir.x * 6, this.y, 1);
@@ -3559,13 +3595,14 @@ class Bear {
                 this.setState(target === undefined || this.angry <= 0 ? "sleeping" : "charging");
             }
         } else if (this.state === "charging") {
-            const bounds = getBounds();
+            // If it only clips something, it slides off it; head on, it thumps into it
+            const slide = this.findSlide();
+            if (slide !== null) {
+                this.dir = slide;
+            }
             const nextX = this.x + this.dir.x * BEAR_SPEED;
             const nextY = this.y + this.dir.y * BEAR_SPEED;
-            const feet = {left: nextX - 6, right: nextX + 6, top: nextY - 4, bottom: nextY};
-            const blocked = getSolids().some(solid => boxesOverlap(feet, solid.getBox()))
-                || nextX < bounds.left + 10 || nextX > bounds.right - 10 || nextY < bounds.top + 16 || nextY > bounds.bottom;
-            if (blocked) {
+            if (slide === null) {
                 // Thumps into it
                 addShake(2);
                 particles.dust(this.x + this.dir.x * 8, this.y, 6);
@@ -3590,6 +3627,70 @@ class Bear {
     setState(state) {
         this.state = state;
         this.ticks = 0;
+    }
+
+    // Where its feet are, standing here
+    getFeet(x, y) {
+        return {left: x - 6, right: x + 6, top: y - 4, bottom: y};
+    }
+
+    // Could it stand here? Anything it's already in doesn't count, so it can always get itself out. (solids is
+    // getSolids(), passed in so it's only worked out once for all the spots it tries.)
+    canStandAt(x, y, solids) {
+        const bounds = getBounds();
+        if (x < bounds.left + 10 || x > bounds.right - 10 || y < bounds.top + 16 || y > bounds.bottom) {
+            return false;
+        }
+        const here = this.getFeet(this.x, this.y);
+        const feet = this.getFeet(x, y);
+        return !solids.some(solid => {
+            const box = solid.getBox();
+            return boxesOverlap(feet, box) && !boxesOverlap(here, box);
+        });
+    }
+
+    // Is the way clear for a little while, going this way? Checked from its very first step, a pixel at a time, so
+    // it can't miss the corner of something it's right up against.
+    isClearWay(dir, distance, solids) {
+        for (let step = BEAR_SPEED; step <= distance; step = Math.floor(step) + 1) {
+            if (!this.canStandAt(this.x + dir.x * step, this.y + dir.y * step, solids)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // The way closest to the one it wants that's clear (or the one it wants, if nothing is)
+    findClearWay(dir) {
+        const solids = getSolids();
+        const angle = Math.atan2(dir.y, dir.x);
+        for (let turn = 0; turn <= 180; turn += 15) {
+            for (const side of turn === 0 ? [1] : [1, -1]) {
+                const turned = angle + side * turn * Math.PI / 180;
+                const way = {x: Math.cos(turned), y: Math.sin(turned)};
+                if (this.isClearWay(way, BEAR_LOOK_AHEAD, solids)) {
+                    return way;
+                }
+            }
+        }
+        return dir;
+    }
+
+    // Mid-charge: the way to go this step. Its own way if that's clear, turned a little if that slides it past
+    // something it's only clipping, or null if it's run head on into something.
+    findSlide() {
+        const solids = getSolids();
+        const angle = Math.atan2(this.dir.y, this.dir.x);
+        for (let turn = 0; turn <= BEAR_SLIDE_TURN; turn += 15) {
+            for (const side of turn === 0 ? [1] : [1, -1]) {
+                const turned = angle + side * turn * Math.PI / 180;
+                const way = {x: Math.cos(turned), y: Math.sin(turned)};
+                if (this.canStandAt(this.x + way.x * BEAR_SPEED, this.y + way.y * BEAR_SPEED, solids)) {
+                    return way;
+                }
+            }
+        }
+        return null;
     }
 
     danger(knight) {
@@ -4622,6 +4723,7 @@ class Strike {
         this.bolt.push({x: this.x, y: this.y});
 
         marks.scorch(this.x, this.y);
+        disturbBears(this.x, this.y, THUNDER_RADIUS + BEAR_WAKE_BLAST, this.owner);
         particles.sparks(this.x, this.y - 2, 16, [255, 240, 140]);
         particles.clippings(this.x, this.y, 6);
         particles.dust(this.x, this.y, 5);
@@ -5262,6 +5364,7 @@ function checkSwords() {
                 const spot = boxCenter(swordA);
                 particles.sparks(spot.x, spot.y, 16);
                 popup("PARRY!", spot.x, spot.y - 10, "#ffe680");
+                disturbBears(spot.x, spot.y, BEAR_WAKE_CLANG, null);
                 addShake(3);
                 hitstop = HITSTOP_CLASH;
                 sound.clang();
@@ -5341,6 +5444,7 @@ function checkSwords() {
                 sword.drop();
                 particles.sparks(sword.x, sword.y - sword.z, 12);
                 popup("PARRY!", sword.x, sword.y - 16, "#ffe680");
+                disturbBears(sword.x, sword.y, BEAR_WAKE_CLANG, null);
                 stats[knight.player.color].parries++;
                 hitstop = Math.max(hitstop, HITSTOP_CLASH);
                 sound.clang();
