@@ -186,9 +186,9 @@ const BEAR_CHARGE_TICKS = 1.3 * TICKS_PER_SECOND;
 const BEAR_SPEED = 0.9;
 const BEAR_SELF_WAKE_TICKS = 15 * TICKS_PER_SECOND; // a sleeping bear wakes up on its own after this long
 const BEAR_REST_TICKS = 0.5 * TICKS_PER_SECOND;
-const MINECART_MIN_WAIT_TICKS = 4 * TICKS_PER_SECOND;
-const MINECART_MAX_WAIT_TICKS = 7 * TICKS_PER_SECOND;
-const MINECART_WARNING_TICKS = 1.1 * TICKS_PER_SECOND;
+// A minecart comes along one of the mine's tracks about every 2 seconds
+const MINECART_MIN_WAIT_TICKS = 1.6 * TICKS_PER_SECOND;
+const MINECART_MAX_WAIT_TICKS = 2.4 * TICKS_PER_SECOND;
 const MINECART_SPEED = 2.6;
 const QUICKSAND_TICKS = 2.5 * TICKS_PER_SECOND; // standing still in quicksand this long swallows you
 const QUICKSAND_SLOW = 0.5;
@@ -1988,8 +1988,10 @@ class Knight {
 
     drawShadow() {
         if (this.bloodPool > 0) {
-            drawOval(this.getGroundX(), this.getGroundY() + 1, this.bloodPool, this.bloodPool * 0.45, "rgba(110, 8, 10, 0.85)");
-            drawOval(this.getGroundX() - 1, this.getGroundY() + 1, this.bloodPool * 0.6, this.bloodPool * 0.25, "rgba(150, 20, 20, 0.6)");
+            // Spreading out from under the middle of his body, which lies a few pixels above his feet
+            const poolY = this.getGroundY() - Math.round(3 * this.scale);
+            drawOval(this.getGroundX(), poolY, this.bloodPool, this.bloodPool * 0.45, "rgba(110, 8, 10, 0.85)");
+            drawOval(this.getGroundX() - 1, poolY, this.bloodPool * 0.6, this.bloodPool * 0.25, "rgba(150, 20, 20, 0.6)");
         }
         if (this.fallHole === null) {
             drawShadow(this.getGroundX(), this.getGroundY(), this.mounted && !this.dead ? 22 : Math.round((this.dead ? 13 : 10) * this.scale));
@@ -3680,41 +3682,25 @@ function drawCrowdFlashes() {
 
 // ----- The mine -----
 
-// A cart track. Every few seconds the rails rattle, a "!" shows where it'll come from, and a minecart races across.
-class Track {
-    constructor(y) {
-        this.y = y; // the ground along the track
-        this.wait = random(MINECART_MIN_WAIT_TICKS, MINECART_MAX_WAIT_TICKS);
-        this.warning = 0;
-        this.dir = Math.random() < 0.5 ? 1 : -1;
+// The mine's cart tracks. Every couple of seconds a minecart races along one of them (never the same one twice in a
+// row), with no warning.
+class Tracks {
+    constructor(ys) {
+        this.ys = ys; // the ground along each track
+        this.wait = MINECART_MIN_WAIT_TICKS;
+        this.last = null;
     }
 
     update() {
         if (phase !== "playing") {
             return;
         }
-        if (this.warning > 0) {
-            this.warning--;
-            if (this.warning % 20 === 0) {
-                sound.hoof();
-            }
-            if (this.warning === 0) {
-                features.push(new Minecart(this.y, this.dir));
-                this.wait = random(MINECART_MIN_WAIT_TICKS, MINECART_MAX_WAIT_TICKS);
-            }
-            return;
-        }
         this.wait--;
         if (this.wait <= 0) {
-            this.dir = Math.random() < 0.5 ? 1 : -1;
-            this.warning = MINECART_WARNING_TICKS;
-        }
-    }
-
-    drawWarning(blink) {
-        if (this.warning > 0) {
-            const x = this.dir > 0 ? 12 : SCREEN_WIDTH - 12;
-            drawBang(x, this.y - 8, blink ? "#ffffff" : "#c0c0d0");
+            const y = pick(this.ys.length > 1 ? this.ys.filter(y => y !== this.last) : this.ys);
+            features.push(new Minecart(y, Math.random() < 0.5 ? 1 : -1));
+            this.last = y;
+            this.wait = random(MINECART_MIN_WAIT_TICKS, MINECART_MAX_WAIT_TICKS);
         }
     }
 }
@@ -4508,7 +4494,10 @@ function makeArenaFeatures() {
     if (settings.get("hazards") && getRoundStage() === 2) {
         if (arena.bear !== undefined) made.push(new Bear(arena.bear.x, arena.bear.y));
         if (arena.storm) made.push(new Storm());
-        for (const track of arena.tracks ?? []) made.push(new Track(track.y));
+    }
+    // The mine's carts aren't a hazard you can turn off, they're what the mine is (like the lava lake's rafts)
+    if (arena.tracks !== undefined) {
+        made.push(new Tracks(arena.tracks.map(track => track.y)));
     }
     if (roundModifier === "lightning") {
         // Round 2's lightning: like the storm, but not as often
@@ -4760,14 +4749,16 @@ function pickRoundHazards() {
     roundHazards = kinds;
 }
 
-// Round 2's twist, from whatever the settings allow
-function pickRoundModifier() {
+// Round 2's twist, from whatever the settings (and the arena) allow
+function pickRoundModifier(nextArena) {
     if (roundNumber !== 2) {
         return null;
     }
     const options = [];
     if (settings.get("weather")) options.push("wind", "rain");
-    if (settings.get("hazards")) options.push("lightning", "horse", "catapult");
+    if (settings.get("hazards")) options.push("lightning", "catapult");
+    // Horses only run on grass
+    if (settings.get("hazards") && nextArena.grassy) options.push("horse");
     if (settings.get("shiftingGround")) options.push("holes");
     return options.length > 0 ? pick(options) : null;
 }
@@ -4906,8 +4897,10 @@ function setArena(name) {
 
 function startRound(quiet = false) {
     roundNumber++;
-    roundModifier = pickRoundModifier();
-    setArena(pickArena());
+    // The twist depends on the arena (no horses off the grass), and setting up the arena depends on the twist
+    const nextArena = pickArena();
+    roundModifier = pickRoundModifier(ARENAS[nextArena]);
+    setArena(nextArena);
     pickRoundHazards();
     knights = PLAYERS.map(player => new Knight(player));
     if (arena.guns) {
@@ -5078,7 +5071,9 @@ function updateHazards(walls) {
             hazardWait = random(HAZARD_MIN_WAIT, HAZARD_MAX_WAIT);
             const kind = pick(roundHazards);
             if (kind === "horse") {
-                horses.push(new Horse());
+                if (arena.grassy) {
+                    horses.push(new Horse());
+                }
             } else if (kind === "dragon") {
                 features.push(new Dragon());
             } else if (kind === "tornado") {
@@ -6071,12 +6066,6 @@ function drawUI() {
         if (juggernaut !== null) {
             drawText(juggernaut.player.color.toUpperCase() + " IS THE JUGGERNAUT!", 100, juggernaut.player.lightTextColor, 1);
             drawText("HUGE AND SLOW, WITH 3 HEARTS", 110, "#ffcc33", 1);
-        }
-        if (roundNumber === 1) {
-            MDog.Draw.rectangleFill(0, 133, SCREEN_WIDTH, 39, "rgba(10, 16, 10, 0.6)");
-            drawText("RED: WASD MOVE, SPACE SWING, E TAUNT", 140, PLAYERS[0].lightTextColor, 1);
-            drawText("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", 150, PLAYERS[1].lightTextColor, 1);
-            drawText("SWING WHEN THEY SWING TO PARRY.  ESC TO PAUSE", 164, "#ffffff", 1);
         }
     } else if (phase === "playing" && phaseTicks < FIGHT_TEXT_TICKS) {
         drawText("FIGHT!", 60, "#ffffff", 2);

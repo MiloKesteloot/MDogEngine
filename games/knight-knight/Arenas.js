@@ -129,11 +129,13 @@ const ARENAS = {
         field: "knight-knight/field-mine.png",
         fieldColor: "#46383a",
         rockImage: "knight-knight/rock.png",
-        rocks: [{x: 112, y: 86}, {x: 24, y: 146}, {x: 200, y: 146}, {x: 112, y: 22}],
-        tracks: [{y: 64}, {y: 128}], // the ground along each track
-        lanterns: [{x: 20, y: 40}, {x: 220, y: 40}, {x: 20, y: 162}, {x: 220, y: 162}, {x: 120, y: 112}, {x: 80, y: 30}, {x: 160, y: 30}],
+        // Everything sits between the tracks, clear of the minecarts
+        rocks: [{x: 112, y: 86}, {x: 24, y: 131}, {x: 200, y: 131}, {x: 112, y: 38}],
+        tracks: [{y: 32}, {y: 64}, {y: 128}, {y: 160}], // the ground along each track
+        lanterns: [{x: 20, y: 50}, {x: 220, y: 50}, {x: 60, y: 146}, {x: 180, y: 146}, {x: 120, y: 112}, {x: 80, y: 50}, {x: 160, y: 50}],
         dark: true,
         knightLight: 28,
+        noBoulders: true, // the minecarts are enough (an avalanche power-up still sends some, rolling along the tracks)
         boulderDirection: "horizontal",
         tallGrass: [],
         holeStyle: "dirt",
