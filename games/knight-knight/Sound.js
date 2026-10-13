@@ -182,6 +182,12 @@ class Sound {
         this.noise(0.13, "bandpass", 700, 2600, 0.5);
     }
 
+    // A sword swishing through tall grass
+    grassCut() {
+        this.noise(0.12, "bandpass", 5000, 2200, 0.35);
+        this.noise(0.08, "highpass", 6000, 4000, 0.2, 0.04);
+    }
+
     // A soft step. Crunchier on snow.
     step(snow) {
         if (snow) {

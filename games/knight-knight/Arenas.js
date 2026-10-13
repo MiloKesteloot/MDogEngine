@@ -11,6 +11,7 @@
 //   special: only comes up now and then, instead of being one of the usual picks
 //   tint: a color laid over everything, fog: drifting fog
 //   disabled: left out of the game for now
+//   calm: nothing extra at all: no weather, power-ups, boulders or chickens
 
 const ARENAS = {
     MEADOW: {
@@ -145,6 +146,7 @@ const ARENAS = {
     // Sand, cacti, tumbleweeds, and quicksand that swallows anyone who stands still in it
     DESERT: {
         title: "DESERT",
+        disabled: true, // taken out for now: never picked. Remove this line (and add it back to ARENA_CHOICES) to bring it back.
         field: "knight-knight/field-desert.png",
         fieldColor: "#e0c488",
         rockImage: "knight-knight/rock.png",
@@ -172,12 +174,13 @@ const ARENAS = {
         bounds: {left: 12, top: 12, right: 228, bottom: 162}, // inside the fence
         joust: true,
         special: "joust",
+        calm: true, // just the joust: no weather, power-ups, boulders or chickens
         solidGround: true,
         tallGrass: [],
         holeStyle: "dirt",
         footprint: "rgba(120, 90, 50, 0.35)",
         critters: null,
-        weathers: ["clear", "wind"],
+        weathers: ["clear"],
         hazards: [],
         music: "battle",
     },
@@ -204,24 +207,31 @@ const ARENAS = {
         hazards: ["catapult", "tornado"],
         music: "night",
     },
-    // A lake of lava between two rock shores, with stone rafts drifting back and forth across it that carry whoever's on
-    // them. Rafts are placed by their middle, and drift `range` pixels either way along their axis.
+    // A lake of lava, edge to edge, with stone rafts moving round it that carry whoever's on them. Each knight starts
+    // on his own raft. Rafts are placed by their middle. A "line" raft slides `range` pixels either way along its axis;
+    // a "loop" raft goes round an oval `rx` by `ry` around its middle. Speeds are in turns (radians) per tick.
     LAVALAKE: {
         title: "LAVA LAKE",
         field: "knight-knight/field-lavalake.png",
         fieldColor: "#d6541c",
         rockImage: "knight-knight/rock-volcano.png",
         rocks: [],
-        starts: [{x: 20, y: 96}, {x: 220, y: 96}],
-        shores: [[0, 0, 40, 180], [200, 0, 240, 180]],
+        starts: [{x: 34, y: 96}, {x: 206, y: 96}], // on the first two rafts
         rafts: [
-            {x: 76, y: 50, w: 30, h: 18, axis: "x", range: 30, speed: 0.0056, phase: 0},
-            {x: 164, y: 50, w: 30, h: 18, axis: "x", range: 30, speed: 0.0056, phase: Math.PI},
-            {x: 120, y: 96, w: 26, h: 26, axis: "y", range: 34, speed: 0.0045, phase: 0},
-            {x: 60, y: 96, w: 26, h: 16, axis: "x", range: 14, speed: 0.007, phase: 1},
-            {x: 180, y: 96, w: 26, h: 16, axis: "x", range: 14, speed: 0.007, phase: 1 + Math.PI},
-            {x: 76, y: 142, w: 30, h: 18, axis: "x", range: 30, speed: 0.0056, phase: Math.PI},
-            {x: 164, y: 142, w: 30, h: 18, axis: "x", range: 30, speed: 0.0056, phase: 0},
+            // The starting rafts, drifting up and down the sides
+            {path: "line", x: 34, y: 96, w: 42, h: 30, axis: "y", range: 44, speed: 0.006, phase: 0},
+            {path: "line", x: 206, y: 96, w: 42, h: 30, axis: "y", range: 44, speed: 0.006, phase: Math.PI},
+            // Two going round a big loop of the whole lake, on opposite sides of it
+            {path: "loop", x: 120, y: 96, rx: 72, ry: 52, w: 45, h: 30, speed: 0.004, phase: 0},
+            {path: "loop", x: 120, y: 96, rx: 72, ry: 52, w: 45, h: 30, speed: 0.004, phase: Math.PI},
+            // One circling the middle the other way
+            {path: "loop", x: 120, y: 96, rx: 30, ry: 22, w: 36, h: 33, speed: -0.008, phase: Math.PI / 2},
+            // Sliding across the top and bottom
+            {path: "line", x: 120, y: 38, w: 45, h: 27, axis: "x", range: 62, speed: 0.005, phase: 0},
+            {path: "line", x: 120, y: 154, w: 45, h: 27, axis: "x", range: 62, speed: 0.005, phase: Math.PI},
+            // And up and down the middle
+            {path: "line", x: 82, y: 96, w: 36, h: 30, axis: "y", range: 50, speed: 0.0055, phase: 1},
+            {path: "line", x: 158, y: 96, w: 36, h: 30, axis: "y", range: 50, speed: 0.0055, phase: 1 + Math.PI},
         ],
         noBoulders: true,
         solidGround: true,

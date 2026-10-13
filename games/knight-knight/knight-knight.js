@@ -183,7 +183,8 @@ const DRAGON_FIRE_RADIUS = 7;
 const BEAR_ANGRY_TICKS = 9 * TICKS_PER_SECOND;
 const BEAR_WINDUP_TICKS = 0.5 * TICKS_PER_SECOND;
 const BEAR_CHARGE_TICKS = 1.3 * TICKS_PER_SECOND;
-const BEAR_SPEED = 1.3;
+const BEAR_SPEED = 0.9;
+const BEAR_SELF_WAKE_TICKS = 15 * TICKS_PER_SECOND; // a sleeping bear wakes up on its own after this long
 const BEAR_REST_TICKS = 0.5 * TICKS_PER_SECOND;
 const MINECART_MIN_WAIT_TICKS = 4 * TICKS_PER_SECOND;
 const MINECART_MAX_WAIT_TICKS = 7 * TICKS_PER_SECOND;
@@ -195,8 +196,10 @@ const LIGHTHOUSE_TURN_SPEED = Math.PI * 2 / (7 * TICKS_PER_SECOND); // once arou
 const LIGHTHOUSE_BEAM_WIDTH = 1.5; // how much wider than a plain light trail the beams are
 const TORNADO_TICKS = 9 * TICKS_PER_SECOND;
 const TORNADO_SPEED = 0.3;
-const TORNADO_RADIUS = 50;
-const TORNADO_PULL = 0.05;
+const TORNADO_RADIUS = 75; // how far away it pulls from
+const TORNADO_PULL = 0.06;
+const TORNADO_CATCH = 11; // how close to the middle it catches (and flings) a knight
+const TORNADO_HEIGHT = 16; // rings in its funnel
 const TORNADO_FLING = 4;
 const JUGGERNAUT_LIVES = 3;
 const JUGGERNAUT_SCALE = 1.75;
@@ -206,24 +209,29 @@ const JUGGERNAUT_WINDUP_TICKS = 0.25 * TICKS_PER_SECOND; // he holds his wind-up
 const JUGGERNAUT_TURN_TICKS = 0.25 * TICKS_PER_SECOND; // and takes this long to turn round
 const JUGGERNAUT_MIN_ROUNDS = 5; // a juggernaut round comes up every this many rounds...
 const JUGGERNAUT_MAX_ROUNDS = 7; // ...to this many
-const JOUST_ACCEL = 0.035; // how hard holding a direction speeds up a horse
-const JOUST_FRICTION = 0.985; // horses coast a long way
-const JOUST_MAX_SPEED = 1.5;
+const GRASS_CUT_REACH = 2; // how far past the sword's edge tall grass gets cut
+// Horses build up speed slowly, and there's no top speed: just a little drag, so one that keeps galloping the same
+// way gets very fast (about 2.4 pixels per tick, after a few seconds)
+const JOUST_ACCEL = 0.012; // how hard holding a direction speeds up a horse
+const JOUST_FRICTION = 0.995; // horses coast a long way
+const JOUST_SAFETY_SPEED = 4; // only so nothing can pass through a fence (or another rider) in one tick
+const JOUST_GALLOP_SPEED = 1.8; // knocking someone down going faster than this is a "FULL GALLOP"
 const JOUST_SPUR = 1.2; // the kick of speed from spurring (the swing button)
-const JOUST_SPUR_TOP = 1.5; // how much faster than his top speed a spurred horse can go, for a moment
-const JOUST_SPUR_TICKS = 50;
+const LANCE_REACH_ACROSS = 20; // how far in front of a horse the lance tip is, going sideways...
+const LANCE_REACH_UP_DOWN = 12; // ...and going up or down the screen
+const LANCE_TIP_REACH = 1; // how close the lance tip has to get to count, past the edge of the other rider
+const RIDER_LIFT = 9; // how far up a knight sits on his horse
+const DEMO_EDGE_ROOM = 4; // how far the title screen's knights keep from edges
+const RAFT_LEEWAY = 2; // on the lava lake, how far past a raft's edge your feet can be before you fall in
 const JOUST_SPUR_COOLDOWN_TICKS = 2 * TICKS_PER_SECOND;
 const JOUST_TIE = 0.3; // riders going within this much of each other's speed both bounce off
 const JOUST_MIN_ROUNDS = 5; // a joust comes up every this many rounds...
 const JOUST_MAX_ROUNDS = 8; // ...to this many, when the arena's mixed
-const JOUST_SKIPS = ["throw", "fury", "grow"]; // power-ups that don't make sense on horseback
 const STORM_MIN_WAIT_TICKS = 2.2 * TICKS_PER_SECOND;
 const STORM_MAX_WAIT_TICKS = 4 * TICKS_PER_SECOND;
 
 // The kill cam only replays cool knockdowns (and always the one that wins the match)
 const COOL_RECENT_TICKS = 2.5 * TICKS_PER_SECOND; // a parry, deflect and so on this recent makes the knockdown cool
-const COOL_SNIPE_DISTANCE = 100; // a shot from this far is cool...
-const COOL_SNIPE_DISTANCE_SHOWDOWN = 170; // ...except in a showdown, where every knockdown is a shot
 
 // The loser of the match bleeds until the next one starts
 const BLOOD_POOL_MAX = 15;
@@ -626,27 +634,31 @@ class GrassRow {
         this.right = right;
         this.y = y;
         this.dark = dark;
-        this.cut = new Map(); // blades a sword has cut down: x -> how tall the stub is
+        this.cut = new Set(); // blades a sword has cut down (by their x), which are gone for the rest of the round
     }
 
     naturalHeight(x) {
         return 6 + ((x * 7 + this.y * 13) % 4);
     }
 
-    // A sword sweeping through cuts down any blades it touches
+    // A sword sweeping through clears away every blade it touches (and a little either side, so nothing's left
+    // standing between the swing's frames). Returns how many it cut.
     cutBox(box) {
+        const reach = growBox(box, GRASS_CUT_REACH);
+        let cut = 0;
         for (let x = this.left; x < this.right; x += 2) {
-            if (this.cut.has(x) || x < box.left || x > box.right) {
+            if (this.cut.has(x) || x < reach.left || x > reach.right) {
                 continue;
             }
             const height = this.naturalHeight(x);
-            if (box.top < this.y + 2 && box.bottom > this.y - height) {
-                this.cut.set(x, 2);
-                if (Math.random() < 0.5) {
-                    particles.clippings(x, this.y - height / 2, 1);
-                }
+            if (reach.top < this.y + 2 && reach.bottom > this.y - height) {
+                this.cut.add(x);
+                cut++;
+                // The blade bursts into clippings
+                particles.clippings(x, this.y - height / 2, 3);
             }
         }
+        return cut;
     }
 
     getSortY() {
@@ -662,8 +674,6 @@ class GrassRow {
         const tip = this.dark ? "#4a7a40" : "#7cbc5a";
         for (let x = this.left; x < this.right; x += 2) {
             if (this.cut.has(x)) {
-                // Just a stub left
-                MDog.Draw.rectangleFill(x, this.y, 1, this.cut.get(x), blade);
                 continue;
             }
             const height = this.naturalHeight(x);
@@ -1203,7 +1213,6 @@ class Knight {
         this.baseScale = 1;
         this.speedFactor = 1;
         this.mounted = false; // on horseback, for a joust
-        this.spurTicks = 0;
         this.spurCooldown = 0;
         this.gallop = 0; // how far the horse has run, for its legs
         this.brain = null; // plays him on the title screen, instead of the keyboard
@@ -1498,13 +1507,11 @@ class Knight {
     // button spurs it on, for a burst of speed.
     ride(canAct, spurPressed) {
         if (this.spurCooldown > 0) this.spurCooldown--;
-        if (this.spurTicks > 0) this.spurTicks--;
         const move = canAct ? this.getMoveInput() : {x: 0, y: 0};
         const boost = this.speedTicks > 0 ? SPEED_BOOST : 1;
 
         if (spurPressed && this.spurCooldown === 0) {
             this.spurCooldown = JOUST_SPUR_COOLDOWN_TICKS;
-            this.spurTicks = JOUST_SPUR_TICKS;
             const speed = Math.hypot(this.vx, this.vy);
             const dir = speed > 0.1 ? {x: this.vx / speed, y: this.vy / speed} : DIRS[this.facing];
             this.vx += dir.x * JOUST_SPUR;
@@ -1522,13 +1529,10 @@ class Knight {
                 this.facing = move.x > 0 ? "east" : "west";
             }
         }
-        // Over top speed (after a spur), it eases back down
-        const most = JOUST_MAX_SPEED * boost * (this.spurTicks > 0 ? JOUST_SPUR_TOP : 1);
         const speed = Math.hypot(this.vx, this.vy);
-        if (speed > most) {
-            const ease = Math.max(most / speed, 0.97);
-            this.vx *= ease;
-            this.vy *= ease;
+        if (speed > JOUST_SAFETY_SPEED) {
+            this.vx *= JOUST_SAFETY_SPEED / speed;
+            this.vy *= JOUST_SAFETY_SPEED / speed;
         }
         const before = Math.floor(this.gallop / 12);
         this.gallop += speed;
@@ -1598,6 +1602,7 @@ class Knight {
         this.swingBuffer = 0;
         this.swingSpent = false;
         this.swingHitRock = false;
+        this.swingCutGrass = false; // so the swish only plays once a swing
         this.swingNear = null;
 
         // The sword catches the light as he winds up, so the other player can see it coming
@@ -1673,8 +1678,13 @@ class Knight {
         const onScreen = feet.left >= bounds.left && feet.right <= bounds.right && y >= bounds.top && feet.bottom <= bounds.bottom;
         const blocked = !onScreen
             || world.solids.some(solid => boxesOverlap(feet, solid.getBox()))
-            // Knights can't walk through each other (but can walk over one that's down)
-            || world.knights.some(other => other !== this && !other.dead && !this.dead && boxesOverlap(feet, other.getFeetBox()));
+            // Knights can't walk through each other (but can walk over one that's down). If they're already overlapping
+            // (pushed together by moving rafts, say), they can always move, so they can't get stuck.
+            || world.knights.some(other => other !== this && !other.dead && !this.dead
+                && boxesOverlap(feet, other.getFeetBox()) && !boxesOverlap(this.getFeetBox(), other.getFeetBox()))
+            // The title screen's knights treat the edge of lava, holes and water as a wall, however they're moved
+            // (walking, lunging or knocked back). They can always step back out, if they ever end up over it.
+            || (this.brain !== null && isUnsafeGround(x + SPRITE_SIZE / 2, y + FEET_Y, true) && !isUnsafeGround(this.getGroundX(), this.getGroundY(), true));
         if (blocked) {
             if (this.mounted && !this.dead) {
                 // A horse bounces off the fence
@@ -1831,7 +1841,12 @@ class Knight {
 
     // The top of his head, for popups
     getTopY() {
-        return this.scaledPoint(0, 4).y;
+        return this.scaledPoint(0, 4).y - this.getRiderLift();
+    }
+
+    // How far up he's drawn, sitting on his horse
+    getRiderLift() {
+        return this.mounted && !this.dead ? RIDER_LIFT : 0;
     }
 
     // Drawn in quarter steps, so while he grows the pixels don't come out every size
@@ -2025,7 +2040,7 @@ class Knight {
         if (this.mounted) {
             this.drawHorse();
         }
-        const riderY = this.mounted ? y - 9 : y;
+        const riderY = y - this.getRiderLift();
         MDog.Draw.animation(animation, x, riderY, {update: false, scale: scale});
         const overlay = tint => this.drawFrame(animation.fileName, animation.getFrame(), x, riderY, tint, scale);
         if (this.mounted) {
@@ -2103,16 +2118,40 @@ class Knight {
         });
     }
 
-    // His lance, pointing the way he's going
-    drawLance() {
+    // Which way his lance points: the way he's going, or the way he's facing when he's standing still
+    getLanceDir() {
         const speed = Math.hypot(this.vx, this.vy);
-        const dir = speed > 0.15 ? {x: this.vx / speed, y: this.vy / speed} : {x: this.facing === "west" ? -1 : 1, y: 0};
+        return speed > 0.15 ? {x: this.vx / speed, y: this.vy / speed} : {x: this.facing === "west" ? -1 : 1, y: 0};
+    }
+
+    // The patch of ground his horse covers, seen from above. Jousts are judged on the ground, so it works the same
+    // whichever way the riders are going.
+    getHorseFootprint() {
+        return {left: this.getGroundX() - 11, right: this.getGroundX() + 11, top: this.getGroundY() - 6, bottom: this.getGroundY() + 1};
+    }
+
+    // Where the point of his lance is, over the ground. It reaches out past the front of his horse.
+    getLanceTip() {
+        const dir = this.getLanceDir();
+        return {x: this.getGroundX() + dir.x * LANCE_REACH_ACROSS, y: this.getGroundY() - 2 + dir.y * LANCE_REACH_UP_DOWN};
+    }
+
+    // Is his lance tip in the other rider's horse?
+    lanceHits(other) {
+        const tip = this.getLanceTip();
+        const box = growBox(other.getHorseFootprint(), LANCE_TIP_REACH);
+        return !this.dead && !other.dead && tip.x > box.left && tip.x < box.right && tip.y > box.top && tip.y < box.bottom;
+    }
+
+    // Held at his chest, out to the tip
+    drawLance() {
+        const dir = this.getLanceDir();
+        const tip = this.getLanceTip();
         const startX = this.getGroundX() + dir.x * 3;
         const startY = this.getGroundY() - 14;
-        const endX = startX + dir.x * 16;
-        const endY = startY + dir.y * 10;
-        MDog.Draw.line(startX, startY, endX, endY, "#8a5a2c");
-        MDog.Draw.rectangleFill(Math.round(endX), Math.round(endY), 1, 1, "#e0e0e8");
+        const tipY = tip.y - 10;
+        MDog.Draw.line(startX, startY, tip.x, tipY, "#8a5a2c");
+        MDog.Draw.rectangleFill(Math.round(tip.x), Math.round(tipY), 1, 1, "#e0e0e8");
     }
 
     // A little musket in his hands
@@ -2155,7 +2194,7 @@ class Knight {
         const size = Math.max(1, Math.round(this.scale));
         const corner = this.scaledPoint(7, -1);
         const left = Math.round(corner.x);
-        const top = Math.round(corner.y) + (Math.floor(this.trailTimer / 40) % 2);
+        const top = Math.round(corner.y) - this.getRiderLift() + (Math.floor(this.trailTimer / 40) % 2);
         const pixel = (x, y, width, color) => MDog.Draw.rectangleFill(left + x * size, top + y * size, width * size, size, color);
         pixel(0, 0, 1, "#ffd84a");
         pixel(2, 0, 1, "#ffd84a");
@@ -2263,7 +2302,9 @@ class ThrownSword {
     }
 
     land() {
-        if (isInWater(this.x, this.y) || holes.some(hole => hole.contains(this.x, this.y))) {
+        // (On the lava lake that means really on a raft, not in the bit of leeway past its edge that stops knights
+        // falling in, since a sword there wouldn't be carried along with the raft)
+        if (isInWater(this.x, this.y) || holes.some(hole => (hole.containsStrictly ?? hole.contains).call(hole, this.x, this.y))) {
             // Gone. A new one comes from the sky.
             const lava = holes.some(hole => hole.style === "lava" && hole.contains(this.x, this.y));
             if (lava) {
@@ -3423,6 +3464,7 @@ class Bear {
         this.angry = 0;
         this.dir = {x: 1, y: 0};
         this.owner = null; // whoever woke it
+        this.sleepTicks = 0; // how long it's been asleep in this round
     }
 
     getBox() {
@@ -3440,6 +3482,7 @@ class Bear {
         }
         this.state = "waking";
         this.ticks = 0;
+        this.sleepTicks = 0;
         this.angry = BEAR_ANGRY_TICKS;
         this.owner = by;
         popup("ROAR!", this.x, this.y - 20, "#ff8060");
@@ -3472,6 +3515,21 @@ class Bear {
     update() {
         this.ticks++;
         if (this.state === "sleeping") {
+            // A thrown sword hitting it wakes it up (and bounces off)
+            const sword = thrownSwords.find(sword => sword.isFlying() && boxesOverlap(sword.getBox(), this.getBox()));
+            if (sword !== undefined) {
+                sword.drop();
+                particles.sparks(sword.x, sword.y - sword.z, 6);
+                this.wake(sword.owner);
+                return;
+            }
+            // And it won't sleep forever
+            if (phase === "playing") {
+                this.sleepTicks++;
+                if (this.sleepTicks >= BEAR_SELF_WAKE_TICKS) {
+                    this.wake(null);
+                }
+            }
             return;
         }
         this.angry--;
@@ -3930,8 +3988,21 @@ class Tornado {
         this.ticks = 0;
         this.done = false;
         this.caught = new Map(); // knight: ticks until it can catch him again
-        popup("TORNADO!", this.x, this.y - 30, "#d8d8e0");
+        // Bits of grass, leaves and stones whirling round inside it
+        this.debris = [];
+        for (let i = 0; i < 28; i++) {
+            this.debris.push({
+                angle: random(0, Math.PI * 2),
+                height: random(2, TORNADO_HEIGHT * 4),
+                speed: random(0.08, 0.16),
+                color: pick(["#6aa04a", "#a07a3a", "#8a8490", "#c8b080", "#4a8030"]),
+                size: Math.random() < 0.3 ? 2 : 1,
+            });
+        }
+        popup("TORNADO!", this.x, this.y - 70, "#d8d8e0");
+        addShake(4);
         sound.dragon();
+        sound.rumble(true);
     }
 
     getStrength() {
@@ -3970,44 +4041,94 @@ class Tornado {
                 knight.vx += (dx / distance) * pull - (dy / distance) * pull * 0.6;
                 knight.vy += (dy / distance) * pull + (dx / distance) * pull * 0.6;
             }
-            if (distance < 8 && cooldown === 0 && strength > 0.5) {
+            if (distance < TORNADO_CATCH && cooldown === 0 && strength > 0.5) {
                 // Caught! Flung out in a random direction
                 this.caught.set(knight, 90);
                 const angle = random(0, Math.PI * 2);
                 knight.fling({x: Math.cos(angle), y: Math.sin(angle)});
             }
         }
-        if (this.ticks % 3 === 0) {
-            particles.dust(this.x + random(-6, 6), this.y, 1);
+        // A ring of dust kicking up round its base, and grass torn up as it goes
+        if (this.ticks % 2 === 0) {
+            const angle = random(0, Math.PI * 2);
+            particles.dust(this.x + Math.cos(angle) * 14, this.y + Math.sin(angle) * 5, 1);
+        }
+        if (this.ticks % 9 === 0) {
+            particles.clippings(this.x + random(-10, 10), this.y, 1);
+        }
+        for (const bit of this.debris) {
+            bit.angle += bit.speed * strength;
         }
         if (this.ticks % 40 === 0) {
             sound.flames();
+        }
+        if (this.ticks % 90 === 0) {
+            sound.rumble(true);
+        }
+        // The ground shakes when a knight's near it
+        if (knights.some(knight => !knight.dead && Math.hypot(knight.getGroundX() - this.x, knight.getGroundY() - this.y) < TORNADO_RADIUS)) {
+            addShake(1.2 * strength);
         }
     }
 
     harms(box) {
         const center = boxCenter(box);
-        return this.getStrength() > 0.5 && Math.hypot(center.x - this.x, box.bottom - this.y) < 6;
+        return this.getStrength() > 0.5 && Math.hypot(center.x - this.x, box.bottom - this.y) < TORNADO_CATCH;
     }
 
+    // How wide the funnel is at a ring (0 at the bottom), and how far that ring sways
+    ringRadius(layer) {
+        return (3 + layer * 1.7 + layer * layer * 0.05) * this.getStrength();
+    }
+
+    ringSway(layer) {
+        return Math.sin(this.ticks / 11 + layer * 0.45) * layer * 0.35;
+    }
+
+    // Its shadow, and a churning ring of dust round its base
     drawGround() {
-        drawOval(this.x, this.y, 12, 4, "rgba(0, 0, 0, 0.2)");
+        const strength = this.getStrength();
+        drawOval(this.x, this.y, 20 * strength, 7 * strength, "rgba(0, 0, 0, 0.25)");
+        const dots = 22;
+        for (let i = 0; i < dots; i++) {
+            const angle = i / dots * Math.PI * 2 + this.ticks / 6;
+            const radius = (13 + Math.sin(this.ticks / 5 + i) * 2) * strength;
+            MDog.Draw.rectangleFill(Math.round(this.x + Math.cos(angle) * radius), Math.round(this.y + Math.sin(angle) * radius * 0.35), 2, 1, "rgba(190, 170, 130, 0.55)");
+        }
     }
 
-    // A swirling funnel, wider at the top
+    // A tall swirling funnel, wider at the top, swaying, with debris whirling round inside it
     drawSky() {
         const strength = this.getStrength();
-        for (let layer = 0; layer < 9; layer++) {
-            const y = this.y - layer * 5;
-            const radius = (3 + layer * 2.2) * strength;
-            const sway = Math.sin(this.ticks / 9 + layer * 0.6) * 2.5;
-            const dots = 10 + layer * 2;
-            for (let i = 0; i < dots; i++) {
-                const angle = i / dots * Math.PI * 2 + this.ticks / 4 + layer;
-                // Only the front half of each ring, so it looks round
-                const depth = Math.sin(angle);
-                const alpha = 0.25 + 0.35 * (depth + 1) / 2;
-                MDog.Draw.rectangleFill(Math.round(this.x + sway + Math.cos(angle) * radius), Math.round(y + depth * radius * 0.3), 1, 1, `rgba(200, 200, 210, ${alpha})`);
+        // The back half of everything first, then the front half, so it looks round
+        for (const front of [false, true]) {
+            for (let layer = 0; layer < TORNADO_HEIGHT; layer++) {
+                const y = this.y - layer * 4;
+                const radius = this.ringRadius(layer);
+                const sway = this.ringSway(layer);
+                const dots = 12 + layer * 3;
+                for (let i = 0; i < dots; i++) {
+                    const angle = i / dots * Math.PI * 2 + this.ticks / 3.5 + layer * 0.7;
+                    const depth = Math.sin(angle);
+                    if ((depth > 0) !== front) {
+                        continue;
+                    }
+                    // Darker and thicker toward the top, lighter at the front
+                    const shade = front ? 215 - layer * 3 : 150 - layer * 2;
+                    const alpha = (front ? 0.55 : 0.35) * strength;
+                    MDog.Draw.rectangleFill(Math.round(this.x + sway + Math.cos(angle) * radius), Math.round(y + depth * radius * 0.3), 1, 1, `rgba(${shade}, ${shade}, ${shade + 12}, ${alpha})`);
+                }
+            }
+            for (const bit of this.debris) {
+                const depth = Math.sin(bit.angle);
+                if ((depth > 0) !== front) {
+                    continue;
+                }
+                const layer = bit.height / 4;
+                const radius = this.ringRadius(layer) * 0.85;
+                const x = this.x + this.ringSway(layer) + Math.cos(bit.angle) * radius;
+                const y = this.y - bit.height + depth * radius * 0.3;
+                MDog.Draw.rectangleFill(Math.round(x), Math.round(y), bit.size, bit.size, bit.color);
             }
         }
     }
@@ -4015,11 +4136,11 @@ class Tornado {
 
 // ----- The lava lake -----
 
-// Two rock shores with a lake of lava between them, and stone rafts drifting back and forth across it. Anyone
-// standing on a raft is carried along. Anywhere that isn't a shore or a raft is lava.
+// A lake of lava, edge to edge, with stone rafts moving around on it. Some slide back and forth in a line, some go
+// round in a big loop, and their paths cross, so you can hop from one to another. Whoever's on a raft (and anything
+// lying on it) is carried along. Anywhere that isn't a raft is lava.
 class LavaLake {
-    constructor(shores, rafts) {
-        this.shores = shores.map(([left, top, right, bottom]) => ({left, top, right, bottom}));
+    constructor(rafts) {
         this.rafts = rafts.map(raft => ({...raft, box: null}));
         this.style = "lava";
         this.cracked = false;
@@ -4029,29 +4150,48 @@ class LavaLake {
         }
     }
 
-    // Where a raft is now: it drifts back and forth along its axis
+    // Where a raft's middle is now
+    raftCenter(raft) {
+        const angle = this.ticks * raft.speed + raft.phase;
+        if (raft.path === "loop") {
+            return {x: raft.x + Math.cos(angle) * raft.rx, y: raft.y + Math.sin(angle) * raft.ry};
+        }
+        const offset = Math.sin(angle) * raft.range;
+        return {x: raft.x + (raft.axis === "x" ? offset : 0), y: raft.y + (raft.axis === "y" ? offset : 0)};
+    }
+
     raftBox(raft) {
-        const offset = Math.sin(this.ticks * raft.speed + raft.phase) * raft.range;
-        const x = raft.x + (raft.axis === "x" ? offset : 0);
-        const y = raft.y + (raft.axis === "y" ? offset : 0);
-        return {left: x - raft.w / 2, right: x + raft.w / 2, top: y - raft.h / 2, bottom: y + raft.h / 2};
+        const center = this.raftCenter(raft);
+        return {left: center.x - raft.w / 2, right: center.x + raft.w / 2, top: center.y - raft.h / 2, bottom: center.y + raft.h / 2};
     }
 
-    isOnShore(x, y) {
-        return this.shores.some(box => x >= box.left && x < box.right && y >= box.top && y < box.bottom);
+    // The raft at a spot. Rafts are drawn in order, so later ones are on top, and where they overlap it's the one on
+    // top that counts. leeway lets the spot be a little past the raft's edge.
+    raftAt(x, y, boxOf, leeway) {
+        const extra = leeway ?? 0;
+        for (let i = this.rafts.length - 1; i >= 0; i--) {
+            const raft = this.rafts[i];
+            const box = boxOf !== undefined ? boxOf(raft) : raft.box;
+            if (x >= box.left - extra && x < box.right + extra && y >= box.top - extra && y < box.bottom + extra) {
+                return raft;
+            }
+        }
+        return undefined;
     }
 
-    raftAt(x, y) {
-        return this.rafts.find(raft => x >= raft.box.left && x < raft.box.right && y >= raft.box.top && y < raft.box.bottom);
-    }
-
+    // A knight whose feet are just past a raft's edge doesn't fall in yet, so it doesn't feel unfair
     contains(x, y) {
-        return !this.isOnShore(x, y) && this.raftAt(x, y) === undefined;
+        return this.raftAt(x, y, undefined, RAFT_LEEWAY) === undefined;
     }
 
-    // Only the shores count as safe for putting things down, since the rafts move away
+    // Without the leeway: for things that need to be carried along, like a dropped sword
+    containsStrictly(x, y) {
+        return this.raftAt(x, y) === undefined;
+    }
+
+    // Power-ups go on rafts (well inside one)
     isNear(x, y, margin) {
-        return [[x, y], [x - margin, y], [x + margin, y], [x, y - margin], [x, y + margin]].some(([px, py]) => !this.isOnShore(px, py));
+        return [[x, y], [x - margin, y], [x + margin, y], [x, y - margin], [x, y + margin]].some(([px, py]) => this.raftAt(px, py) === undefined);
     }
 
     getFallSpot(x, y) {
@@ -4059,34 +4199,51 @@ class LavaLake {
     }
 
     update() {
+        const before = new Map(this.rafts.map(raft => [raft, raft.box]));
         this.ticks++;
         for (const raft of this.rafts) {
-            const before = raft.box;
-            const after = this.raftBox(raft);
-            const dx = after.left - before.left;
-            const dy = after.top - before.top;
-            // Carries whoever's standing on it (unless they're on the shore it's touching)
-            for (const knight of knights) {
-                const x = knight.getGroundX();
-                const y = knight.getGroundY();
-                if (!knight.dead && !this.isOnShore(x, y) && x >= before.left && x < before.right && y >= before.top && y < before.bottom) {
-                    knight.x += dx;
-                    knight.y += dy;
-                }
+            raft.box = this.raftBox(raft);
+        }
+        // Anything on a raft moves with it. Where two rafts overlap, it goes with the one drawn on top. Only the raft
+        // something is really standing on carries it: the leeway past the edge just stops it falling in, so a raft
+        // passing close by can't grab someone off the raft they're on.
+        const carry = (x, y) => {
+            const raft = this.raftAt(x, y, raft => before.get(raft));
+            if (raft === undefined) {
+                return {dx: 0, dy: 0};
             }
-            raft.box = after;
+            return {dx: raft.box.left - before.get(raft).left, dy: raft.box.top - before.get(raft).top};
+        };
+        for (const knight of knights) {
+            if (knight.fallHole === null) {
+                const {dx, dy} = carry(knight.getGroundX(), knight.getGroundY());
+                knight.x += dx;
+                knight.y += dy;
+            }
+        }
+        for (const powerup of powerups) {
+            const {dx, dy} = carry(powerup.x, powerup.y);
+            powerup.x += dx;
+            powerup.y += dy;
+        }
+        for (const sword of thrownSwords) {
+            if (sword.state === "grounded") {
+                const {dx, dy} = carry(sword.x, sword.y);
+                sword.x += dx;
+                sword.y += dy;
+            }
         }
         if (Math.random() < 0.08) {
-            particles.embers(random(40, 200), random(20, SCREEN_HEIGHT), 1);
+            particles.embers(random(0, SCREEN_WIDTH), random(20, SCREEN_HEIGHT), 1);
         }
     }
 
     draw() {
         // Bubbles popping in the lava
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 8; i++) {
             const phase = (this.ticks / 50 + i * 0.37) % 1;
             if (phase < 0.5) {
-                const x = 50 + (i * 53) % 140;
+                const x = 10 + (i * 53) % 220;
                 const y = 20 + (i * 71) % 150;
                 MDog.Draw.rectangleFill(x, y, phase < 0.25 ? 1 : 2, 1, "#ffe080");
             }
@@ -4162,7 +4319,62 @@ class DemoBrain {
             wantY = toY / length;
         }
         // Like pressing arrow keys: each way is on or off
-        this.move = {x: Math.abs(wantX) > 0.38 ? Math.sign(wantX) : 0, y: Math.abs(wantY) > 0.38 ? Math.sign(wantY) : 0};
+        const move = {x: Math.abs(wantX) > 0.38 ? Math.sign(wantX) : 0, y: Math.abs(wantY) > 0.38 ? Math.sign(wantY) : 0};
+        // If he's somehow over danger (it's moved out from under him), getting back to safe ground comes first
+        const rescue = isUnsafeGround(knight.getGroundX(), knight.getGroundY()) ? this.findWayToSafety() : null;
+        this.move = rescue ?? this.findSafeMove(move);
+    }
+
+    // The way toward the nearest safe ground, looking out in every direction
+    findWayToSafety() {
+        for (let distance = 3; distance <= 60; distance += 3) {
+            for (let i = 0; i < 16; i++) {
+                const angle = i / 16 * Math.PI * 2;
+                const x = this.knight.getGroundX() + Math.cos(angle) * distance;
+                const y = this.knight.getGroundY() + Math.sin(angle) * distance;
+                if (this.isSafeSpot(x, y)) {
+                    return {x: Math.abs(Math.cos(angle)) > 0.38 ? Math.sign(Math.cos(angle)) : 0, y: Math.abs(Math.sin(angle)) > 0.38 ? Math.sign(Math.sin(angle)) : 0};
+                }
+            }
+        }
+        return null;
+    }
+
+    // Safe, with a little room around it so he keeps away from edges
+    isSafeSpot(x, y) {
+        const room = DEMO_EDGE_ROOM;
+        return [[x, y], [x - room, y], [x + room, y], [x, y - room], [x, y + room]].every(([px, py]) => !isUnsafeGround(px, py, true));
+    }
+
+    // The way closest to the one he wants that doesn't walk him into lava, a hole or water (or standing still, if
+    // every way does)
+    findSafeMove(move) {
+        if (move.x === 0 && move.y === 0) {
+            return move;
+        }
+        const ways = [];
+        for (let x = -1; x <= 1; x++) {
+            for (let y = -1; y <= 1; y++) {
+                if (x !== 0 || y !== 0) {
+                    ways.push({x, y});
+                }
+            }
+        }
+        // Most like the wanted way first
+        ways.sort((a, b) => (b.x * move.x + b.y * move.y) / Math.hypot(b.x, b.y) - (a.x * move.x + a.y * move.y) / Math.hypot(a.x, a.y));
+        return ways.find(way => this.isSafeWay(way)) ?? {x: 0, y: 0};
+    }
+
+    isSafeWay(way) {
+        const length = Math.hypot(way.x, way.y);
+        for (const distance of [4, 9]) {
+            const x = this.knight.getGroundX() + way.x / length * distance;
+            const y = this.knight.getGroundY() + way.y / length * distance;
+            if (!this.isSafeSpot(x, y)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     pickMode(distance) {
@@ -4203,19 +4415,37 @@ class DemoBrain {
 
 // ----- Jousting -----
 
-// Two jousting knights colliding: if they're going about as fast as each other, they both bounce off. Otherwise the
-// faster one unhorses the slower one (which checkHits sees through findDanger).
+// Jousting knights meeting. What counts is the tip of the lance:
+//   - only one lance tip in the other rider (a hit from the side or behind): that rider wins
+//   - both lance tips in each other (head on): the faster one wins, and if they're about as fast, both bounce off
+//   - horses bumping without a lance tip landing: they just push apart
+// The wins are seen by checkHits, through findJoustDanger. This handles the bouncing.
 function checkJousts() {
     if (!arena.joust) {
         return;
     }
     const [a, b] = knights;
-    if (a.dead || b.dead || !boxesOverlap(a.getBodyBox(), b.getBodyBox())) {
+    if (a.dead || b.dead) {
         return;
     }
+    const aHits = a.lanceHits(b);
+    const bHits = b.lanceHits(a);
     const speedA = Math.hypot(a.vx, a.vy);
     const speedB = Math.hypot(b.vx, b.vy);
-    if (Math.abs(speedA - speedB) > JOUST_TIE) {
+    if (!aHits && !bHits) {
+        if (boxesOverlap(a.getHorseFootprint(), b.getHorseFootprint())) {
+            // Bump
+            const awayX = a.getGroundX() - b.getGroundX();
+            const awayY = a.getGroundY() - b.getGroundY();
+            const length = Math.hypot(awayX, awayY) || 1;
+            a.vx += awayX / length * 0.4;
+            a.vy += awayY / length * 0.4;
+            b.vx -= awayX / length * 0.4;
+            b.vy -= awayY / length * 0.4;
+        }
+        return;
+    }
+    if (!(aHits && bHits) || Math.abs(speedA - speedB) > JOUST_TIE) {
         return;
     }
     // Even: lances clash and both are thrown back
@@ -4238,20 +4468,20 @@ function checkJousts() {
     sound.clang();
 }
 
-// The faster jousting knight, if he's running this one down
+// The other jousting knight, if his lance tip is in this one and it's a win (see checkJousts)
 function findJoustDanger(target) {
     if (!arena.joust) {
         return null;
     }
-    const targetSpeed = Math.hypot(target.vx, target.vy);
-    const rider = knights.find(knight => knight !== target && !knight.dead && knight.mounted
-        && boxesOverlap(knight.getBodyBox(), target.getBodyBox())
-        && Math.hypot(knight.vx, knight.vy) > targetSpeed + JOUST_TIE);
+    const rider = knights.find(knight => knight !== target && knight.mounted && knight.lanceHits(target));
     if (rider === undefined) {
         return null;
     }
-    const speed = Math.hypot(rider.vx, rider.vy) || 1;
-    return {cause: "joust", push: {x: rider.vx / speed, y: rider.vy / speed}, source: rider};
+    // Head on, the faster one wins
+    if (target.lanceHits(rider) && Math.hypot(rider.vx, rider.vy) <= Math.hypot(target.vx, target.vy) + JOUST_TIE) {
+        return null;
+    }
+    return {cause: "joust", push: rider.getLanceDir(), source: rider};
 }
 
 // The arena's own features, made fresh each round
@@ -4508,7 +4738,7 @@ const MODIFIER_LABELS = {lightning: "LIGHTNING STORM", holes: "SHAKY GROUND", ho
 // Which hazards (and whether boulders) are on this round. The first two rounds are set: boulders, and round 2's
 // twist if it's a horse or catapult. After that it's random, like the weather.
 function pickRoundHazards() {
-    roundBoulders = getRoundStage() < 2 || Math.random() < BOULDER_ROUND_CHANCE;
+    roundBoulders = !arena.calm && (getRoundStage() < 2 || Math.random() < BOULDER_ROUND_CHANCE);
     roundHazards = [];
     if (!settings.get("hazards")) {
         return;
@@ -4562,6 +4792,12 @@ function wasPressed(codes) {
 
 function popup(text, x, y, color) {
     popups.push(new Popup(text, x, y, color ?? "#ffffff"));
+}
+
+// Would someone standing here fall in: water, lava, a hole, off the bridge or into the sea? strictly leaves out the
+// lava lake's bit of leeway past a raft's edge (where you don't fall in, but aren't carried along either).
+function isUnsafeGround(x, y, strictly) {
+    return isInWater(x, y) || holes.some(hole => strictly && hole.containsStrictly !== undefined ? hole.containsStrictly(x, y) : hole.contains(x, y));
 }
 
 function isInTallGrass(x, y) {
@@ -4642,7 +4878,7 @@ function setArena(name) {
         holes.push(new Platform(arena.platform));
     }
     if (arena.rafts !== undefined) {
-        holes.push(new LavaLake(arena.shores, arena.rafts));
+        holes.push(new LavaLake(arena.rafts));
     }
     features = makeArenaFeatures();
     critters = [];
@@ -4651,7 +4887,7 @@ function setArena(name) {
     }
     // Clear for the first round, only round 2's twist if that's wind or rain, then whatever the arena has
     let kind = "clear";
-    if (settings.get("weather")) {
+    if (settings.get("weather") && !arena.calm) {
         if (getRoundStage() === 2) {
             kind = pick(arena.weathers);
         } else if (roundModifier === "wind" || roundModifier === "rain") {
@@ -4796,8 +5032,8 @@ function findClearSpot(knightDistance) {
 
 function updatePowerups() {
     // There's always one on the field: a new one comes soon after the last one's gone
-    const allowed = SPAWNING_POWERUPS.filter(type => settings.isPowerupOn(type) && !(arena.guns && SHOWDOWN_SKIPS.includes(type))
-        && !(arena.joust && JOUST_SKIPS.includes(type)));
+    // (none at all in a calm arena, like the jousting yard)
+    const allowed = arena.calm ? [] : SPAWNING_POWERUPS.filter(type => settings.isPowerupOn(type) && !(arena.guns && SHOWDOWN_SKIPS.includes(type)));
     if (phase === "playing" && powerups.length === 0 && allowed.length > 0) {
         powerupWait--;
         if (powerupWait <= 0) {
@@ -4881,7 +5117,7 @@ function updateHazards(walls) {
     }
 
     // Chickens, when nobody's been hit for a while (from round 3 on)
-    if (phase === "playing" && settings.get("hazards") && getRoundStage() === 2) {
+    if (phase === "playing" && settings.get("hazards") && getRoundStage() === 2 && !arena.calm) {
         calmTicks++;
         if (calmTicks >= CHICKEN_FIRST_TICKS && (calmTicks - CHICKEN_FIRST_TICKS) % CHICKEN_EVERY_TICKS === 0) {
             spawnChicken();
@@ -5044,8 +5280,13 @@ function checkSwords() {
         }
 
         // Cutting the grass: tall grass gets chopped down, and on grassy ground the sword shaves a lighter streak
+        let cut = 0;
         for (const row of grassRows) {
-            row.cutBox(swordBox);
+            cut += row.cutBox(swordBox);
+        }
+        if (cut > 0 && !knight.swingCutGrass) {
+            knight.swingCutGrass = true;
+            sound.grassCut();
         }
         if (arena.grassy && Math.random() < 0.6) {
             const groundY = Math.max(knight.getGroundY() - 3, Math.min(knight.getGroundY() + 4, swordBox.bottom));
@@ -5360,36 +5601,25 @@ function getCoolReason(hits, winner) {
     const hit = hits[0];
     const killer = getKiller(hit);
     const recent = time => gameTime - time < COOL_RECENT_TICKS;
-    const snipeDistance = arena.guns ? COOL_SNIPE_DISTANCE_SHOWDOWN : COOL_SNIPE_DISTANCE;
     const reasons = [
         // Abilities and power-ups
         [hit.ownGoal, "OWN GOAL"],
         [hit.target.tauntTicks > 0, "TAUNT PUNISHED"],
-        [hit.target.maxLives > 1, "GIANT SLAYER"],
         [gameTime - hit.target.lastFling < COOL_RECENT_TICKS, "TORNADO"],
         [hit.cause === "minecart", "RUN OVER"],
-        [hit.cause === "joust" && Math.hypot(killer.vx, killer.vy) > JOUST_MAX_SPEED, "FULL GALLOP"],
+        [hit.cause === "joust" && Math.hypot(killer.vx, killer.vy) > JOUST_GALLOP_SPEED, "FULL GALLOP"],
         [hit.cause === "explosion", "KABOOM"],
         [hit.cause === "fire", "DRAGON FIRE"],
         [hit.cause === "bear", "MAULED"],
         [hit.target.grabTicks > 0, "GRAVE GRAB"],
-        [hit.cause === "lightning", "THUNDER"],
         [hit.cause === "thrown", "SWORD THROW"],
         [hit.cause === "bullet" && hit.source.reflected === true, "REFLECTED"],
-        [hit.cause === "bullet" && hit.source.travelled > snipeDistance, "SNIPED"],
         [hit.cause === "boulder" && hit.source.deflectedBy === killer && killer !== null, "DEFLECTED BOULDER"],
-        [hit.cause === "boulder" && hit.source.owner !== null, "AVALANCHE"],
-        [hit.target.reverseTicks > 0, "REVERSED"],
-        [killer !== null && killer.growTicks > 0, "GIANT"],
-        [killer !== null && killer.furyTicks > 0, "FURY"],
         // The arena
         [hit.cause === "horse", "TRAMPLED"],
-        [hit.cause === "rock" || hit.cause === "fireball", "FROM ABOVE"],
         // Something the winner just pulled off
         [winner !== null && recent(winner.lastParry), "PARRY COUNTER"],
-        [winner !== null && recent(winner.lastBlock), "SHIELD SAVE"],
         [winner !== null && recent(winner.lastDeflect), "DEFLECT"],
-        [winner !== null && recent(winner.lastCloseCall), "CLOSE CALL"],
     ];
     return reasons.find(([happened]) => happened)?.[1] ?? null;
 }
@@ -5403,7 +5633,8 @@ function scoreRound(hits) {
     const alive = knights.filter(knight => !knight.dead);
     const killCamSetting = settings.get("killCam");
     const coolReason = getCoolReason(hits, alive[0] ?? null);
-    // "COOL KILLS" (or anything older) replays cool ones; the match's last knockdown is replayed unless it's off
+    // "COOL KILLS" (or anything older) replays every cool knockdown, "FINAL BLOW" only the match's last one if it
+    // was cool
     const replayCool = killCamSetting !== "OFF" && killCamSetting !== "FINAL BLOW";
     if (alive.length === 0) {
         resultText = {text: "DOUBLE KO!", color: "#ffffff"};
@@ -5456,8 +5687,9 @@ function scoreRound(hits) {
             loserKnight.bleeding = true;
             particles.blood(loserKnight.getGroundX(), loserKnight.getGroundY() - 6, 24, bloodLanded);
         }
-        if (killCamSetting !== "OFF") {
-            replay(coolReason ?? "FINAL BLOW");
+        // Replayed only if it was cool, like any other knockdown
+        if (killCamSetting !== "OFF" && coolReason !== null) {
+            replay(coolReason);
         }
     } else {
         resultText = {text: winner.color.toUpperCase() + " SCORES!", color: winner.textColor};
@@ -5513,6 +5745,19 @@ function updateTitle() {
         knight.brain?.update();
         knight.update(world, true);
     }
+    // The ground moves like it does in a match (the lava lake's rafts drift, and so on), except that bridge planks
+    // don't break under them
+    for (const hole of holes) {
+        if (!(hole instanceof Canyon)) {
+            hole.update();
+        }
+    }
+    // The arena's moving parts and anything fired keep going too (the lighthouse's beam, bullets in a showdown...)
+    for (const feature of features) {
+        feature.update?.();
+    }
+    features = features.filter(feature => !feature.done);
+    updateProjectiles([...rocks, ...trees, ...crates, ...getFeatureSolids()]);
     // Their swords clang when they meet (but nobody gets knocked down here)
     checkSwords();
     for (const critter of critters) {
@@ -5759,14 +6004,14 @@ function drawTitle() {
     MDog.Draw.rectangleFill(0, 26, SCREEN_WIDTH, 70, "rgba(10, 16, 10, 0.55)");
     drawText("KNIGHT KNIGHT", 48, "#ffd84a", 3);
     drawText("BY MILO KESTELOOT AND TRENT SCHROER", 74, "#ffffff", 1);
-    drawText("ART BY JAMES MILESTONE", 86, "#d8d8d8", 1);
+    drawText("ART BY JAMES MILESTONE", 86, "#ffffff", 1);
     if (Math.floor(liveTicks / 50) % 2 === 0) {
         drawText("PRESS SPACE OR ENTER TO START", 122, "#ffffff", 1);
     }
     MDog.Draw.rectangleFill(0, 139, SCREEN_WIDTH, 37, "rgba(10, 16, 10, 0.6)");
     drawText("RED: WASD MOVE, SPACE SWING, E TAUNT", 146, PLAYERS[0].lightTextColor, 1);
     drawText("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", 156, PLAYERS[1].lightTextColor, 1);
-    drawText("ESC IN A MATCH: PAUSE AND SETTINGS", 170, "#c8d4c0", 1);
+    drawText("ESC: SETTINGS", 170, "#c8d4c0", 1);
 }
 
 function drawUI() {
@@ -5953,6 +6198,7 @@ class Menu {
         this.items = items;
         this.hint = hint ?? null;
         this.choice = 0;
+        this.isPauseMenu = false; // the pause menu is laid out a bit differently, with the controls under it
     }
 }
 
@@ -5973,13 +6219,14 @@ const POWERUP_MENU_NAMES = {
 };
 
 function makePauseMenu() {
-    return new Menu("PAUSED", [
+    const menu = new Menu("PAUSED", [
         {label: () => "RESUME", pick: () => closeMenus()},
         {label: () => "RESTART MATCH", pick: () => { startMatch(); closeMenus(); }},
         {label: () => "TITLE SCREEN", pick: () => { showTitle(); closeMenus(); }},
-        {label: () => "SETTINGS", pick: () => openMenu(makeSettingsMenu())},
         {label: () => "HITBOXES: " + onOff(showHitboxes), pick: () => { showHitboxes = !showHitboxes; }},
     ]);
+    menu.isPauseMenu = true;
+    return menu;
 }
 
 function makeSettingsMenu() {
@@ -5987,13 +6234,18 @@ function makeSettingsMenu() {
         label: () => label + ": " + onOff(settings.get(key)),
         change: () => { settings.toggle(key); after?.(); },
     });
-    const cycle = (label, key, choices) => ({
+    const cycle = (label, key, choices, after) => ({
         label: () => label + ": " + settings.get(key),
-        change: direction => settings.cycle(key, choices, direction),
+        change: direction => { settings.cycle(key, choices, direction); after?.(); },
     });
     return new Menu("SETTINGS", [
         cycle("ROUNDS TO WIN", "roundsToWin", ROUNDS_CHOICES),
-        cycle("ARENA", "arena", ARENA_CHOICES),
+        cycle("ARENA", "arena", ARENA_CHOICES, () => {
+            // On the title screen, the field behind the menu changes to show it (a mixed match starts on the meadow)
+            if (phase === "title") {
+                showTitle();
+            }
+        }),
         cycle("BOULDERS", "boulders", BOULDER_CHOICES),
         {label: () => "POWER-UPS", pick: () => openMenu(makePowerupMenu())},
         toggle("WEATHER", "weather"),
@@ -6078,11 +6330,11 @@ function updateMenu() {
 function drawMenu() {
     const menu = menus[menus.length - 1];
     MDog.Draw.rectangleFill(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, "rgba(10, 20, 10, 0.7)");
-    const top = menu === menus[0] ? 34 : 14;
+    const top = menu.isPauseMenu ? 34 : 14;
     drawText(menu.title, top, "#ffffff", 2);
 
     const spacing = menu.items.length > 8 ? 10 : 14;
-    const firstY = top + (menu === menus[0] ? 30 : 20);
+    const firstY = top + (menu.isPauseMenu ? 30 : 20);
     menu.items.forEach((item, i) => {
         const y = firstY + i * spacing;
         const selected = i === menu.choice;
@@ -6096,7 +6348,7 @@ function drawMenu() {
         }
     });
 
-    if (menu === menus[0]) {
+    if (menu.isPauseMenu) {
         drawText("RED: WASD MOVE, SPACE SWING, E TAUNT", 136, PLAYERS[0].lightTextColor, 1);
         drawText("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", 146, PLAYERS[1].lightTextColor, 1);
         drawText("ESC: RESUME", 162, "#c8d4c0", 1);
@@ -6119,6 +6371,9 @@ function gameTick() {
             backMenu();
         } else if (canPause) {
             openMenu(makePauseMenu());
+        } else if (phase === "title") {
+            // On the title screen there's nothing to pause, so it's straight to the settings
+            openMenu(makeSettingsMenu());
         }
     } else if (Keyboard.isClicked("p")) {
         if (isPaused()) {
