@@ -88,7 +88,8 @@ From `games/knight-knight-online/tests`, with Node 22 or newer:
 | `node quick-test.mjs`, `node invite-test.mjs` | Quick match pairing and cancelling, and invite links joining in one click, in two real browsers |
 | `node lobby-test.mjs` | The settings shown before a match, the lobby between matches, and F3, in two real browsers |
 | `node showdown-check.mjs` | The showdown: all three layouts come up, and nothing extra (boulders, hazards, holes, chickens...) ever does |
-| `node volcano-check.mjs` | The volcano's fissures (crack, open, close, and knights fall in) and dragons every 7 to 13 seconds |
+| `node boxin-check.mjs`, `node fissure-edges.mjs` | The volcano's fissures boxing the knights in (always away from them, both on the same side, never too small), and reaching edge to edge |
+| `node volcano-check.mjs` | The volcano's dragons every 7 to 13 seconds, and falling into a fissure |
 | `node boogie-check.mjs` | The boogie bomb (dance, but can't attack, for 5 seconds), and the pause between rounds |
 | `node facing-check.mjs`, `node code-check.mjs`, `node storm-check.mjs` | Spamming swing while turning, join codes, and the storm arena's lightning |
 

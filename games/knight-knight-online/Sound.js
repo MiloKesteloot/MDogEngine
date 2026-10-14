@@ -453,8 +453,8 @@ class Sound {
         this.tone(0.08, "square", 990, 1320, 0.07);
     }
 
-    // A western wail, for a showdown: "ooo-aaa-ooo-aaa-ooooooo", like a voice (or a coyote) sliding between two notes,
-    // then a long one that falls away with a growing wobble
+    // A western wail, for a showdown: "ooo-aaa-ooo-aaa-ooooo", high and quick, like a voice (or a coyote) jumping
+    // between two notes, then a long one that falls away with a growing wobble
     western() {
         if (!this.isReady()) return;
         const start = this.context.currentTime + 0.05;
@@ -465,15 +465,15 @@ class Sound {
         vowel.type = "lowpass";
         vowel.Q.value = 6;
         const vibrato = this.context.createOscillator();
-        vibrato.frequency.value = 5.5;
+        vibrato.frequency.value = 6;
         const wobble = this.context.createGain();
         vibrato.connect(wobble).connect(voice.frequency);
         const gain = this.context.createGain();
         // [seconds in, pitch, vowel]
         const path = [
-            [0, 440, 500], [0.28, 440, 500], [0.36, 660, 1700], [0.62, 660, 1700],
-            [0.7, 440, 500], [0.96, 440, 500], [1.04, 660, 1700], [1.3, 660, 1700],
-            [1.42, 494, 600], [2.6, 466, 450],
+            [0, 880, 1000], [0.13, 880, 1000], [0.18, 1320, 2800], [0.31, 1320, 2800],
+            [0.36, 880, 1000], [0.49, 880, 1000], [0.54, 1320, 2800], [0.67, 1320, 2800],
+            [0.75, 990, 1400], [1.55, 932, 1100],
         ];
         voice.frequency.setValueAtTime(path[0][1], start);
         vowel.frequency.setValueAtTime(path[0][2], start);
@@ -482,17 +482,17 @@ class Sound {
             vowel.frequency.linearRampToValueAtTime(cutoff, start + time);
         }
         wobble.gain.setValueAtTime(0, start);
-        wobble.gain.linearRampToValueAtTime(6, start + 1.4);
-        wobble.gain.linearRampToValueAtTime(14, start + 2.6);
+        wobble.gain.linearRampToValueAtTime(8, start + 0.8);
+        wobble.gain.linearRampToValueAtTime(22, start + 1.55);
         gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.22, start + 0.06);
-        gain.gain.setValueAtTime(0.22, start + 2.0);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 2.7);
+        gain.gain.exponentialRampToValueAtTime(0.2, start + 0.04);
+        gain.gain.setValueAtTime(0.2, start + 1.2);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 1.6);
         voice.connect(vowel).connect(gain).connect(this.master);
         voice.start(start);
         vibrato.start(start);
-        voice.stop(start + 2.75);
-        vibrato.stop(start + 2.75);
+        voice.stop(start + 1.65);
+        vibrato.stop(start + 1.65);
     }
 
     // A funky little bassline, for the boogie bomb

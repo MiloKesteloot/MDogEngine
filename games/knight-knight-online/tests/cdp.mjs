@@ -18,6 +18,9 @@ export async function launch(port) {
     const chrome = spawn(CHROME, [
         "--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run",
         "--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--autoplay-policy=no-user-gesture-required",
+        // Silent: the tests play the game, and nobody wants to hear it. (Sounds can still be measured without
+        // speakers, see sound-look.mjs.) SOUND=1 lets it be heard.
+        ...(process.env.SOUND === "1" ? [] : ["--mute-audio"]),
         "--window-size=960,720", "about:blank",
     ], {stdio: "ignore"});
     for (let i = 0; i < 50; i++) {

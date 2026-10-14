@@ -1,5 +1,5 @@
-// The boogie bomb: the other knight dances for 5 seconds, can still walk, but can't attack. And the pause after a
-// round (with no replay) is 4 seconds longer than it was.
+// The boogie bomb: the other knight dances for 5 seconds, can still walk, but can't attack. And how long the pause
+// after a round is (with no replay).
 import "./fake-browser.mjs";
 import {SETTINGS} from "./bots.mjs";
 const g = (await import("../knight-knight-online.js")).testHooks;
@@ -40,7 +40,7 @@ while (g.phase === "roundOver") {
     g.stepOnline([0, 0]);
     ticks++;
 }
-console.log(`     from the knockdown to the next round: ${(ticks / 160).toFixed(1)} seconds (it was about ${((ticks - 4 * 160) / 160).toFixed(1)})`);
+console.log(`     from the knockdown to the next round: ${(ticks / 160).toFixed(1)} seconds`);
 check("the next round started", g.phase === "ready");
 console.log(failed ? "FAILED" : "PASS");
 process.exit(failed ? 1 : 0);

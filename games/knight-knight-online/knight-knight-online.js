@@ -85,7 +85,7 @@ const EPIC_ROUND_TICKS = 40 * TICKS_PER_SECOND; // one that goes longer is "WHAT
 
 const READY_TICKS = 150; // "READY" before each round
 const FIGHT_TEXT_TICKS = 70; // how long "FIGHT!" stays up after the round starts
-const ROUND_OVER_TICKS = 260 + 4 * TICKS_PER_SECOND; // from a knight going down to the next round (when there's no replay)
+const ROUND_OVER_TICKS = 260 + 1.5 * TICKS_PER_SECOND; // from a knight going down to the next round (when there's no replay)
 const RESTART_DELAY_TICKS = 120; // after the match, so a late swing press doesn't skip the win screen
 
 const BOULDER_SPEED = 70 / TICKS_PER_SECOND; // pixels per tick
@@ -190,13 +190,16 @@ const DRAGON_MIN_WAIT_TICKS = 7 * TICKS_PER_SECOND; // on the volcano, between d
 const DRAGON_MAX_WAIT_TICKS = 13 * TICKS_PER_SECOND;
 // The volcano's fissures: a crack spreads across the field (the warning), splits open into lava, then closes again
 const FISSURE_FIRST_WAIT_TICKS = 5 * TICKS_PER_SECOND;
-const FISSURE_MIN_WAIT_TICKS = 9 * TICKS_PER_SECOND; // from one closing to the next starting
+const FISSURE_MIN_WAIT_TICKS = 9 * TICKS_PER_SECOND; // from one opening to the next starting
 const FISSURE_MAX_WAIT_TICKS = 15 * TICKS_PER_SECOND;
 const FISSURE_CRACK_TICKS = 2 * TICKS_PER_SECOND;
 const FISSURE_OPENING_TICKS = 24;
 const FISSURE_OPEN_TICKS = 5 * TICKS_PER_SECOND;
 const FISSURE_CLOSING_TICKS = 80;
 const FISSURE_WIDTH = 12;
+const FISSURE_SAFE_DISTANCE = 30; // how far from both knights a new one has to be
+const FISSURE_MIN_AREA_WIDTH = 90; // the smallest the field gets boxed in to, across...
+const FISSURE_MIN_AREA_HEIGHT = 70; // ...and up and down
 const DRAGON_FIRE_DELAY_TICKS = 0.35 * TICKS_PER_SECOND; // the fire comes this long after the shadow passes
 const DRAGON_FIRE_TICKS = 1.8 * TICKS_PER_SECOND;
 const DRAGON_FIRE_RADIUS = 7;
@@ -3719,45 +3722,115 @@ class DragonSpawner {
     }
 }
 
-// Starts a fissure every so often (one at a time)
+// The volcano's fissures box the knights in. Each one cuts off part of the field that neither knight is in (well away
+// from both of them), and stays open for the rest of the round, so the field gets smaller and smaller. If the knights
+// end up on different sides of one anyway (one crossed over while it was cracking, say), it doesn't stay: it closes
+// up again after a while, like any crack.
+function getPlayArea() {
+    const bounds = getBounds();
+    const area = {left: bounds.left, right: bounds.right, top: Math.max(bounds.top, 20), bottom: bounds.bottom};
+    for (const hole of holes) {
+        if (hole instanceof Fissure && hole.permanent && hole.keepSide !== null) {
+            const [low, high] = hole.getExtent();
+            if (hole.axis === "y") {
+                if (hole.keepSide > 0) area.left = Math.max(area.left, high);
+                else area.right = Math.min(area.right, low);
+            } else {
+                if (hole.keepSide > 0) area.top = Math.max(area.top, high);
+                else area.bottom = Math.min(area.bottom, low);
+            }
+        }
+    }
+    return area;
+}
+
+// Plans the next fissure: across the part of the field that's left, beyond both knights (so they're on the same side,
+// well clear of it), and leaving them enough room. Null if there's nowhere it can go.
+function planFissure() {
+    const alive = knights.filter(knight => !knight.dead);
+    if (alive.length === 0) {
+        return null;
+    }
+    const area = getPlayArea();
+    for (let tries = 0; tries < 30; tries++) {
+        const axis = rng() < 0.5 ? "y" : "x";
+        const vertical = axis === "y";
+        const spots = alive.map(knight => vertical ? knight.getGroundX() : knight.getGroundY());
+        const low = vertical ? area.left : area.top;
+        const high = vertical ? area.right : area.bottom;
+        // Cutting off the side before both knights (they're on its far side, 1), or after both (-1)
+        const knightsSide = rng() < 0.5 ? 1 : -1;
+        const from = knightsSide > 0 ? low + 10 : Math.max(...spots) + FISSURE_SAFE_DISTANCE;
+        const to = knightsSide > 0 ? Math.min(...spots) - FISSURE_SAFE_DISTANCE : high - 10;
+        if (to - from < 4) {
+            continue;
+        }
+        const fissure = new Fissure(axis, random(from, to));
+        const [cutLow, cutHigh] = fissure.getExtent();
+        const room = knightsSide > 0 ? high - cutHigh : cutLow - low;
+        const enoughRoom = room >= (vertical ? FISSURE_MIN_AREA_WIDTH : FISSURE_MIN_AREA_HEIGHT);
+        const insideArea = cutLow >= low + 4 && cutHigh <= high - 4;
+        const clearOfKnights = alive.every(knight => fissure.distanceFrom(knight.getGroundX(), knight.getGroundY()) >= FISSURE_SAFE_DISTANCE
+            && fissure.sideOf(knight.getGroundX(), knight.getGroundY()) === knightsSide);
+        if (enoughRoom && insideArea && clearOfKnights) {
+            return fissure;
+        }
+    }
+    return null;
+}
+
+// Starts the next fissure every so often: one at a time (not while one is still cracking or opening, or is one that
+// is going to close again)
 class FissureSpawner {
     constructor() {
         this.wait = FISSURE_FIRST_WAIT_TICKS;
     }
 
     update() {
-        if (phase !== "playing" || holes.some(hole => hole instanceof Fissure)) {
+        if (phase !== "playing") {
+            return;
+        }
+        if (holes.some(hole => hole instanceof Fissure && (!hole.permanent || hole.state === "cracking" || hole.state === "opening"))) {
             return;
         }
         this.wait--;
         if (this.wait <= 0) {
             this.wait = random(FISSURE_MIN_WAIT_TICKS, FISSURE_MAX_WAIT_TICKS);
-            holes.push(new Fissure());
+            const fissure = planFissure();
+            if (fissure !== null) {
+                holes.push(fissure);
+                sound.rumble(true);
+            }
         }
     }
 }
 
-// A crack right across the field, up and down or side to side, near the middle. First it spreads across (glowing,
-// as a warning, harmless), then it splits open into a river of lava that cuts the field in two, then it closes up and
-// the ground's back together. It's a hole while it's open: knights, boulders, chickens and dropped swords fall in.
+// A crack right across the field, up and down or side to side. First it spreads across (glowing, as a warning, and
+// harmless), then it splits open into a river of lava. If both knights are on the same side of it then, it stays open
+// for the rest of the round; if not, it closes up again after a while. It's a hole while it's open: knights,
+// boulders, chickens and dropped swords fall in.
 class Fissure {
-    constructor() {
+    // axis "y" runs up and down (its middle moves in x as it goes down), "x" side to side. middle is where it crosses
+    // the field. Without them it goes anywhere near the middle.
+    constructor(axis, middle) {
         const bounds = getBounds();
-        // "y": it runs up and down (its middle moves in x as it goes down); "x": side to side
-        this.axis = rng() < 0.5 ? "y" : "x";
+        this.axis = axis ?? (rng() < 0.5 ? "y" : "x");
         const vertical = this.axis === "y";
-        this.start = (vertical ? bounds.top : Math.max(bounds.top, 20)) - 8; // where it runs from and to
+        // Where it runs from and to: a little past the edges of the field, so it cuts right across
+        this.start = (vertical ? bounds.top : bounds.left) - 8;
         this.end = (vertical ? bounds.bottom : bounds.right) + 8;
-        const low = vertical ? bounds.left : Math.max(bounds.top, 20);
-        const high = vertical ? bounds.right : bounds.bottom;
-        const middle = low + (high - low) * random(0.3, 0.7);
-        const slope = random(-0.25, 0.25);
+        if (middle === undefined) {
+            const low = vertical ? bounds.left : Math.max(bounds.top, 20);
+            const high = vertical ? bounds.right : bounds.bottom;
+            middle = low + (high - low) * random(0.3, 0.7);
+        }
+        const slope = random(-0.1, 0.1);
         const halfway = (this.start + this.end) / 2;
         // Its middle, every few pixels along it, wandering a little
         this.step = 6;
         this.points = [];
         for (let along = this.start; along <= this.end + this.step; along += this.step) {
-            this.points.push(middle + (along - halfway) * slope + random(-4, 4));
+            this.points.push(middle + (along - halfway) * slope + random(-3, 3));
         }
         this.style = "lava";
         this.cracked = false; // it's not one of the holes that cracked open and stay (see MAX_HOLES)
@@ -3765,7 +3838,55 @@ class Fissure {
         this.ticks = 0;
         this.width = 0;
         this.done = false;
-        sound.rumble(true);
+        this.permanent = true; // stays open, unless the knights turn out to be on different sides of it
+        this.keepSide = null; // the side the knights are on (1 or -1), once it's open
+    }
+
+    // How far across the field it reaches, both ways: [lowest, highest], counting its full width
+    getExtent() {
+        return [Math.min(...this.points) - FISSURE_WIDTH / 2, Math.max(...this.points) + FISSURE_WIDTH / 2];
+    }
+
+    // Which side of it a spot is on: 1 (right of it, or below it) or -1
+    sideOf(x, y) {
+        return this.axis === "y" ? (x > this.centerAt(y) ? 1 : -1) : (y > this.centerAt(x) ? 1 : -1);
+    }
+
+    // The side both knights still standing are on, or null if they're on different sides
+    getKnightsSide() {
+        const sides = new Set(knights.filter(knight => !knight.dead).map(knight => this.sideOf(knight.getGroundX(), knight.getGroundY())));
+        if (sides.size === 0) {
+            return this.keepSide ?? 1;
+        }
+        return sides.size === 1 ? [...sides][0] : null;
+    }
+
+    // Is this spot in a part of the field it has cut off (so nothing should be put there)?
+    isCutOff(x, y) {
+        return this.permanent && this.keepSide !== null && this.sideOf(x, y) !== this.keepSide;
+    }
+
+    // As it opens, whatever's lying in its way or in the part it cuts off (where nobody can get to it) is gone: power-ups
+    // sink into the lava, and a sword lying there is lost (so a new one comes down for its owner, like one lost in
+    // water)
+    swallow() {
+        const gone = (x, y) => this.distanceFrom(x, y) < FISSURE_WIDTH / 2 + 4 || this.isCutOff(x, y);
+        for (const powerup of powerups) {
+            if (gone(powerup.x, powerup.y)) {
+                powerup.life = 0;
+                particles.embers(powerup.x, powerup.y, 6);
+            }
+        }
+        for (const sword of thrownSwords) {
+            if (sword.state === "grounded" && gone(sword.x, sword.y)) {
+                sword.state = "lost";
+                particles.embers(sword.x, sword.y, 6);
+                if (!sword.owner.dead && !sword.owner.hasSword) {
+                    sword.owner.newSwordTicks = NEW_SWORD_TICKS;
+                    popup("SWORD LOST!", sword.x, sword.y - 12, "#c8d4c0");
+                }
+            }
+        }
     }
 
     // Where its middle is, this far along
@@ -3806,6 +3927,14 @@ class Fissure {
                 addShake(4);
                 sound.sizzle();
                 sound.crumble();
+                // It only stays if both knights are on the same side of it
+                const side = this.getKnightsSide();
+                if (side === null) {
+                    this.permanent = false;
+                } else {
+                    this.keepSide = side;
+                }
+                this.swallow();
             }
         } else if (this.state === "opening") {
             this.width = FISSURE_WIDTH * Math.min(1, this.ticks / FISSURE_OPENING_TICKS);
@@ -3813,7 +3942,11 @@ class Fissure {
                 this.setState("open");
             }
         } else if (this.state === "open") {
-            if (this.ticks >= FISSURE_OPEN_TICKS) {
+            if (this.permanent && this.getKnightsSide() === null) {
+                // Somehow they have ended up on different sides of it (flung over by a tornado, say): it does not stay
+                this.permanent = false;
+                this.setState("open");
+            } else if (!this.permanent && this.ticks >= FISSURE_OPEN_TICKS) {
                 this.setState("closing");
                 sound.crumble();
             }
@@ -5320,12 +5453,18 @@ function pickRoundHazards() {
 }
 
 // Round 2's twist, from whatever the settings (and the arena) allow
+// Can a knight be pushed off this arena (into the sea, off the sumo platform, into the canyon, off a raft)? Then
+// there's never any wind: it could blow you off.
+function canFallOff(someArena) {
+    return someArena.platform !== undefined || someArena.cliffs !== undefined || someArena.rafts !== undefined;
+}
+
 function pickRoundModifier(nextArena) {
     if (roundNumber !== 2) {
         return null;
     }
     const options = [];
-    if (simSettings.get("weather")) options.push("wind", "rain");
+    if (simSettings.get("weather")) options.push(...(canFallOff(nextArena) ? ["rain"] : ["wind", "rain"]));
     if (nextArena.quiet) {
         return options.length > 0 ? pick(options) : null;
     }
@@ -5550,7 +5689,8 @@ function setArena(name) {
     let kind = "clear";
     if (simSettings.get("weather") && !arena.calm) {
         if (getRoundStage() === 2) {
-            kind = pick(arena.weathers);
+            const weathers = arena.weathers.filter(choice => choice !== "wind" || !canFallOff(arena));
+            kind = weathers.length > 0 ? pick(weathers) : "clear";
         } else if (roundModifier === "wind" || roundModifier === "rain") {
             kind = roundModifier;
         }
@@ -5682,7 +5822,7 @@ function isClearSpot(x, y, knightDistance) {
     const box = {left: x - 8, right: x + 8, top: y - 6, bottom: y + 4};
     return !getSolids().some(solid => boxesOverlap(box, solid.getBox()))
         && !isInWater(x - 8, y) && !isInWater(x + 8, y)
-        && !holes.some(hole => hole.isNear(x, y, 8))
+        && !holes.some(hole => hole.isNear(x, y, 8) || hole.isCutOff?.(x, y))
         && !features.some(feature => feature.isNear?.(x, y, 8))
         && !knights.some(knight => dhypot(knight.getGroundX() - x, knight.getGroundY() - y) < knightDistance);
 }

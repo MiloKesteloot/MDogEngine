@@ -1,5 +1,5 @@
-// The volcano: fissures crack across the field, open into lava, and close again, and dragons come every 7 to 13
-// seconds
+// The volcano: dragons come every 7 to 13 seconds, and a knight standing on a fissure's crack falls in when it opens
+// (how fissures box the knights in is boxin-check.mjs)
 import "./fake-browser.mjs";
 import {SETTINGS} from "./bots.mjs";
 const g = (await import("../knight-knight-online.js")).testHooks;
@@ -32,7 +32,6 @@ for (let t = 0; t < 60 * 160; t++) {
         }
     }
 }
-check(`fissures cracked ${seen.cracking} times, opened ${seen.open} times, and closed ${seen.closed} times in a minute`, seen.cracking >= 3 && seen.open >= 3 && seen.closed >= 3);
 const gaps = dragonTimes.slice(1).map((time, i) => time - dragonTimes[i]);
 check(`dragons came ${dragonTimes.length} times in a minute, ${gaps.map(gap => gap.toFixed(1)).join(", ")} seconds apart`,
     dragonTimes.length >= 4 && gaps.every(gap => gap >= 6.9 && gap <= 13.1));

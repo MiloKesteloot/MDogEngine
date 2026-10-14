@@ -237,7 +237,7 @@ const ARENAS = {
         holeStyle: "ice",
         footprint: "rgba(30, 50, 30, 0.3)",
         critters: null,
-        weathers: ["clear", "rain", "wind"],
+        weathers: ["clear", "rain"], // never wind: it could blow you into the sea
         hazards: ["catapult", "tornado"],
         music: "night",
     },
@@ -293,7 +293,7 @@ const ARENAS = {
         holeStyle: "dirt",
         footprint: "rgba(30, 60, 20, 0.22)",
         critters: "butterflies",
-        weathers: ["clear", "wind"],
+        weathers: ["clear"], // never wind: it could blow you into the canyon
         hazards: ["catapult", "dragon"],
         music: "battle",
     },
@@ -392,7 +392,7 @@ const ARENAS = {
         holeStyle: "ice",
         footprint: "rgba(120, 90, 60, 0.3)",
         critters: null,
-        weathers: ["clear", "wind"],
+        weathers: ["clear"], // never wind: it could blow you off the platform
         hazards: ["catapult"],
         music: "battle",
     },
