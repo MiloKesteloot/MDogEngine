@@ -8,9 +8,9 @@ import Connection from "./Connection.js";
 import RollbackSession from "./Rollback.js";
 import {getServerUrl} from "./config.js";
 
-// Codes leave out letters that are easy to mix up: O and 0, I, 1 and L, C and G, U and V. Capitals don't matter (a
-// typed or pasted code is made all capitals).
-const CODE_LETTERS = "ABDEFHJKMNPQRSTWXYZ23456789";
+// Codes leave out letters that are easy to mix up (O and 0, I, 1 and L, C and G, U and V) and X. Capitals don't
+// matter: a typed or pasted code is made all capitals.
+const CODE_LETTERS = "ABDEFHJKMNPQRSTWYZ23456789";
 export const CODE_LENGTH = 4;
 const PING_EVERY_MS = 250;
 const SYNC_MS = 1200; // measuring the ping before the match starts
