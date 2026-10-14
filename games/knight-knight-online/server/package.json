@@ -1,0 +1,12 @@
+{
+  "name": "knight-knight-online-server",
+  "private": true,
+  "description": "Join codes and connection setup for Knight Knight Online, as a Cloudflare Worker with a Durable Object",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
