@@ -1315,6 +1315,19 @@ class Knight {
         return (DIRS[dir].x !== 0 && DIRS[dir].x === move.x) || (DIRS[dir].y !== 0 && DIRS[dir].y === move.y);
     }
 
+    // Turns to face the way he's being held, right before a swing (or a shot or a throw), so it goes the way the player
+    // wants even when swings come one straight after another and he never gets a chance to walk. A juggernaut is too
+    // big to turn that fast: he only turns as he walks.
+    faceHeldWay() {
+        if (this.maxLives > 1) {
+            return;
+        }
+        const move = this.getMoveInput();
+        if (move.x !== 0 || move.y !== 0) {
+            this.faceToward(move);
+        }
+    }
+
     faceToward(move) {
         // Keep facing the same way while still moving that way, so walking diagonally doesn't flicker
         if (!this.isMovingToward(this.facing, move)) {
@@ -1398,10 +1411,12 @@ class Knight {
                 return;
             }
             if (this.swingBuffer > 0 && canAct && this.hasSword) {
+                this.faceHeldWay();
                 this.startSwing();
                 return;
             }
         } else if (swingPressed) {
+            this.faceHeldWay();
             if (this.attack()) {
                 return;
             }
