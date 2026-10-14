@@ -72,6 +72,8 @@ const SLOWMO_KILL = 150; // ticks
 const SLOWMO_MATCH_POINT = 360;
 const SLOWMO_RATE = 3; // during slow motion, the game moves on once every this many ticks
 const FLASH_TICKS = 10; // the screen flashes white on a knockdown
+// In the dark arenas, a lightning strike lights everything up: bright, a flicker, bright again, then it fades back
+const LIGHTNING_GLOW_TICKS = 90; // about half a second
 
 const POPUP_TICKS = 90;
 const SLASH_TICKS = 22;
@@ -241,6 +243,12 @@ const JOUST_MIN_ROUNDS = 5; // a joust comes up every this many rounds...
 const JOUST_MAX_ROUNDS = 8; // ...to this many, when the arena's mixed
 const STORM_MIN_WAIT_TICKS = 2.2 * TICKS_PER_SECOND;
 const STORM_MAX_WAIT_TICKS = 4 * TICKS_PER_SECOND;
+// The storm arena's own storm is much wilder: about one strike a second, nearly all of them at the knights
+const WILD_STORM_MIN_WAIT_TICKS = 0.8 * TICKS_PER_SECOND;
+const WILD_STORM_MAX_WAIT_TICKS = 1.2 * TICKS_PER_SECOND;
+const WILD_STORM_ON_CHANCE = 0.4; // right where a knight is standing (so he has to move)...
+const WILD_STORM_NEAR_CHANCE = 0.45; // ...or just next to him (the rest land anywhere)
+const WILD_STORM_NEAR_DISTANCE = 34; // how far from him "next to him" can be
 
 // The kill cam only replays cool knockdowns (and always the one that wins the match)
 const COOL_RECENT_TICKS = 2.5 * TICKS_PER_SECOND; // a parry, deflect and so on this recent makes the knockdown cool
@@ -3863,12 +3871,20 @@ class Bear {
 
 // ----- The storm -----
 
-// Lightning striking on its own, at random places and near the knights
+// Lightning striking on its own, at random places and near the knights. The storm arena's is wild: about once a
+// second, and nearly always at someone, either right on him or just next to him.
 class Storm {
     // slower makes the strikes further apart
-    constructor(slower) {
+    constructor(slower, wild) {
         this.slower = slower ?? 1;
-        this.wait = random(STORM_MIN_WAIT_TICKS, STORM_MAX_WAIT_TICKS) * this.slower;
+        this.wild = wild ?? false;
+        this.wait = this.nextWait();
+    }
+
+    nextWait() {
+        return this.wild
+            ? random(WILD_STORM_MIN_WAIT_TICKS, WILD_STORM_MAX_WAIT_TICKS)
+            : random(STORM_MIN_WAIT_TICKS, STORM_MAX_WAIT_TICKS) * this.slower;
     }
 
     update() {
@@ -3877,18 +3893,47 @@ class Storm {
         }
         this.wait--;
         if (this.wait <= 0) {
-            this.wait = random(STORM_MIN_WAIT_TICKS, STORM_MAX_WAIT_TICKS) * this.slower;
-            const near = pick(knights.filter(knight => !knight.dead));
-            let spot = null;
-            if (near !== undefined && rng() < 0.5) {
-                spot = {x: near.getGroundX() + random(-26, 26), y: near.getGroundY() + random(-18, 18)};
-            } else {
-                spot = findClearSpot(0);
-            }
+            this.wait = this.nextWait();
+            const spot = this.wild ? this.pickWildSpot() : this.pickSpot();
             if (spot !== null) {
                 strikes.push(new Strike(null, null, spot));
             }
         }
+    }
+
+    pickSpot() {
+        const near = pick(knights.filter(knight => !knight.dead));
+        if (near !== undefined && rng() < 0.5) {
+            return {x: near.getGroundX() + random(-26, 26), y: near.getGroundY() + random(-18, 18)};
+        }
+        return findClearSpot(0);
+    }
+
+    pickWildSpot() {
+        const near = pick(knights.filter(knight => !knight.dead));
+        const roll = rng();
+        if (near === undefined || roll >= WILD_STORM_ON_CHANCE + WILD_STORM_NEAR_CHANCE) {
+            return findClearSpot(0);
+        }
+        let x = near.getGroundX();
+        let y = near.getGroundY();
+        if (roll < WILD_STORM_ON_CHANCE) {
+            // On him, give or take a step
+            x += random(-4, 4);
+            y += random(-3, 3);
+        } else {
+            // Just past the edge of where it'd hit him, so it's a close call if he stays put
+            const angle = random(0, Math.PI * 2);
+            const distance = random(THUNDER_RADIUS + 3, WILD_STORM_NEAR_DISTANCE);
+            x += dcos(angle) * distance;
+            y += dsin(angle) * distance * 0.7;
+        }
+        // Not off the edge of the field
+        const bounds = getBounds();
+        return {
+            x: Math.max(bounds.left + 8, Math.min(bounds.right - 8, x)),
+            y: Math.max(Math.max(24, bounds.top + 8), Math.min(bounds.bottom - 4, y)),
+        };
     }
 }
 
@@ -4728,7 +4773,7 @@ function makeArenaFeatures() {
     // (and wait until round 3, since the first rounds are kept simple)
     if (simSettings.get("hazards") && getRoundStage() === 2) {
         if (arena.bear !== undefined) made.push(new Bear(arena.bear.x, arena.bear.y));
-        if (arena.storm) made.push(new Storm());
+        if (arena.storm) made.push(new Storm(1, true));
     }
     // The mine's carts aren't a hazard you can turn off, they're what the mine is (like the lava lake's rafts)
     if (arena.tracks !== undefined) {
@@ -4880,6 +4925,7 @@ class Strike {
         particles.dust(this.x, this.y, 5);
         addShake(6);
         flash = Math.max(flash, FLASH_TICKS * 0.6);
+        lightningGlow = LIGHTNING_GLOW_TICKS;
         sound.thunder();
         for (const knight of knights) {
             const distance = dhypot(knight.getGroundX() - this.x, knight.getGroundY() - this.y);
@@ -4963,6 +5009,7 @@ let worstDeficit = {}; // the furthest behind each knight has been this match, b
 let hitstop = 0; // ticks the game is frozen for
 let slowmo = 0; // ticks the game runs slowly for
 let flash = 0; // ticks the screen flashes white for
+let lightningGlow = 0; // ticks left of a lightning strike lighting up the dark
 let ticks = 0; // every tick since the game started, frozen or not
 let liveTicks = 0; // the same, but not counting while paused, for the kill cam
 let showHitboxes = false;
@@ -5296,6 +5343,7 @@ function startRound(quiet = false) {
     calmTicks = 0;
     hitstop = 0;
     slowmo = 0;
+    lightningGlow = 0;
     music.setIntense(isMatchPoint());
     setPhase("ready");
     if (!quiet) {
@@ -6289,15 +6337,37 @@ function drawDarkness() {
     if (!arena.beamOnly) {
         addGlowingLights(lights);
     }
+    // Lightning about to strike lights up where it's going to hit, even where nothing else gives off light, and it
+    // flickers brighter as it's about to come down
+    for (const strike of strikes) {
+        if (strike.bolt === null) {
+            const locked = strike.ticks >= THUNDER_TRACK_TICKS;
+            const flicker = locked && Math.floor(strike.ticks / 4) % 2 === 0 ? 4 : 0;
+            lights.push({x: strike.x, y: strike.y, r: THUNDER_RADIUS + 8 + flicker});
+        }
+    }
 
     // A lightning flash lights up everything for a moment
-    const strength = 1 - Math.min(1, flash / (FLASH_TICKS * 0.5));
+    const flashLift = Math.min(1, flash / (FLASH_TICKS * 0.5));
+    const strength = 1 - Math.max(flashLift, getLightningLift());
     if (strength <= 0) {
         return;
     }
     const dark = `rgba(4, 8, 20, ${(arena.beamOnly ? 1 : 0.8) * strength})`;
     const dim = `rgba(4, 8, 20, ${(arena.beamOnly ? 0.7 : 0.42) * strength})`;
     drawLightStrips(lights, dark, dim);
+}
+
+// How much a lightning strike is lighting up the dark right now, from 0 to 1
+function getLightningLift() {
+    if (lightningGlow <= 0) {
+        return 0;
+    }
+    const age = LIGHTNING_GLOW_TICKS - lightningGlow;
+    if (age < 6) return 1;
+    if (age < 10) return 0.35; // the flicker
+    if (age < 24) return 1;
+    return Math.max(0, 1 - (age - 24) / (LIGHTNING_GLOW_TICKS - 24));
 }
 
 // Everything that gives off a little light of its own: the knights, power-ups, fireflies...
@@ -6312,7 +6382,6 @@ function addGlowingLights(lights) {
     for (const critter of critters) {
         if (critter.isLit()) lights.push({x: critter.x, y: critter.y - critter.z, r: 6});
     }
-    for (const strike of strikes) lights.push({x: strike.x, y: strike.y, r: 16});
     for (const skyRock of skyRocks) lights.push({x: skyRock.x, y: skyRock.y, r: skyRock.style === "fireball" ? 22 : 14});
 }
 
@@ -6765,7 +6834,7 @@ function captureState() {
         resultText, commentary, lastRoundWinner, streak, worstDeficit, hitstop, slowmo, flash, shake,
         closeCallCooldown, roundsUntilShowdown, roundsUntilJuggernaut, roundsUntilJoust, roundModifier,
         roundHazards, roundBoulders, juggernaut, calmTicks, replayBlowTick, replayReason, aftermath, gameTime,
-        rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom,
+        rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom, lightningGlow,
     };
 }
 
@@ -6777,7 +6846,7 @@ function restoreState(state) {
         resultText, commentary, lastRoundWinner, streak, worstDeficit, hitstop, slowmo, flash, shake,
         closeCallCooldown, roundsUntilShowdown, roundsUntilJuggernaut, roundsUntilJoust, roundModifier,
         roundHazards, roundBoulders, juggernaut, calmTicks, replayBlowTick, replayReason, aftermath, gameTime,
-        rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom,
+        rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom, lightningGlow,
     } = state);
 }
 
@@ -6841,6 +6910,9 @@ function stepSim() {
     if (flash > 0) {
         flash--;
     }
+    if (lightningGlow > 0) {
+        lightningGlow--;
+    }
 }
 
 // One tick of an online match, with both players' input bits
@@ -6888,6 +6960,7 @@ function startOnlineMatch(seed, values, localIndex) {
     closeCallCooldown = 0;
     shake = 0;
     flash = 0;
+    lightningGlow = 0;
     inputs = PLAYERS.map(() => ({move: {x: 0, y: 0}, swing: false, taunt: false}));
     joinTyping = null;
     menus = [];
@@ -7179,7 +7252,9 @@ function drawOnlineStatus() {
         MDog.Draw.textImage(ping + "MS" + (online.isUsingServer() ? " (SERVER)" : ""), SCREEN_WIDTH - 4, SCREEN_HEIGHT - 5, color, FONT, {alignX: "right", alignY: "center"});
     }
     if (session.stallTicks > 40) {
-        drawText("WAITING FOR YOUR OPPONENT" + ".".repeat(1 + Math.floor(liveTicks / 30) % 3), 124, "#ffffff", 1);
+        // Up at the top, out of the way of the round's text and the end of match stats
+        MDog.Draw.rectangleFill(0, 18, SCREEN_WIDTH, 12, "rgba(10, 16, 10, 0.75)");
+        drawText("WAITING FOR YOUR OPPONENT" + ".".repeat(1 + Math.floor(liveTicks / 30) % 3), 24, "#ffffff", 1);
     }
     if (session.desyncTick !== null) {
         // The games drifted apart, and the host's sending its game over to put it right (see Rollback.js)
@@ -7319,7 +7394,7 @@ function gameTick() {
 // For the tests (tests/), which play the game without a browser
 export const testHooks = {
     captureState, restoreState, cloneState, hashState, skipInHash, CLASSES, frozenThings, stepOnline, startOnlineMatch, stepSim,
-    readLocalInputs, fx, online,
+    readLocalInputs, fx, online, killCam,
     get phase() { return phase; },
     get arenaName() { return arenaName; },
     get scores() { return scores; },
@@ -7328,6 +7403,9 @@ export const testHooks = {
     get gameTime() { return gameTime; },
     get mode() { return mode; },
     get replayTicksLeft() { return replayTicksLeft; },
+    get simTicks() { return simTicks; },
+    // A lightning strike coming down here, for seeing how it looks
+    strikeAt(x, y) { strikes.push(new Strike(null, null, {x, y})); },
 };
 
 // Handy from the browser's console too (and the browser tests use it)

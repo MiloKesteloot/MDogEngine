@@ -25,6 +25,9 @@ class KillCam {
         this.spare.push(...this.frames.map(frame => frame.canvas));
         this.frames = [];
         this.playing = false;
+        // Online the replay's clock starts again from 0 with each match, so the last picture's time has to go too, or
+        // nothing would be saved until the new clock caught up with the old one
+        this.lastCapture = -Infinity;
     }
 
     // Saves what's on the screen now. tick counts every tick of the game, paused or not.

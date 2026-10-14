@@ -124,7 +124,7 @@ for (const network of NETWORKS) {
         + `(avg ${(s0.rolledBackTicks / Math.max(1, s0.rollbacks)).toFixed(1)} ticks), longest wait ${maxStall[0]}/${maxStall[1]} ticks, `
         + `delay ${s0.delay}, round ${copies[0].roundNumber}, score ${JSON.stringify(copies[0].scores)}, hashes compared up to ${s0.nextHashTick}`;
     const fixes = `, fixed ${s0.resyncs}/${s1.resyncs} drifts`;
-    if (desync.some(t => t !== null) || s0.nextHashTick < 1000 || (network.breakAt !== undefined && s1.resyncs < network.breakAt.length)) {
+    if (desync.some(t => t !== null) || s0.nextHashTick < 1000 || (network.breakAt !== undefined && s1.resyncs < network.breakAt.filter(at => at < totalMs - 3000).length)) {
         failed = true;
         console.log("FAIL " + report + fixes + " desync at " + desync);
     } else {

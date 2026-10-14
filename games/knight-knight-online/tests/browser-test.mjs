@@ -42,7 +42,8 @@ try {
             throw new Error(page.name + "'s game never loaded");
         }
     }
-    await sleep(1500); // the art loading in
+    // Sitting on the title screen for a while first, like people do
+    await sleep(Number(process.env.TITLE_WAIT ?? 1500));
     await host.screenshot("1-title.png");
 
     // Host: down to HOST ONLINE MATCH, and pick it
@@ -110,7 +111,9 @@ try {
         const o = knightKnightOnline.online, s = o.session;
         return {state: o.state, tick: s?.tick, rollbacks: s?.rollbacks, desync: s?.desyncTick, rtt: Math.round(o.rtt),
             direct: o.connection?.direct, delay: s?.delay, round: knightKnightOnline.roundNumber, scores: knightKnightOnline.scores,
-            hashesChecked: s?.nextHashTick};
+            hashesChecked: s?.nextHashTick, replayFrames: knightKnightOnline.killCam.frames.length,
+            replayBehind: knightKnightOnline.killCam.frames.length === 0 ? null
+                : knightKnightOnline.simTicks - knightKnightOnline.killCam.frames.at(-1).tick};
     })()`);
     const results = {host: await report(host), guest: await report(guest)};
     console.log(JSON.stringify(results, null, 1));
@@ -118,6 +121,9 @@ try {
         if (result.state !== "playing") fail(name + " isn't playing any more: " + result.state);
         if (result.desync !== null) fail(name + " found the games out of sync at tick " + result.desync);
         if (!(result.hashesChecked > 800)) fail(name + " hardly compared fingerprints");
+        if (!(result.replayFrames > 10) || !(result.replayBehind < 40)) {
+            fail(name + "'s kill cam isn't recording (" + result.replayFrames + " frames, newest " + result.replayBehind + " ticks old)");
+        }
     }
     if (JSON.stringify(results.host.scores) !== JSON.stringify(results.guest.scores) && Math.abs(results.host.tick - results.guest.tick) < 50) {
         console.log("note: scores differ right now (they can, for a moment, while one's ahead)");
