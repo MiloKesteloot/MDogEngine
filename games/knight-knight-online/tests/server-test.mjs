@@ -4,7 +4,11 @@
 const server = process.argv[2] ?? "ws://127.0.0.1:8787";
 
 function open(code, role) {
-    const socket = new WebSocket(`${server}/room/${code}?role=${role}`);
+    return openUrl(`${server}/room/${code}?role=${role}`);
+}
+
+function openUrl(url) {
+    const socket = new WebSocket(url);
     const received = [];
     const waiters = [];
     socket.addEventListener("message", event => {
@@ -95,5 +99,62 @@ await check("host leaving tells the guest and closes it", async () => {
     await guest.event("peer-left");
     await guest.closed;
 });
+// ---------- Quick matches ----------
+
+const httpServer = server.replace(/^ws/, "http");
+const stats = async () => (await fetch(httpServer + "/stats")).json();
+
+await check("stats can be read (from any website)", async () => {
+    const response = await fetch(httpServer + "/stats");
+    if (response.headers.get("access-control-allow-origin") !== "*") throw new Error("no CORS header");
+    const numbers = await response.json();
+    if (typeof numbers.matches !== "number" || typeof numbers.waiting !== "number") throw new Error(JSON.stringify(numbers));
+});
+let first, second;
+await check("the first to look waits", async () => {
+    first = openUrl(server + "/quick");
+    const queued = await first.event("queued");
+    if (queued.waiting !== 1) throw new Error("waiting " + queued.waiting);
+    if ((await stats()).waiting !== 1) throw new Error("stats don't show them waiting");
+});
+let pairing;
+await check("the next to look is paired with them", async () => {
+    second = openUrl(server + "/quick");
+    const [a, b] = await Promise.all([first.event("match"), second.event("match")]);
+    if (a.code !== b.code || a.role !== "host" || b.role !== "guest" || a.code.length !== 6) throw new Error(JSON.stringify([a, b]));
+    pairing = a;
+    if ((await stats()).waiting !== 0) throw new Error("still shows someone waiting");
+});
+let before;
+await check("the paired players' match is counted while it's played", async () => {
+    before = (await stats()).matches;
+    const quickHost = open(pairing.code, "host");
+    await quickHost.event("hosting");
+    const quickGuest = open(pairing.code, "guest");
+    await quickGuest.event("joined");
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const during = (await stats()).matches;
+    if (during !== before + 1) throw new Error(`${before} matches before, ${during} during`);
+    quickGuest.close();
+    await quickHost.event("peer-left");
+    quickHost.close();
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const after = (await stats()).matches;
+    if (after !== before) throw new Error(`${before} matches before, ${after} after`);
+});
+await check("someone waiting sees the count change", async () => {
+    const waiter = openUrl(server + "/quick");
+    await waiter.event("queued");
+    const host2 = open("Q7Q7", "host");
+    await host2.event("hosting");
+    const guest2 = open("Q7Q7", "guest");
+    await guest2.event("joined");
+    const update = await waiter.event("stats");
+    if (update.matches < 1) throw new Error(JSON.stringify(update));
+    guest2.close();
+    host2.close();
+    waiter.close();
+});
+
 console.log(failures === 0 ? "PASS" : failures + " FAILED");
 process.exit(failures === 0 ? 0 : 1);

@@ -47,7 +47,8 @@ try {
     await host.screenshot("1-title.png");
 
     // Host: down to HOST ONLINE MATCH, and pick it
-    await host.press(...KEYS.down);
+    await host.press(...KEYS.up); // HOST ONLINE MATCH is second from the bottom
+    await host.press(...KEYS.up);
     await host.press(...KEYS.enter);
     let code = null;
     for (let i = 0; i < 50 && code === null; i++) {
@@ -61,8 +62,7 @@ try {
     await host.screenshot("2-hosting.png");
 
     // Guest: down twice to JOIN ONLINE MATCH, type the code, and join
-    await guest.press(...KEYS.down);
-    await guest.press(...KEYS.down);
+    await guest.press(...KEYS.up); // JOIN ONLINE MATCH is at the bottom
     await guest.press(...KEYS.enter);
     for (const letter of code) {
         await guest.press(letter.toLowerCase(), /[0-9]/.test(letter) ? "Digit" + letter : "Key" + letter, letter.charCodeAt(0));
@@ -111,7 +111,7 @@ try {
         const o = knightKnightOnline.online, s = o.session;
         return {state: o.state, tick: s?.tick, rollbacks: s?.rollbacks, desync: s?.desyncTick, rtt: Math.round(o.rtt),
             direct: o.connection?.direct, delay: s?.delay, round: knightKnightOnline.roundNumber, scores: knightKnightOnline.scores,
-            hashesChecked: s?.nextHashTick, replayFrames: knightKnightOnline.killCam.frames.length,
+            hashesChecked: s?.nextHashTick, replayFrames: knightKnightOnline.killCam.frames.length, replaying: knightKnightOnline.replayTicksLeft > 0,
             replayBehind: knightKnightOnline.killCam.frames.length === 0 ? null
                 : knightKnightOnline.simTicks - knightKnightOnline.killCam.frames.at(-1).tick};
     })()`);
@@ -121,7 +121,8 @@ try {
         if (result.state !== "playing") fail(name + " isn't playing any more: " + result.state);
         if (result.desync !== null) fail(name + " found the games out of sync at tick " + result.desync);
         if (!(result.hashesChecked > 800)) fail(name + " hardly compared fingerprints");
-        if (!(result.replayFrames > 10) || !(result.replayBehind < 40)) {
+        // (Nothing's recorded while a replay plays)
+        if (!result.replaying && (!(result.replayFrames > 10) || !(result.replayBehind < 40))) {
             fail(name + "'s kill cam isn't recording (" + result.replayFrames + " frames, newest " + result.replayBehind + " ticks old)");
         }
     }
@@ -133,9 +134,8 @@ try {
     await guest.press("Escape", "Escape", 27);
     await sleep(300);
     await guest.screenshot("6-guest-menu.png");
-    for (let i = 0; i < 4; i++) {
-        await guest.press(...KEYS.down);
-    }
+    // LEAVE MATCH is last on the menu: up from the top wraps round to it
+    await guest.press(...KEYS.up);
     await guest.press(...KEYS.enter);
     await sleep(1500);
     const hostState = await host.eval("knightKnightOnline.online.state + ': ' + knightKnightOnline.online.message");

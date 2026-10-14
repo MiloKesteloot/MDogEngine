@@ -6,13 +6,24 @@ exactly like before. The original `games/knight-knight` is untouched.
 On the title screen:
 
 - **LOCAL MATCH**: two players, one keyboard, like always. Space or Enter starts it straight away.
-- **HOST ONLINE MATCH**: you get a 4 letter code. Send it to a friend, or press C to copy an invite link. You're
-  red, and your settings (Esc on the title screen) are the match's settings.
-- **JOIN ONLINE MATCH**: type your friend's code (pasting the code or the whole invite link works too). You're blue.
+- **QUICK MATCH**: play whoever else is looking. If someone's waiting you're paired with them straight away;
+  otherwise you wait in line and play the next person who looks. While QUICK MATCH is picked, the bottom of the
+  title screen says if anyone's waiting and how many matches are being played. Quick matches use the standard
+  settings (the host can change them in the lobby after the first one).
+- **HOST ONLINE MATCH**: you get a 4 letter code. Send it to a friend, or press C to copy a link that joins in one
+  click (the address you're on, plus `&code=` and the code). You're
+  red, and you pick the match's settings while you wait (Enter on the code screen); whatever they're set to when your
+  friend joins is the match. When your friend joins, a doorbell plays, and if you're in another tab its title flashes
+  "FRIEND JOINED!".
+- **JOIN ONLINE MATCH**: type your friend's code (pasting the code or the whole invite link works too, and capitals
+  don't matter). You're blue. You see the host's settings while the match gets ready.
 
 Online, either set of keys moves your knight. Esc opens a menu, but it doesn't pause anything. After a match, both
-press R for a rematch. The ping is in the bottom right corner, with "(SERVER)" next to it when the match is going
-through the server instead of straight between you.
+press R for a rematch, or the host can press Esc and pick CHANGE SETTINGS: you both go to a lobby (still connected),
+the host changes the settings while the guest watches them change, and START MATCH begins a new one. The ping is in
+the bottom right corner, with "(SERVER)" next to it when the match is going through the server instead of straight
+between you. F3 (or CONNECTION INFO in the menu) shows more: the ping, the input delay, how often the game is going
+back to fix a wrong guess, how in step the two games are, and the sync checks.
 
 Before online play works on milo.games the server has to be put online. That takes a few minutes and it's free; see
 [server/README.md](server/README.md).
@@ -74,5 +85,8 @@ From `games/knight-knight-online/tests`, with Node 22 or newer:
 | `node server-test.mjs` | The server's rooms (needs `npm run dev` in `server/`) |
 | `node browser-test.mjs` | Two real headless Chrome browsers play an online match through the local server. `NO_DIRECT=1` forces it through the server. (Needs the server and `node static-server.mjs`.) |
 | `node local-test.mjs` | Local two player still works in a real browser |
+| `node quick-test.mjs`, `node invite-test.mjs` | Quick match pairing and cancelling, and invite links joining in one click, in two real browsers |
+| `node lobby-test.mjs` | The settings shown before a match, the lobby between matches, and F3, in two real browsers |
+| `node facing-check.mjs`, `node code-check.mjs`, `node storm-check.mjs` | Spamming swing while turning, join codes, and the storm arena's lightning |
 
 The browser tests use Chrome at its usual Windows location; set `CHROME` to use another one.

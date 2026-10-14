@@ -1,8 +1,13 @@
 // Hosting and joining online matches: making a join code, waiting for a friend, starting the match together, and
 // keeping it going (with the rollback netcode in Rollback.js) until someone leaves.
 //
-// The host is red and the guest is blue. The host's settings are the match's settings. Before the match starts the
-// two measure how long messages take to get between them, and each picks its input delay from that.
+// The host is red and the guest is blue. The host's settings are the match's settings, and the guest's shown them as
+// soon as they're connected. Before the match starts the two measure how long messages take to get between them, and
+// each picks its input delay from that. After a match the host can take them both back to the lobby, to change the
+// settings without anyone leaving, and start a new match from there.
+//
+// A quick match is with whoever else is looking for one: the matchmaker on the server pairs them up and gives them a
+// code, and from there it's like any other match (with the standard settings).
 
 import Connection from "./Connection.js";
 import RollbackSession from "./Rollback.js";
@@ -48,7 +53,7 @@ export default class Online {
     // game: the same as for RollbackSession (save, load, step, hash, setFx), plus start(seed, settings, localIndex)
     constructor(game) {
         this.game = game;
-        this.state = "idle"; // idle, connecting, waiting, syncing, playing, ended
+        this.state = "idle"; // idle, connecting, searching (quick match), waiting, syncing, playing, lobby, ended
         this.role = null;
         this.code = null;
         this.message = null; // why it ended
@@ -60,10 +65,16 @@ export default class Online {
         this.lastPing = 0;
         this.syncStarted = 0;
         this.lastHeard = 0;
-        this.hostSettings = null;
+        this.hostSettings = null; // the match's settings (the guest gets them from the host)
         this.tries = 0;
         this.lastDelayCheck = 0;
         this.readHeld = undefined; // the keys being held right now (set by the game)
+        this.onPeerJoined = null; // called when a friend joins the host's code (set by the game)
+        this.wasDirect = false;
+        this.quickMatch = false; // this match came from the matchmaker
+        this.quickSocket = null; // the connection to the matchmaker, while looking
+        this.quickStats = null; // {matches, waiting}, from the matchmaker
+        this.searchStarted = 0;
     }
 
     isActive() {
@@ -74,18 +85,86 @@ export default class Online {
         return this.state === "playing";
     }
 
+    isConnected() {
+        return this.state === "syncing" || this.state === "playing" || this.state === "lobby";
+    }
+
     getLocalIndex() {
         return this.role === "host" ? 0 : 1;
     }
 
     host(settingsValues) {
+        this.quickMatch = false;
         this.hostSettings = settingsValues;
         this.tries = 0;
         this.connect("host", makeCode());
     }
 
     join(code) {
+        this.quickMatch = false;
+        this.tries = 0;
         this.connect("guest", code);
+    }
+
+    // Looking for anyone else who's looking. settingsValues are used if this one ends up hosting.
+    quick(settingsValues) {
+        this.close();
+        const server = getServerUrl();
+        this.quickMatch = true;
+        this.role = null;
+        this.code = null;
+        this.hostSettings = settingsValues;
+        this.quickStats = null;
+        this.message = null;
+        if (server === null) {
+            this.end("ONLINE ISN'T SET UP YET");
+            return;
+        }
+        this.state = "connecting";
+        this.searchStarted = now();
+        let socket;
+        try {
+            socket = new WebSocket(server.replace(/\/$/, "") + "/quick");
+        } catch (e) {
+            this.end("COULDN'T REACH THE SERVER");
+            return;
+        }
+        this.quickSocket = socket;
+        socket.addEventListener("message", event => {
+            let message;
+            try {
+                message = JSON.parse(event.data);
+            } catch (e) {
+                return;
+            }
+            if (this.quickSocket !== socket) {
+                return;
+            }
+            if (message.e === "queued" || message.e === "stats") {
+                this.quickStats = {matches: message.matches, waiting: message.waiting};
+                if (message.e === "queued") {
+                    this.state = "searching";
+                    this.searchStarted = now();
+                }
+            } else if (message.e === "match") {
+                // Found someone: on to the room the matchmaker made up for the two
+                this.quickSocket = null;
+                socket.close();
+                this.tries = 0;
+                this.connect(message.role, message.code);
+            }
+        });
+        socket.addEventListener("close", () => {
+            if (this.quickSocket === socket) {
+                this.quickSocket = null;
+                this.end(this.state === "connecting" ? "COULDN'T REACH THE SERVER" : "LOST THE CONNECTION");
+            }
+        });
+    }
+
+    // How long it's been looking for a quick match, in seconds
+    getSearchSeconds() {
+        return Math.floor((now() - this.searchStarted) / 1000);
     }
 
     connect(role, code) {
@@ -99,6 +178,7 @@ export default class Online {
         }
         this.state = "connecting";
         this.message = null;
+        this.wasDirect = false;
         this.rtt = null;
         this.rttSamples = [];
         this.pings = 0;
@@ -118,16 +198,35 @@ export default class Online {
             this.state = "waiting";
         } else if (message.e === "joined" || message.e === "peer-joined") {
             this.startSync();
+            if (this.role === "host") {
+                // The game settles the settings first (the host may have been changing them while waiting), then the
+                // guest's sent them, so they can see what they're in for while it gets ready
+                this.onPeerJoined?.();
+                this.connection.sendReliable({t: "settings", values: this.hostSettings});
+            } else {
+                this.hostSettings = null;
+            }
         } else if (message.e === "peer-left") {
-            if (this.state === "playing") {
+            if (this.state === "playing" || this.state === "lobby") {
                 this.end("YOUR OPPONENT LEFT");
             } else if (this.role === "host") {
                 // They left before it started: wait for someone else
                 this.state = "waiting";
             } else {
-                this.end("THE HOST LEFT");
+                this.end(this.quickMatch ? "YOUR OPPONENT LEFT" : "THE HOST LEFT");
             }
-        } else if (message.e === "taken" && this.role === "host" && this.tries < 5) {
+        } else if (message.e === "no-room" && this.quickMatch && this.role === "guest" && this.tries < 20) {
+            // Got here before the other one finished making the room: try again in a moment
+            this.tries++;
+            this.connection.close();
+            this.connection = null;
+            const code = this.code;
+            setTimeout(() => {
+                if (this.state === "connecting" && this.code === code && this.connection === null) {
+                    this.connect("guest", code);
+                }
+            }, 300);
+        } else if (message.e === "taken" && this.role === "host" && this.tries < 5 && !this.quickMatch) {
             // Someone's already using that code
             this.tries++;
             this.connect("host", makeCode());
@@ -165,13 +264,19 @@ export default class Online {
             if (this.session !== null) {
                 this.session.rtt = this.rtt;
             }
-        } else if (message.t === "start" && this.role === "guest" && this.state === "syncing") {
+        } else if (message.t === "start" && this.role === "guest" && (this.state === "syncing" || this.state === "lobby")) {
+            this.hostSettings = message.settings;
             this.begin(message.seed, message.settings);
             this.connection.sendReliable({t: "go"});
         } else if (message.t === "go" && this.role === "host" && this.state === "syncing") {
             this.begin(this.pendingSeed, this.hostSettings);
+        } else if (message.t === "settings" && this.role === "guest") {
+            this.hostSettings = message.values;
+        } else if (message.t === "lobby" && this.role === "guest") {
+            this.session = null;
+            this.state = "lobby";
         } else if (message.t === "bye") {
-            this.end(this.state === "playing" ? "YOUR OPPONENT LEFT" : "THE HOST LEFT");
+            this.end(this.state === "playing" || this.state === "lobby" || this.quickMatch ? "YOUR OPPONENT LEFT" : "THE HOST LEFT");
         } else if (this.session !== null) {
             this.session.receive(message);
         }
@@ -202,12 +307,47 @@ export default class Online {
         }
     }
 
+    // The host, after a match: both go back to the lobby, staying connected, while the host changes the settings
+    toLobby() {
+        if (this.role !== "host" || this.state !== "playing") {
+            return;
+        }
+        this.connection.sendReliable({t: "lobby"});
+        this.session = null;
+        this.pendingSeed = undefined;
+        this.state = "lobby";
+    }
+
+    // The host, in the lobby: the settings changed, so the guest sees them
+    changeSettings(values) {
+        this.hostSettings = values;
+        this.connection?.sendReliable({t: "settings", values});
+    }
+
+    // The host, in the lobby: a new match, with the settings as they are now
+    startFromLobby(values) {
+        if (this.role !== "host" || this.state !== "lobby") {
+            return;
+        }
+        this.hostSettings = values;
+        this.pendingSeed = Math.floor(Math.random() * 4294967296);
+        this.state = "syncing";
+        this.connection.sendReliable({t: "start", seed: this.pendingSeed, settings: values});
+    }
+
     // Every tick, playing or not
     update() {
-        if (this.connection === null || (this.state !== "syncing" && this.state !== "playing")) {
+        if (this.connection === null || !this.isConnected()) {
             return;
         }
         const time = now();
+        // Pings from before the direct connection opened went the slow way round, through the server
+        const direct = this.connection.direct;
+        if (direct !== this.wasDirect) {
+            this.wasDirect = direct;
+            this.rttSamples = [];
+            this.rtt = null;
+        }
         if (time - this.lastPing > PING_EVERY_MS) {
             this.lastPing = time;
             this.connection.sendFast({t: "ping", at: time});
@@ -253,11 +393,30 @@ export default class Online {
     }
 
     close() {
+        if (this.quickSocket !== null) {
+            const socket = this.quickSocket;
+            this.quickSocket = null;
+            socket.close();
+        }
         if (this.connection !== null) {
             this.connection.close();
             this.connection = null;
         }
         this.session = null;
         this.pendingSeed = undefined;
+    }
+}
+
+// How many matches are being played, and if someone's waiting for a quick match: {matches, waiting}, or null
+export async function fetchStats() {
+    const server = getServerUrl();
+    if (server === null) {
+        return null;
+    }
+    try {
+        const response = await fetch(server.replace(/^ws/, "http").replace(/\/$/, "") + "/stats");
+        return await response.json();
+    } catch (e) {
+        return null;
     }
 }

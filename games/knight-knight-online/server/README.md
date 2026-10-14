@@ -1,7 +1,8 @@
 # Knight Knight Online server
 
-A tiny Cloudflare Worker that handles join codes. Each code gets a room (a Durable Object), and the two players use
-the room to find each other and set up a direct connection between their browsers. After that the match goes
+A tiny Cloudflare Worker that handles join codes and quick matches (a matchmaker pairs up whoever's looking). Each
+code gets a room (a Durable Object), and the two players use the room to find each other and set up a direct
+connection between their browsers. After that the match goes
 straight between the players, so the server barely does anything. The match only goes through the server if a
 direct connection can't be made (some school or work networks block them), and it still works then, just a little
 slower.
@@ -35,7 +36,8 @@ resets at midnight UTC.
 
 4. Commit and push, so GitHub Pages has it. Online play then works on milo.games.
 
-To update the server later, just run `npx wrangler deploy` again.
+To update the server later (like after the server code changes), just run `npx wrangler deploy` again in this
+folder.
 
 ## Trying it on your own computer
 

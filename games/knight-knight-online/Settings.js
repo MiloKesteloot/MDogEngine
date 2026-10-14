@@ -9,7 +9,8 @@ export const ARENA_CHOICES = ["MIXED", "MEADOW", "RIVER", "SNOW", "VOLCANO", "FO
 // and only if it was cool.
 export const KILL_CAM_CHOICES = ["COOL KILLS", "FINAL BLOW", "OFF"];
 
-const DEFAULTS = {
+// Quick matches are played with these, so nobody gets surprised by a stranger's settings
+export const DEFAULTS = {
     roundsToWin: 5,
     arena: "MIXED", // MIXED picks a different arena every round
     boulders: "NORMAL",

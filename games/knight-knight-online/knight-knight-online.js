@@ -2,14 +2,14 @@ import MDog from "../../MDogModules/MDogMain.js"
 import Sound from "./Sound.js";
 import Music from "./Music.js";
 import Particles from "./Particles.js";
-import Settings, {ROUNDS_CHOICES, BOULDER_CHOICES, ARENA_CHOICES, KILL_CAM_CHOICES} from "./Settings.js";
+import Settings, {ROUNDS_CHOICES, BOULDER_CHOICES, ARENA_CHOICES, KILL_CAM_CHOICES, DEFAULTS} from "./Settings.js";
 import ARENAS from "./Arenas.js";
 import Weather from "./Weather.js";
 import Marks from "./Marks.js";
 import KillCam, {BEFORE_TICKS as REPLAY_BEFORE_TICKS, AFTER_TICKS as REPLAY_AFTER_TICKS, PLAYBACK_SPEED as REPLAY_SPEED} from "./KillCam.js";
 import {dsin, dcos, datan2, dhypot, makeRandomState, nextRandom} from "./DetMath.js";
 import {cloneState, hashState, deepFreeze, serializeState, deserializeState, nameFrozenThings} from "./Snapshot.js";
-import Online, {CODE_LENGTH, cleanCode, isCodeLetter} from "./Online.js";
+import Online, {CODE_LENGTH, cleanCode, isCodeLetter, fetchStats} from "./Online.js";
 
 // Knight Knight: a two player knight duel. One hit knocks a knight down, and the first to win 5 rounds wins.
 // Swords that meet clang off each other (a parry). Boulders roll through that can be hit back at the other knight,
@@ -6454,7 +6454,7 @@ function drawTitle() {
     drawText("AND JAMES MILESTONE", 86, "#ffffff", 1);
     // The menu: local or online
     TITLE_CHOICES.forEach((choice, i) => {
-        const y = 106 + i * 11;
+        const y = 102 + i * 10;
         const selected = i === titleChoice;
         drawText(choice, y, selected ? "#ffcc33" : "#ffffff", 1);
         if (selected && Math.floor(liveTicks / 40) % 2 === 0) {
@@ -6463,10 +6463,112 @@ function drawTitle() {
             drawText("<", y, "#ffcc33", 1, CENTER_X + half + 7);
         }
     });
-    MDog.Draw.rectangleFill(0, 139, SCREEN_WIDTH, 37, "rgba(10, 16, 10, 0.6)");
-    drawText("RED: WASD MOVE, SPACE SWING, E TAUNT", 146, PLAYERS[0].lightTextColor, 1);
-    drawText("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", 156, PLAYERS[1].lightTextColor, 1);
-    drawText("ESC: SETTINGS", 170, "#c8d4c0", 1);
+    // The box at the bottom says about whichever choice is picked
+    MDog.Draw.rectangleFill(0, TITLE_BOX_TOP, SCREEN_WIDTH, TITLE_BOX_BOTTOM - TITLE_BOX_TOP, "rgba(10, 16, 10, 0.6)");
+    drawCenteredLines(getTitleBoxLines(), TITLE_BOX_TOP, TITLE_BOX_BOTTOM);
+}
+
+const TITLE_BOX_TOP = 139;
+const TITLE_BOX_BOTTOM = 176;
+
+// What goes in the title screen's bottom box, for the choice that's picked
+function getTitleBoxLines() {
+    const choice = TITLE_CHOICES[titleChoice];
+    const hint = "#c8d4c0";
+    if (choice === "QUICK MATCH") {
+        const lines = [line("PLAY ANYONE LOOKING, WITH STANDARD SETTINGS", "#ffffff")];
+        if (quickStats === null) {
+            lines.push(loadingLine("CHECKING WHO'S AROUND", hint));
+        } else {
+            lines.push(quickStats.waiting > 0
+                ? line("SOMEONE IS WAITING RIGHT NOW!", "#9cf09c")
+                : line("NOBODY'S WAITING - YOU'LL BE FIRST IN LINE", "#ffcc33"));
+            lines.push(line(describeMatches(quickStats.matches), hint));
+        }
+        return lines;
+    }
+    if (choice === "HOST ONLINE MATCH") {
+        return [
+            line("HOST A MATCH, AND GET A CODE TO SEND A FRIEND", "#ffffff"),
+            gap(2),
+            line("YOU PICK THE SETTINGS WHILE YOU WAIT", hint),
+        ];
+    }
+    if (choice === "JOIN ONLINE MATCH") {
+        // Online, either set of keys moves your own knight
+        return [
+            line("JOIN A FRIEND'S MATCH WITH THEIR CODE", "#ffffff"),
+            gap(2),
+            line("WASD OR ARROWS MOVE, SPACE OR ENTER SWING", hint, 9),
+            line("E OR / TAUNT", hint, 9),
+        ];
+    }
+    return [
+        line("RED: WASD MOVE, SPACE SWING, E TAUNT", PLAYERS[0].lightTextColor, 9),
+        line("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", PLAYERS[1].lightTextColor, 9),
+        gap(3),
+        line("ESC: SETTINGS", hint, 9),
+    ];
+}
+
+// ---------- Laying out text ----------
+
+// A line of text for drawCenteredLines, taking up height pixels
+function line(text, color, height) {
+    return {text, color, height: height ?? 10};
+}
+
+// A line with "..." after it, while something's happening
+function loadingLine(text, color) {
+    return {text, color, height: 10, dots: true};
+}
+
+// Some space between lines
+function gap(height) {
+    return {height};
+}
+
+// The join code's boxes
+function codeBoxes(code) {
+    return {code, height: 26};
+}
+
+// Lines (from line, gap and codeBoxes), one under the other, as a block centered between top and bottom
+function drawCenteredLines(lines, top, bottom) {
+    const total = lines.reduce((sum, item) => sum + item.height, 0);
+    let y = (top + bottom) / 2 - total / 2;
+    for (const item of lines) {
+        const middle = Math.round(y + item.height / 2);
+        if (item.dots) {
+            drawTextWithDots(item.text, middle, item.color);
+        } else if (item.text !== undefined) {
+            drawText(item.text, middle, item.color, 1);
+        } else if (item.code !== undefined) {
+            drawCodeBoxes(item.code, middle);
+        }
+        y += item.height;
+    }
+}
+
+// Text centered on the screen, with "..." growing one dot at a time just after it. The text itself stays put.
+function drawTextWithDots(text, y, color) {
+    drawText(text, y, color, 1);
+    const dots = ".".repeat(1 + Math.floor(liveTicks / 30) % 3);
+    const x = CENTER_X + Math.ceil(text.length * 5 / 2);
+    MDog.Draw.textImage(dots, x, y + 1, "#1c2a18", FONT, {alignX: "left", alignY: "center"});
+    MDog.Draw.textImage(dots, x, y, color, FONT, {alignX: "left", alignY: "center"});
+}
+
+// A match's settings in three short lines, for showing before it starts
+function describeSettings(values) {
+    const offPowerups = SPAWNING_POWERUPS.filter(type => values.powerups?.[type] === false).length;
+    const powerups = offPowerups === 0 ? "" : offPowerups === SPAWNING_POWERUPS.length ? ", NO POWER-UPS" : ", " + offPowerups + " POWER-UPS OFF";
+    const killCam = {"COOL KILLS": "ON", "FINAL BLOW": "LAST HIT", OFF: "OFF"}[values.killCam] ?? values.killCam;
+    return [
+        "FIRST TO " + values.roundsToWin + " - " + (values.arena === "MIXED" ? "MIXED ARENAS" : values.arena) + powerups,
+        "BOULDERS " + values.boulders + ", HAZARDS " + onOff(values.hazards) + ", WEATHER " + onOff(values.weather),
+        "HOLES " + onOff(values.shiftingGround) + ", JUGGERNAUTS " + onOff(values.juggernaut) + ", KILL CAM " + killCam,
+    ];
 }
 
 function drawUI() {
@@ -6685,16 +6787,42 @@ function makePauseMenu() {
     return menu;
 }
 
-function makeSettingsMenu() {
-    const toggle = (label, key, after) => ({
+function settingToggle(label, key, after) {
+    return {
         onOff: true,
         label: () => label + ": " + onOff(settings.get(key)),
         change: () => { settings.toggle(key); after?.(); },
-    });
-    const cycle = (label, key, choices, after) => ({
+    };
+}
+
+function settingCycle(label, key, choices, after) {
+    return {
         label: () => label + ": " + settings.get(key),
         change: direction => { settings.cycle(key, choices, direction); after?.(); },
-    });
+    };
+}
+
+// The settings that change how a match plays (the rest, like the music, are just yours)
+function matchSettingItems() {
+    return [
+        settingCycle("ROUNDS TO WIN", "roundsToWin", ROUNDS_CHOICES),
+        settingCycle("ARENA", "arena", ARENA_CHOICES, () => {
+            // On the title screen, the field behind the menu changes to show it (a mixed match starts on the meadow)
+            if (phase === "title") {
+                showTitle();
+            }
+        }),
+        settingCycle("BOULDERS", "boulders", BOULDER_CHOICES),
+        {label: () => "POWER-UPS", pick: () => openMenu(makePowerupMenu())},
+        settingToggle("WEATHER", "weather"),
+        settingToggle("HAZARDS", "hazards"),
+        settingToggle("SHIFTING GROUND", "shiftingGround"),
+        settingToggle("JUGGERNAUT ROUNDS", "juggernaut"),
+        settingCycle("KILL CAM", "killCam", KILL_CAM_CHOICES),
+    ];
+}
+
+function makeSettingsMenu() {
     // Asks first, so it can't be hit by accident: the first press only arms it
     let resetArmed = false;
     const resetItem = {
@@ -6715,21 +6843,8 @@ function makeSettingsMenu() {
         },
     };
     return new Menu("SETTINGS", [
-        cycle("ROUNDS TO WIN", "roundsToWin", ROUNDS_CHOICES),
-        cycle("ARENA", "arena", ARENA_CHOICES, () => {
-            // On the title screen, the field behind the menu changes to show it (a mixed match starts on the meadow)
-            if (phase === "title") {
-                showTitle();
-            }
-        }),
-        cycle("BOULDERS", "boulders", BOULDER_CHOICES),
-        {label: () => "POWER-UPS", pick: () => openMenu(makePowerupMenu())},
-        toggle("WEATHER", "weather"),
-        toggle("HAZARDS", "hazards"),
-        toggle("SHIFTING GROUND", "shiftingGround"),
-        toggle("JUGGERNAUT ROUNDS", "juggernaut"),
-        cycle("KILL CAM", "killCam", KILL_CAM_CHOICES),
-        toggle("MUSIC", "music", () => music.setEnabled(settings.get("music"))),
+        ...matchSettingItems(),
+        settingToggle("MUSIC", "music", () => music.setEnabled(settings.get("music"))),
         {onOff: true, label: () => "SOUND: " + onOff(!sound.muted), change: () => sound.toggleMute()},
         resetItem,
         {label: () => "BACK", pick: () => backMenu()},
@@ -6986,6 +7101,7 @@ function startOnlineMatch(seed, values, localIndex) {
     replayFrom = null;
     localPlayer = localIndex;
     mode = "online";
+    stopTitleAlert();
     music.setDucked(false);
     sound.setDucked(false);
     startMatch();
@@ -7002,6 +7118,20 @@ const online = new Online({
     start: startOnlineMatch,
 });
 online.readHeld = () => readHeldBits();
+online.onPeerJoined = () => {
+    if (!online.quickMatch) {
+        online.hostSettings = JSON.parse(JSON.stringify(settings.values));
+        if (menus.some(menu => menu.isWaitingSettings)) {
+            closeMenus();
+        }
+    }
+    alertFriendJoined();
+};
+window.addEventListener("keydown", e => {
+    if (e.key === "F3" && mode === "online") {
+        e.preventDefault();
+    }
+});
 let localPlayer = 0; // which knight is yours, online
 
 // Back to the title screen and a normal local game
@@ -7017,16 +7147,18 @@ function leaveOnline() {
 
 // ---------- The title menu and the online screens ----------
 
-const TITLE_CHOICES = ["LOCAL MATCH", "HOST ONLINE MATCH", "JOIN ONLINE MATCH"];
+const TITLE_CHOICES = ["LOCAL MATCH", "QUICK MATCH", "HOST ONLINE MATCH", "JOIN ONLINE MATCH"];
 let titleChoice = 0;
 let joinTyping = null; // the code typed so far on the join screen, or null when it's not open
 let copiedTicks = 0; // "COPIED!" shows for a moment after copying the invite link
 
+// A link straight into the host's match: exactly the address the host's on, with the code on the end. Opening it
+// joins the match right away.
 function inviteLink() {
     const url = new URL(location.href);
-    url.search = "";
+    url.searchParams.delete("room");
     url.searchParams.set("game", "knight-knight-online");
-    url.searchParams.set("room", online.code);
+    url.searchParams.set("code", online.code);
     return url.toString();
 }
 
@@ -7050,7 +7182,7 @@ window.addEventListener("paste", e => {
         return;
     }
     const text = e.clipboardData?.getData("text") ?? "";
-    const room = text.match(/room=([A-Za-z0-9]+)/)?.[1] ?? text;
+    const room = text.match(/(?:code|room)=([A-Za-z0-9]+)/)?.[1] ?? text;
     joinTyping = cleanCode(room);
 });
 
@@ -7063,6 +7195,8 @@ function startJoin(code) {
 function clickedAny(keys) {
     return keys.some(key => Keyboard.isClicked(key));
 }
+
+let escapeUsed = false; // Esc was already used this tick, closing a menu
 
 // The title screen's keys, when no menu's open
 function updateTitleMenu() {
@@ -7081,11 +7215,13 @@ function updateTitleMenu() {
     }
 
     if (online.isActive()) {
-        if (Keyboard.isClicked("Escape") || (online.state === "ended" && clickedAny([" ", "Enter"]))) {
+        if ((Keyboard.isClicked("Escape") && !escapeUsed) || (online.state === "ended" && clickedAny([" ", "Enter"]))) {
             online.leave();
             sound.menuMove();
         } else if (online.state === "waiting" && Keyboard.isClicked("c")) {
             navigator.clipboard?.writeText(inviteLink()).then(() => { copiedTicks = 180; }, () => {});
+        } else if (online.state === "waiting" && !online.quickMatch && clickedAny([" ", "Enter"])) {
+            openMenu(makeWaitingSettingsMenu());
         }
         return;
     }
@@ -7097,9 +7233,13 @@ function updateTitleMenu() {
         titleChoice = (titleChoice + 1) % TITLE_CHOICES.length;
         sound.menuMove();
     } else if (clickedAny([" ", "Enter"])) {
-        if (titleChoice === 0) {
+        const choice = TITLE_CHOICES[titleChoice];
+        if (choice === "LOCAL MATCH") {
             startMatch();
-        } else if (titleChoice === 1) {
+        } else if (choice === "QUICK MATCH") {
+            online.quick(JSON.parse(JSON.stringify(DEFAULTS)));
+            sound.menuSelect();
+        } else if (choice === "HOST ONLINE MATCH") {
             online.host(JSON.parse(JSON.stringify(settings.values)));
             sound.menuSelect();
         } else {
@@ -7107,6 +7247,39 @@ function updateTitleMenu() {
             sound.menuSelect();
         }
     }
+    // While QUICK MATCH is picked, it keeps checking if anyone's waiting
+    if (TITLE_CHOICES[titleChoice] === "QUICK MATCH") {
+        updateQuickStats();
+    }
+}
+
+// How many matches are being played, and if someone's waiting, for the title screen: {matches, waiting}
+let quickStats = null;
+let quickStatsAt = -Infinity;
+
+function updateQuickStats() {
+    const time = performance.now();
+    if (time - quickStatsAt < 5000) {
+        return;
+    }
+    quickStatsAt = time;
+    fetchStats().then(stats => {
+        quickStats = stats;
+    });
+}
+
+function describeMatches(matches) {
+    return matches === 1 ? "1 MATCH BEING PLAYED RIGHT NOW" : matches + " MATCHES BEING PLAYED RIGHT NOW";
+}
+
+// The host's settings, while waiting for a friend to join: whatever they're set to when the friend joins is the match
+function makeWaitingSettingsMenu() {
+    const menu = new Menu("MATCH SETTINGS", [
+        ...matchSettingItems(),
+        {label: () => "DONE", pick: () => backMenu()},
+    ], "YOUR FRIEND PLAYS WITH THESE.  ESC: DONE");
+    menu.isWaitingSettings = true;
+    return menu;
 }
 
 function isOnTitleScreens() {
@@ -7132,41 +7305,233 @@ function drawCodeBoxes(code, y) {
     }
 }
 
-function drawOnlineScreen() {
+// The online screens on a dark band: a heading at the top, a hint (like "ESC: CANCEL") at the bottom, and whatever
+// it's saying centered between them
+const PANEL_TOP = 26;
+const PANEL_BOTTOM = 138;
+const PANEL_HEADING_Y = 42;
+const PANEL_HINT_Y = 128;
+
+function drawOnlinePanel(heading, lines, hint) {
     drawPanel();
-    const dots = ".".repeat(1 + Math.floor(liveTicks / 30) % 3);
-    if (joinTyping !== null) {
-        drawText("JOIN A MATCH", 42, "#ffd84a", 2);
-        drawText("TYPE YOUR FRIEND'S CODE", 62, "#ffffff", 1);
-        drawCodeBoxes(joinTyping, 88);
-        if (joinTyping.length === CODE_LENGTH) {
-            drawText("ENTER: JOIN", 114, "#ffcc33", 1);
-        }
-        drawText("ESC: BACK", 128, "#c8d4c0", 1);
-        return;
-    }
-    drawText("ONLINE MATCH", 42, "#ffd84a", 2);
-    if (online.state === "connecting") {
-        drawText("CONNECTING" + dots, 80, "#ffffff", 1);
-        drawText("ESC: CANCEL", 128, "#c8d4c0", 1);
-    } else if (online.state === "waiting") {
-        drawText("YOUR CODE IS", 60, "#ffffff", 1);
-        drawCodeBoxes(online.code, 82);
-        drawText("WAITING FOR A FRIEND TO JOIN" + dots, 104, "#ffffff", 1);
-        drawText(copiedTicks > 0 ? "COPIED! SEND IT TO A FRIEND" : "C: COPY INVITE LINK", 116, copiedTicks > 0 ? "#9cf09c" : "#ffcc33", 1);
-        drawText("ESC: CANCEL", 128, "#c8d4c0", 1);
-    } else if (online.state === "syncing") {
-        drawText("FRIEND FOUND!", 70, "#9cf09c", 1);
-        drawText("GET READY" + dots, 84, "#ffffff", 1);
-        drawText(online.role === "host" ? "YOU ARE RED" : "YOU ARE BLUE", 100, PLAYERS[online.getLocalIndex()].lightTextColor, 1);
-        drawText("ESC: CANCEL", 128, "#c8d4c0", 1);
-    } else if (online.state === "ended") {
-        drawText(online.message ?? "", 80, "#ff9a8a", 1);
-        drawText("ENTER: BACK", 128, "#c8d4c0", 1);
+    drawText(heading, PANEL_HEADING_Y, "#ffd84a", 2);
+    drawCenteredLines(lines, 50, 122);
+    if (hint !== null) {
+        drawText(hint, PANEL_HINT_Y, "#c8d4c0", 1);
     }
 }
 
+function drawOnlineScreen() {
+    if (joinTyping !== null) {
+        drawOnlinePanel("JOIN A MATCH", [
+            line("TYPE YOUR FRIEND'S CODE", "#ffffff"),
+            gap(4),
+            codeBoxes(joinTyping),
+            gap(4),
+            // Kept in place (just blank) until the code's all typed, so nothing jumps when it shows up
+            line(joinTyping.length === CODE_LENGTH ? "ENTER: JOIN" : "", "#ffcc33"),
+        ], "ESC: BACK");
+        return;
+    }
+    const heading = online.quickMatch ? "QUICK MATCH" : "ONLINE MATCH";
+    const pairedUp = online.quickMatch && online.code !== null;
+    if (online.state === "searching") {
+        const seconds = online.getSearchSeconds();
+        drawOnlinePanel(heading, [
+            loadingLine("LOOKING FOR AN OPPONENT", "#ffffff"),
+            line("WAITING " + Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0"), "#c8d4c0"),
+            gap(6),
+            line("YOU'LL PLAY THE NEXT PERSON WHO LOOKS", "#ffcc33"),
+            line(online.quickStats !== null ? describeMatches(online.quickStats.matches) : "", "#c8d4c0"),
+        ], "ESC: CANCEL");
+    } else if (online.state === "connecting" || (pairedUp && online.state === "waiting")) {
+        drawOnlinePanel(heading, [
+            pairedUp ? loadingLine("OPPONENT FOUND! CONNECTING", "#9cf09c") : loadingLine("CONNECTING", "#ffffff"),
+        ], "ESC: CANCEL");
+    } else if (online.state === "waiting") {
+        drawOnlinePanel(heading, [
+            codeBoxes(online.code),
+            gap(4),
+            loadingLine("WAITING FOR A FRIEND TO JOIN", "#ffffff"),
+            copiedTicks > 0
+                ? line("LINK COPIED! SEND IT TO A FRIEND", "#9cf09c")
+                : line("C: COPY A LINK THAT JOINS IN ONE CLICK", "#ffcc33"),
+            gap(4),
+            line(describeSettings(settings.values)[0], "#c8d4c0"),
+        ], "ENTER: MATCH SETTINGS   ESC: CANCEL");
+    } else if (online.state === "syncing") {
+        const ping = online.rtt === null ? "" : "PING " + Math.round(online.rtt) + "MS";
+        const pingColor = online.rtt === null || online.rtt < 60 ? "#c8d4c0" : online.rtt < 120 ? "#ffcc33" : "#ff7060";
+        drawOnlinePanel(heading, [
+            loadingLine((online.quickMatch ? "OPPONENT FOUND!" : "FRIEND FOUND!") + " GET READY", "#9cf09c"),
+            line(online.role === "host" ? "YOU ARE RED" : "YOU ARE BLUE", PLAYERS[online.getLocalIndex()].lightTextColor),
+            gap(4),
+            ...getSettingsLines(),
+            gap(4),
+            line(ping, pingColor),
+        ], "ESC: CANCEL");
+    } else if (online.state === "ended") {
+        drawOnlinePanel(heading, [line(online.message ?? "", "#ff9a8a")], "ENTER: BACK");
+    }
+}
+
+// The match's settings (the host's), as lines for drawCenteredLines, once they're known (blank until then, so
+// nothing jumps about when they arrive)
+function getSettingsLines() {
+    const lines = online.hostSettings !== null ? describeSettings(online.hostSettings) : ["", "", ""];
+    return lines.map(text => line(text, "#e8f0e0"));
+}
+
 // ---------- Online matches ----------
+
+// When a friend joins the host's code: a doorbell, and if the host's looking at another tab, its title flashes
+let titleAlert = null;
+
+function alertFriendJoined() {
+    sound.friendJoined();
+    if (typeof document === "undefined" || (!document.hidden && document.hasFocus?.() !== false)) {
+        return;
+    }
+    stopTitleAlert();
+    const alert = online.quickMatch ? "OPPONENT FOUND!" : "FRIEND JOINED!";
+    let on = true;
+    document.title = alert;
+    titleAlert = setInterval(() => {
+        on = !on;
+        document.title = on ? alert : "Knight Knight Online";
+    }, 800);
+}
+
+function stopTitleAlert() {
+    if (titleAlert !== null) {
+        clearInterval(titleAlert);
+        titleAlert = null;
+        document.title = "Knight Knight Online";
+    }
+}
+
+if (typeof document !== "undefined") {
+    window.addEventListener("focus", stopTitleAlert);
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+            stopTitleAlert();
+        }
+    });
+}
+
+// ---------- The lobby (between matches) ----------
+
+// The host's menu in the lobby: the match settings, then start or leave. The guest sees the settings change as the
+// host changes them.
+function makeLobbyMenu() {
+    const menu = new Menu("MATCH SETTINGS", [
+        ...matchSettingItems(),
+        {label: () => "START MATCH", pick: () => {
+            sound.menuSelect();
+            online.startFromLobby(JSON.parse(JSON.stringify(settings.values)));
+        }},
+        {label: () => "LEAVE", pick: () => leaveOnline()},
+    ], "YOUR FRIEND SEES THESE CHANGE AS YOU GO");
+    menu.isLobby = true;
+    return menu;
+}
+
+let sentSettings = null; // the settings the guest was last sent, as JSON
+
+// While the two are connected but not playing: getting a new match ready, or in the lobby
+function lobbyTick(lastTickOfFrame) {
+    liveTicks++;
+    const hostInLobby = online.role === "host" && online.state === "lobby";
+    if (hostInLobby) {
+        if (menus.length === 0) {
+            openMenu(makeLobbyMenu());
+        }
+        if (Keyboard.isClicked("Escape")) {
+            // Back out of the power-ups (the lobby itself stays: leaving is on it)
+            if (!menus[menus.length - 1].isLobby) {
+                backMenu();
+            }
+        } else {
+            updateMenu();
+        }
+        if (mode !== "online") {
+            return; // left
+        }
+        const values = JSON.stringify(settings.values);
+        if (values !== sentSettings) {
+            sentSettings = values;
+            online.changeSettings(JSON.parse(values));
+        }
+    } else if (Keyboard.isClicked("Escape")) {
+        leaveOnline();
+        return;
+    }
+    if (Keyboard.isClicked("F3")) {
+        showConnectionInfo = !showConnectionInfo;
+    }
+
+    if (lastTickOfFrame) {
+        draw();
+        if (hostInLobby && isPaused()) {
+            drawMenu();
+        } else {
+            drawOnlinePanel(online.quickMatch ? "QUICK MATCH" : "ONLINE MATCH", [
+                online.state === "lobby"
+                    ? loadingLine("THE HOST IS PICKING THE SETTINGS", "#ffffff")
+                    : loadingLine("NEW MATCH! GET READY", "#9cf09c"),
+                gap(6),
+                ...getSettingsLines(),
+            ], online.role !== "host" ? "ESC: LEAVE" : null);
+        }
+        drawConnectionInfo();
+    }
+}
+
+// ---------- Connection details (F3) ----------
+
+let showConnectionInfo = false;
+const connectionStats = {at: 0, rollbacks: 0, rolledBackTicks: 0, perSecond: 0, averageTicks: 0};
+
+// The ping, the input delay, how often it has to go back and replay, which way the messages are going, how in step
+// the two games are, and the fingerprint checks
+function drawConnectionInfo() {
+    if (!showConnectionInfo || isPaused()) {
+        return;
+    }
+    const session = online.session;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (session !== null && now - connectionStats.at >= 1000) {
+        if (session.rollbacks < connectionStats.rollbacks) {
+            // A new match (and a new session)
+            connectionStats.rollbacks = 0;
+            connectionStats.rolledBackTicks = 0;
+        }
+        const rollbacks = session.rollbacks - connectionStats.rollbacks;
+        connectionStats.perSecond = rollbacks;
+        connectionStats.averageTicks = rollbacks > 0 ? (session.rolledBackTicks - connectionStats.rolledBackTicks) / rollbacks : 0;
+        connectionStats.rollbacks = session.rollbacks;
+        connectionStats.rolledBackTicks = session.rolledBackTicks;
+        connectionStats.at = now;
+    }
+    const best = online.rttSamples.length > 0 ? Math.round(Math.min(...online.rttSamples)) : null;
+    const lines = [
+        "PING " + (online.rtt === null ? "?" : Math.round(online.rtt) + "MS") + (best !== null ? "  BEST " + best + "MS" : ""),
+        online.isUsingServer() ? "THROUGH THE SERVER" : "DIRECT CONNECTION",
+    ];
+    if (session !== null) {
+        const syncError = session.getSyncError();
+        lines.push(
+            "DELAY " + session.delay + " TICKS (" + Math.round(session.delay * 1000 / TICKS_PER_SECOND) + "MS)",
+            "ROLLBACKS " + connectionStats.perSecond + "/S, AVG " + connectionStats.averageTicks.toFixed(1) + " TICKS",
+            "IN STEP " + (syncError >= 0 ? "+" : "") + syncError.toFixed(1) + " TICKS",
+            "SYNC CHECKS " + Math.floor(session.nextHashTick / 160) + ", FIXED " + session.resyncs,
+        );
+    }
+    MDog.Draw.rectangleFill(2, 16, 136, lines.length * 9 + 4, "rgba(0, 0, 0, 0.6)");
+    lines.forEach((line, i) => {
+        MDog.Draw.textImage(line, 5, 22 + i * 9, "#d8f0d8", FONT, {alignX: "left", alignY: "center"});
+    });
+}
 
 function makeOnlineMenu() {
     const menu = new Menu("MENU", [
@@ -7174,8 +7539,17 @@ function makeOnlineMenu() {
         {onOff: true, label: () => "SOUND: " + onOff(!sound.muted), change: () => sound.toggleMute()},
         {onOff: true, label: () => "MUSIC: " + onOff(settings.get("music")), change: () => { settings.toggle("music"); music.setEnabled(settings.get("music")); }},
         {label: () => "HITBOXES: " + onOff(showHitboxes), pick: () => { showHitboxes = !showHitboxes; }},
+        {label: () => "CONNECTION INFO (F3): " + onOff(showConnectionInfo), pick: () => { showConnectionInfo = !showConnectionInfo; }},
         {label: () => "LEAVE MATCH", pick: () => leaveOnline()},
     ], "THE MATCH KEEPS GOING!  ESC: BACK");
+    // After a match, the host can change the settings for the next one, without either of them leaving
+    if (online.role === "host" && phase === "matchOver") {
+        menu.items.splice(1, 0, {label: () => "CHANGE SETTINGS", pick: () => {
+            closeMenus();
+            sentSettings = null;
+            online.toLobby();
+        }});
+    }
     return menu;
 }
 
@@ -7185,7 +7559,11 @@ function onlineTick(lastTickOfFrame) {
     online.update();
     const session = online.session;
 
-    if (online.state === "ended" || session === null) {
+    if (online.state !== "ended" && (online.state !== "playing" || session === null)) {
+        lobbyTick(lastTickOfFrame);
+        return;
+    }
+    if (online.state === "ended") {
         // The other player's gone: the game holds still, with a message over it
         if (clickedAny([" ", "Enter", "Escape"])) {
             leaveOnline();
@@ -7215,8 +7593,11 @@ function onlineTick(lastTickOfFrame) {
             sound.toggleMute();
         }
     }
-    if (mode !== "online") {
-        return; // left from the menu
+    if (Keyboard.isClicked("F3")) {
+        showConnectionInfo = !showConnectionInfo;
+    }
+    if (mode !== "online" || online.session === null) {
+        return; // left, or went to the lobby, from the menu
     }
 
     liveTicks++;
@@ -7246,6 +7627,7 @@ function onlineTick(lastTickOfFrame) {
             killCam.capture(simTicks);
         }
         drawOnlineStatus();
+        drawConnectionInfo();
         if (isPaused()) {
             drawMenu();
         }
@@ -7269,7 +7651,7 @@ function drawOnlineStatus() {
     if (session.stallTicks > 40) {
         // Up at the top, out of the way of the round's text and the end of match stats
         MDog.Draw.rectangleFill(0, 18, SCREEN_WIDTH, 12, "rgba(10, 16, 10, 0.75)");
-        drawText("WAITING FOR YOUR OPPONENT" + ".".repeat(1 + Math.floor(liveTicks / 30) % 3), 24, "#ffffff", 1);
+        drawTextWithDots("WAITING FOR YOUR OPPONENT", 24, "#ffffff");
     }
     if (session.desyncTick !== null) {
         // The games drifted apart, and the host's sending its game over to put it right (see Rollback.js)
@@ -7285,6 +7667,9 @@ function drawOnlineStatus() {
             MDog.Draw.rectangleFill(x - 1, y + 5, 3, 1, knight.player.lightTextColor);
             MDog.Draw.rectangleFill(x, y + 6, 1, 1, knight.player.lightTextColor);
         }
+    }
+    if (phase === "matchOver" && phaseTicks >= RESTART_DELAY_TICKS && online.role === "host" && replayTicksLeft === 0) {
+        drawText("ESC: CHANGE SETTINGS", 170, "#c8d4c0", 1);
     }
     if (phase === "matchOver" && phaseTicks >= RESTART_DELAY_TICKS) {
         const mine = rematchVotes[localPlayer];
@@ -7312,10 +7697,13 @@ function gameTick() {
 
     // There's nothing to pause on the title screen
     const canPause = phase !== "title";
-    if (isOnTitleScreens()) {
+    escapeUsed = false;
+    if (isOnTitleScreens() && !isPaused()) {
         // The online screens use the keys themselves
     } else if (Keyboard.isClicked("Escape")) {
         if (isPaused()) {
+            // (so the same press doesn't also cancel the online screen behind the menu)
+            escapeUsed = true;
             backMenu();
         } else if (canPause) {
             openMenu(makePauseMenu());
@@ -7332,6 +7720,9 @@ function gameTick() {
     }
 
     if (isPaused()) {
+        if (phase === "title") {
+            online.update();
+        }
         updateMenu();
         // Swings and taunts pressed in the menu don't happen when it closes
         usePresses();
@@ -7417,6 +7808,7 @@ export const testHooks = {
     get knights() { return knights; },
     get gameTime() { return gameTime; },
     get mode() { return mode; },
+    inviteLink,
     get replayTicksLeft() { return replayTicksLeft; },
     get simTicks() { return simTicks; },
     // A lightning strike coming down here, for seeing how it looks
@@ -7441,10 +7833,20 @@ for (const image of images) {
 MDog.Draw.setBackgroundColor("#222");
 MDog.setActiveFunction(gameTick);
 
-// An invite link (?room=CODE) goes straight to joining that match
+// An invite link (?code=CODE, or ?room=CODE from before) goes straight to joining that match. The code's then taken
+// out of the address, so reloading the page later doesn't try to join a match that's long over.
 if (typeof location !== "undefined") {
-    const room = new URLSearchParams(location.search).get("room");
-    if (room !== null && cleanCode(room).length === CODE_LENGTH) {
-        online.join(cleanCode(room));
+    const params = new URLSearchParams(location.search);
+    const code = params.get("code") ?? params.get("room");
+    if (code !== null && cleanCode(code).length === CODE_LENGTH) {
+        online.join(cleanCode(code));
+        const url = new URL(location.href);
+        url.searchParams.delete("code");
+        url.searchParams.delete("room");
+        try {
+            history.replaceState(null, "", url.toString());
+        } catch (e) {
+            // Just stays in the address
+        }
     }
 }

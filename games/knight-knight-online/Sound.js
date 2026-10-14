@@ -453,6 +453,12 @@ class Sound {
         this.tone(0.08, "square", 990, 1320, 0.07);
     }
 
+    // A doorbell, when a friend joins your online match (it plays even if you're in another tab)
+    friendJoined() {
+        [784, 988, 1319].forEach((frequency, i) => this.tone(0.16, "triangle", frequency, frequency, 0.35, i * 0.11));
+        [784, 988, 1319].forEach((frequency, i) => this.tone(0.16, "triangle", frequency, frequency, 0.35, 0.5 + i * 0.11));
+    }
+
     ready() {
         this.tone(0.12, "square", 440, 440, 0.14);
     }
