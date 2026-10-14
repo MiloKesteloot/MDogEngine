@@ -453,6 +453,54 @@ class Sound {
         this.tone(0.08, "square", 990, 1320, 0.07);
     }
 
+    // A western wail, for a showdown: "ooo-aaa-ooo-aaa-ooooooo", like a voice (or a coyote) sliding between two notes,
+    // then a long one that falls away with a growing wobble
+    western() {
+        if (!this.isReady()) return;
+        const start = this.context.currentTime + 0.05;
+        const voice = this.context.createOscillator();
+        voice.type = "sawtooth";
+        // The vowels: a low filter is "ooo", a high one "aaa"
+        const vowel = this.context.createBiquadFilter();
+        vowel.type = "lowpass";
+        vowel.Q.value = 6;
+        const vibrato = this.context.createOscillator();
+        vibrato.frequency.value = 5.5;
+        const wobble = this.context.createGain();
+        vibrato.connect(wobble).connect(voice.frequency);
+        const gain = this.context.createGain();
+        // [seconds in, pitch, vowel]
+        const path = [
+            [0, 440, 500], [0.28, 440, 500], [0.36, 660, 1700], [0.62, 660, 1700],
+            [0.7, 440, 500], [0.96, 440, 500], [1.04, 660, 1700], [1.3, 660, 1700],
+            [1.42, 494, 600], [2.6, 466, 450],
+        ];
+        voice.frequency.setValueAtTime(path[0][1], start);
+        vowel.frequency.setValueAtTime(path[0][2], start);
+        for (const [time, pitch, cutoff] of path.slice(1)) {
+            voice.frequency.linearRampToValueAtTime(pitch, start + time);
+            vowel.frequency.linearRampToValueAtTime(cutoff, start + time);
+        }
+        wobble.gain.setValueAtTime(0, start);
+        wobble.gain.linearRampToValueAtTime(6, start + 1.4);
+        wobble.gain.linearRampToValueAtTime(14, start + 2.6);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.22, start + 0.06);
+        gain.gain.setValueAtTime(0.22, start + 2.0);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 2.7);
+        voice.connect(vowel).connect(gain).connect(this.master);
+        voice.start(start);
+        vibrato.start(start);
+        voice.stop(start + 2.75);
+        vibrato.stop(start + 2.75);
+    }
+
+    // A funky little bassline, for the boogie bomb
+    boogie() {
+        [196, 196, 294, 247, 196, 330, 294, 247].forEach((frequency, i) =>
+            this.tone(0.09, "square", frequency, frequency, 0.16, i * 0.1));
+    }
+
     // A doorbell, when a friend joins your online match (it plays even if you're in another tab)
     friendJoined() {
         [784, 988, 1319].forEach((frequency, i) => this.tone(0.16, "triangle", frequency, frequency, 0.35, i * 0.11));

@@ -85,7 +85,7 @@ const EPIC_ROUND_TICKS = 40 * TICKS_PER_SECOND; // one that goes longer is "WHAT
 
 const READY_TICKS = 150; // "READY" before each round
 const FIGHT_TEXT_TICKS = 70; // how long "FIGHT!" stays up after the round starts
-const ROUND_OVER_TICKS = 260; // from a knight going down to the next round
+const ROUND_OVER_TICKS = 260 + 4 * TICKS_PER_SECOND; // from a knight going down to the next round (when there's no replay)
 const RESTART_DELAY_TICKS = 120; // after the match, so a late swing press doesn't skip the win screen
 
 const BOULDER_SPEED = 70 / TICKS_PER_SECOND; // pixels per tick
@@ -126,6 +126,8 @@ const AVALANCHE_SPREAD = 26; // how far off from the knight each one can be line
 const FURY_TICKS = 7 * TICKS_PER_SECOND;
 const FURY_SWING_SPEED = 26; // instead of SWING_SPEED
 const REVERSE_TICKS = 5 * TICKS_PER_SECOND;
+const BOOGIE_TICKS = 5 * TICKS_PER_SECOND; // the boogie bomb: the other knight dances this long, and can't attack
+const DISCO_COLORS = [[255, 90, 200], [90, 210, 255], [255, 230, 90], [130, 255, 130]];
 const THROW_SPEED = 2.8; // pixels per tick: fast, but you can step out of the way
 const THROW_RANGE = 160; // how far it flies before it drops
 const NEW_SWORD_TICKS = 2 * TICKS_PER_SECOND; // a sword lost in water or lava comes back from the sky after this
@@ -178,12 +180,23 @@ const EXPLOSION_RADIUS = 38; // a barrel's blast
 const BARREL_CHAIN_TICKS = 10; // a barrel caught in a blast goes up this soon after
 const CHICKEN_FIRST_TICKS = 60 * TICKS_PER_SECOND; // the first chicken comes after this long with nobody hit...
 const CHICKEN_EVERY_TICKS = 20 * TICKS_PER_SECOND; // ...and another this often after that
-const CHICKEN_SPEED = 0.42; // a little faster than walking, so you can't just outrun them
+const CHICKEN_SPEED = 0.33; // a little slower than walking, so you can get away (it doesn't give up, though)
 const CHICKEN_REPATH_TICKS = 8; // how often a chicken works out its way to whoever it's chasing again
 const PATH_CELL = 4; // the size of the squares things find their way round the field on
-const PECK_STUN_TICKS = 40;
+const PECK_KNOCKBACK = 2.4; // a peck knocks you back (about 17 pixels), but doesn't stun
 const PECK_COOLDOWN_TICKS = 70;
 const DRAGON_SPEED = 2.4;
+const DRAGON_MIN_WAIT_TICKS = 7 * TICKS_PER_SECOND; // on the volcano, between dragons
+const DRAGON_MAX_WAIT_TICKS = 13 * TICKS_PER_SECOND;
+// The volcano's fissures: a crack spreads across the field (the warning), splits open into lava, then closes again
+const FISSURE_FIRST_WAIT_TICKS = 5 * TICKS_PER_SECOND;
+const FISSURE_MIN_WAIT_TICKS = 9 * TICKS_PER_SECOND; // from one closing to the next starting
+const FISSURE_MAX_WAIT_TICKS = 15 * TICKS_PER_SECOND;
+const FISSURE_CRACK_TICKS = 2 * TICKS_PER_SECOND;
+const FISSURE_OPENING_TICKS = 24;
+const FISSURE_OPEN_TICKS = 5 * TICKS_PER_SECOND;
+const FISSURE_CLOSING_TICKS = 80;
+const FISSURE_WIDTH = 12;
 const DRAGON_FIRE_DELAY_TICKS = 0.35 * TICKS_PER_SECOND; // the fire comes this long after the shadow passes
 const DRAGON_FIRE_TICKS = 1.8 * TICKS_PER_SECOND;
 const DRAGON_FIRE_RADIUS = 7;
@@ -274,7 +287,7 @@ const BEAR_IMAGE = "knight-knight/bear.png";
 const CACTUS_IMAGE = "knight-knight/cactus.png";
 const LIGHTHOUSE_IMAGE = "knight-knight/lighthouse.png";
 const POWERUP_SIZE = 9;
-const POWERUP_TYPES = ["shield", "speed", "thunder", "grow", "avalanche", "freeze", "fury", "throw", "reverse", "gun"]; // in the order they are in the image
+const POWERUP_TYPES = ["shield", "speed", "thunder", "grow", "avalanche", "freeze", "fury", "throw", "reverse", "gun", "boogie"]; // in the order they are in the image (the boogie bomb's isn't: it's drawn in code)
 // The gun isn't found lying around any more, it's what everyone uses in a showdown
 // Freeze was taken out (its icon is still in the image, so the others stay in place)
 const SPAWNING_POWERUPS = POWERUP_TYPES.filter(type => type !== "gun" && type !== "freeze");
@@ -472,6 +485,23 @@ function drawRing(x, y, radius, color) {
     }
 }
 
+// A little mirrored disco ball centered at x, y, glinting in colors as time goes on. On a string, unless it's the
+// power-up's icon.
+function drawDiscoBall(x, y, time, icon) {
+    if (!icon) {
+        MDog.Draw.rectangleFill(x, y - 5, 1, 3, "rgba(200, 200, 210, 0.7)");
+    }
+    drawOval(x, y, 4, 4, "#3a3448");
+    drawOval(x, y, 3, 3, "#a8a8bc");
+    // Its little mirrors catching the light
+    const glint = Math.floor(time / 8);
+    const spots = [[-2, -1], [0, -2], [1, 0], [-1, 1], [2, 1], [0, 2]];
+    spots.forEach(([dx, dy], i) => {
+        const [r, g, b] = DISCO_COLORS[(i + glint) % DISCO_COLORS.length];
+        MDog.Draw.rectangleFill(x + dx, y + dy, 1, 1, (i + glint) % 3 === 0 ? "#ffffff" : `rgb(${r}, ${g}, ${b})`);
+    });
+}
+
 // One strip per animation per direction per color, cut from knight.png
 function makeAnimations(color, name, frames, speed, suffix) {
     const animations = {};
@@ -494,6 +524,7 @@ function addShake(amount) {
 
 let arena = ARENAS.MEADOW;
 let arenaName = "MEADOW";
+let arenaLayout = null; // for an arena with a few layouts (the showdown), the one picked this round
 let weather = new Weather("clear", SCREEN_WIDTH, SCREEN_HEIGHT);
 
 // Is this spot in the river (and not on a bridge)?
@@ -1097,6 +1128,10 @@ class Powerup {
         const frame = POWERUP_TYPES.indexOf(this.type);
         const x = Math.round(this.x - POWERUP_SIZE / 2);
         const y = Math.round(this.y - 13 + bob);
+        if (this.type === "boogie") {
+            drawDiscoBall(x + 4, y + 4, this.age, true);
+            return;
+        }
         MDog.Draw.image(POWERUP_IMAGE, x, y, {width: POWERUP_SIZE, offsetX: POWERUP_SIZE * frame});
     }
 
@@ -1231,6 +1266,7 @@ class Knight {
         this.scale = 1; // grows and shrinks smoothly toward GROW_SCALE or 1
         this.furyTicks = 0;
         this.reverseTicks = 0; // controls are backwards
+        this.danceTicks = 0; // dancing from a boogie bomb: can walk, but can't attack
         this.gunAmmo = 0;
         this.gunCooldown = 0;
         this.throwCharges = 0; // with one, the next swing throws the sword
@@ -1410,7 +1446,7 @@ class Knight {
             if (swing.getRawFrame() < swing.order.length) {
                 return;
             }
-            if (this.swingBuffer > 0 && canAct && this.hasSword) {
+            if (this.swingBuffer > 0 && canAct && this.hasSword && this.danceTicks === 0) {
                 this.faceHeldWay();
                 this.startSwing();
                 return;
@@ -1499,6 +1535,14 @@ class Knight {
         }
         if (this.speedTicks > 0) this.speedTicks--;
         if (this.reverseTicks > 0) this.reverseTicks--;
+        if (this.danceTicks > 0) {
+            this.danceTicks--;
+            // Sparkles off the disco ball
+            if (this.danceTicks % 12 === 0) {
+                const ball = this.getDiscoBallSpot();
+                particles.sparks(ball.x, ball.y, 1, DISCO_COLORS[Math.floor(this.danceTicks / 12) % DISCO_COLORS.length]);
+            }
+        }
         if (this.gunCooldown > 0) this.gunCooldown--;
         if (this.noSwordCooldown > 0) this.noSwordCooldown--;
         if (this.furyTicks > 0) {
@@ -1540,6 +1584,14 @@ class Knight {
     // The swing button: shoots if he has a gun, throws his sword if he has a throw, or swings. Returns if it did
     // anything.
     attack() {
+        // Too busy dancing (he can still walk)
+        if (this.danceTicks > 0) {
+            if (this.noSwordCooldown === 0) {
+                this.noSwordCooldown = 50;
+                popup("TOO BUSY DANCING!", this.getGroundX(), this.getTopY() - 4, "#ff80e0");
+            }
+            return false;
+        }
         if (this.gunAmmo > 0) {
             if (this.gunCooldown === 0) {
                 this.shoot();
@@ -1795,15 +1847,13 @@ class Knight {
         sound.grab();
     }
 
-    // Pecked by a chicken: stunned for a moment
+    // Pecked by a chicken: knocked back (away from it), but he can keep going
     peck(dx, dy) {
         if (this.dead) {
             return;
         }
-        this.setState("idle");
-        this.stunTicks = PECK_STUN_TICKS;
-        this.vx += dx * 1.2;
-        this.vy += dy * 1.2;
+        this.vx += dx * PECK_KNOCKBACK;
+        this.vy += dy * PECK_KNOCKBACK;
         popup("PECK!", this.getGroundX(), this.getTopY() - 4, "#ffffff");
         particles.feathers(this.getGroundX(), this.getGroundY(), [245, 245, 240], 2);
         sound.cluck();
@@ -2040,6 +2090,7 @@ class Knight {
         this.speedTicks = 0;
         this.furyTicks = 0;
         this.reverseTicks = 0;
+        this.danceTicks = 0;
         this.gunAmmo = 0;
     }
 
@@ -2048,6 +2099,9 @@ class Knight {
     }
 
     drawShadow() {
+        if (this.danceTicks > 0 && !this.dead) {
+            this.drawDiscoLights();
+        }
         if (this.bloodPool > 0) {
             // Spreading out from under the middle of his body, which lies a few pixels above his feet
             const poolY = this.getGroundY() - Math.round(3 * this.scale);
@@ -2075,7 +2129,9 @@ class Knight {
         const spot = this.getSpriteSpot(scale);
         const x = spot.x;
         // Hops up and down while taunting
-        const y = spot.y - (this.tauntTicks > 0 ? Math.round(Math.abs(dsin(this.tauntTicks / 8)) * 3) : 0);
+        const bop = this.tauntTicks > 0 ? Math.round(Math.abs(dsin(this.tauntTicks / 8)) * 3)
+            : this.danceTicks > 0 ? Math.round(Math.abs(dsin(this.danceTicks / 6)) * 2) : 0;
+        const y = spot.y - bop;
 
         if (this.fallHole !== null) {
             // Shrinks away into the hole
@@ -2119,6 +2175,10 @@ class Knight {
             overlay(`rgba(255, 90, 40, ${0.15 + 0.12 * dsin(this.trailTimer / 8)})`);
         } else if (this.reverseTicks > 0) {
             overlay(`rgba(190, 110, 230, ${0.15 + 0.1 * dsin(this.trailTimer / 6)})`);
+        } else if (this.danceTicks > 0) {
+            // Lit up by the disco lights, a different color every beat
+            const [r, g, b] = DISCO_COLORS[Math.floor(this.danceTicks / 10) % DISCO_COLORS.length];
+            overlay(`rgba(${r}, ${g}, ${b}, 0.35)`);
         }
 
         if (this.gunAmmo > 0) {
@@ -2126,6 +2186,10 @@ class Knight {
         }
         if (this.reverseTicks > 0) {
             this.drawDizzy();
+        }
+        if (this.danceTicks > 0) {
+            const ball = this.getDiscoBallSpot();
+            drawDiscoBall(ball.x, ball.y, this.danceTicks, false);
         }
         if (this.shield) {
             this.drawShield();
@@ -2225,6 +2289,20 @@ class Knight {
         MDog.Draw.rectangleFill(Math.floor(a.x), Math.floor(a.y), 2, 2, "#82502c");
     }
 
+    // Where the disco ball hangs, over his head (the sparkles come from here too)
+    getDiscoBallSpot() {
+        return {x: Math.round(this.getGroundX()), y: Math.round(this.getTopY() - 7)};
+    }
+
+    // Spots of colored light going round on the ground under him while he dances
+    drawDiscoLights() {
+        for (let i = 0; i < DISCO_COLORS.length; i++) {
+            const angle = this.danceTicks / 14 + i * Math.PI / 2;
+            const [r, g, b] = DISCO_COLORS[i];
+            drawOval(this.getGroundX() + dcos(angle) * 12 * this.scale, this.getGroundY() + dsin(angle) * 5 * this.scale, 4, 2, `rgba(${r}, ${g}, ${b}, 0.45)`);
+        }
+    }
+
     // Little purple stars going round his head while his controls are backwards
     drawDizzy() {
         const head = this.scaledPoint(SPRITE_SIZE / 2, 2);
@@ -2277,6 +2355,7 @@ class Knight {
             [this.growTicks, GROW_TICKS, "#e05040"],
             [this.furyTicks, FURY_TICKS, "#ff8a30"],
             [this.reverseTicks, REVERSE_TICKS, "#c890f0"],
+            [this.danceTicks, BOOGIE_TICKS, "#ff80e0"],
         ].filter(([ticks]) => ticks > 0);
         const left = Math.round(this.getGroundX()) - 6;
         let y = Math.round(this.getGroundY()) + 3;
@@ -3620,6 +3699,180 @@ class FirePatch {
     }
 }
 
+// ----- The volcano -----
+
+// A dragon every so often, on the volcano
+class DragonSpawner {
+    constructor() {
+        this.wait = random(DRAGON_MIN_WAIT_TICKS, DRAGON_MAX_WAIT_TICKS) * 0.5;
+    }
+
+    update() {
+        if (phase !== "playing") {
+            return;
+        }
+        this.wait--;
+        if (this.wait <= 0) {
+            this.wait = random(DRAGON_MIN_WAIT_TICKS, DRAGON_MAX_WAIT_TICKS);
+            features.push(new Dragon());
+        }
+    }
+}
+
+// Starts a fissure every so often (one at a time)
+class FissureSpawner {
+    constructor() {
+        this.wait = FISSURE_FIRST_WAIT_TICKS;
+    }
+
+    update() {
+        if (phase !== "playing" || holes.some(hole => hole instanceof Fissure)) {
+            return;
+        }
+        this.wait--;
+        if (this.wait <= 0) {
+            this.wait = random(FISSURE_MIN_WAIT_TICKS, FISSURE_MAX_WAIT_TICKS);
+            holes.push(new Fissure());
+        }
+    }
+}
+
+// A crack right across the field, up and down or side to side, near the middle. First it spreads across (glowing,
+// as a warning, harmless), then it splits open into a river of lava that cuts the field in two, then it closes up and
+// the ground's back together. It's a hole while it's open: knights, boulders, chickens and dropped swords fall in.
+class Fissure {
+    constructor() {
+        const bounds = getBounds();
+        // "y": it runs up and down (its middle moves in x as it goes down); "x": side to side
+        this.axis = rng() < 0.5 ? "y" : "x";
+        const vertical = this.axis === "y";
+        this.start = (vertical ? bounds.top : Math.max(bounds.top, 20)) - 8; // where it runs from and to
+        this.end = (vertical ? bounds.bottom : bounds.right) + 8;
+        const low = vertical ? bounds.left : Math.max(bounds.top, 20);
+        const high = vertical ? bounds.right : bounds.bottom;
+        const middle = low + (high - low) * random(0.3, 0.7);
+        const slope = random(-0.25, 0.25);
+        const halfway = (this.start + this.end) / 2;
+        // Its middle, every few pixels along it, wandering a little
+        this.step = 6;
+        this.points = [];
+        for (let along = this.start; along <= this.end + this.step; along += this.step) {
+            this.points.push(middle + (along - halfway) * slope + random(-4, 4));
+        }
+        this.style = "lava";
+        this.cracked = false; // it's not one of the holes that cracked open and stay (see MAX_HOLES)
+        this.state = "cracking";
+        this.ticks = 0;
+        this.width = 0;
+        this.done = false;
+        sound.rumble(true);
+    }
+
+    // Where its middle is, this far along
+    centerAt(along) {
+        const position = (along - this.start) / this.step;
+        const i = Math.max(0, Math.min(this.points.length - 2, Math.floor(position)));
+        const t = Math.max(0, Math.min(1, position - i));
+        return this.points[i] + (this.points[i + 1] - this.points[i]) * t;
+    }
+
+    // How far a spot is from its middle, across it
+    distanceFrom(x, y) {
+        return this.axis === "y" ? Math.abs(x - this.centerAt(y)) : Math.abs(y - this.centerAt(x));
+    }
+
+    contains(x, y) {
+        // A little narrower than it looks, so only really being in it counts
+        return this.width > 2 && this.distanceFrom(x, y) < this.width * 0.85 / 2;
+    }
+
+    isNear(x, y, margin) {
+        return this.distanceFrom(x, y) < FISSURE_WIDTH / 2 + margin;
+    }
+
+    // A knight who falls in goes down where he is, in the middle of it
+    getFallSpot(x, y) {
+        return this.axis === "y" ? {x: this.centerAt(y), y} : {x, y: this.centerAt(x)};
+    }
+
+    update() {
+        this.ticks++;
+        if (this.state === "cracking") {
+            if (this.ticks % 40 === 0) {
+                sound.crack();
+            }
+            if (this.ticks >= FISSURE_CRACK_TICKS) {
+                this.setState("opening");
+                addShake(4);
+                sound.sizzle();
+                sound.crumble();
+            }
+        } else if (this.state === "opening") {
+            this.width = FISSURE_WIDTH * Math.min(1, this.ticks / FISSURE_OPENING_TICKS);
+            if (this.ticks >= FISSURE_OPENING_TICKS) {
+                this.setState("open");
+            }
+        } else if (this.state === "open") {
+            if (this.ticks >= FISSURE_OPEN_TICKS) {
+                this.setState("closing");
+                sound.crumble();
+            }
+        } else if (this.state === "closing") {
+            this.width = FISSURE_WIDTH * Math.max(0, 1 - this.ticks / FISSURE_CLOSING_TICKS);
+            if (this.ticks >= FISSURE_CLOSING_TICKS) {
+                this.done = true;
+            }
+        }
+        // Embers rising off the lava
+        if (this.width > 2 && this.ticks % 6 === 0) {
+            const along = random(this.start, this.end);
+            const spot = this.getFallSpot(along, along);
+            particles.embers(spot.x, spot.y, 1);
+        }
+    }
+
+    setState(state) {
+        this.state = state;
+        this.ticks = 0;
+    }
+
+    // A strip one pixel across, from a to b across it, at along
+    fillAcross(along, a, b, color) {
+        const from = Math.round(a);
+        const size = Math.round(b) - from;
+        if (size <= 0) {
+            return;
+        }
+        if (this.axis === "y") {
+            MDog.Draw.rectangleFill(from, along, size, 1, color);
+        } else {
+            MDog.Draw.rectangleFill(along, from, 1, size, color);
+        }
+    }
+
+    draw() {
+        if (this.state === "cracking") {
+            // The crack spreads from one end to the other, glowing brighter as it's about to open
+            const progress = this.ticks / FISSURE_CRACK_TICKS;
+            const reach = this.start + (this.end - this.start) * Math.min(1, progress / 0.6);
+            const glow = progress > 0.6 && Math.floor(this.ticks / 6) % 2 === 0 ? 0.95 : 0.7;
+            for (let along = this.start; along < reach; along++) {
+                const center = this.centerAt(along);
+                this.fillAcross(along, center - 1.5, center + 1.5, "rgba(40, 14, 8, 0.6)");
+                this.fillAcross(along, center - 0.5, center + 0.5, `rgba(255, 120, 40, ${glow})`);
+            }
+            return;
+        }
+        const half = this.width / 2;
+        for (let along = this.start; along < this.end; along++) {
+            const center = this.centerAt(along);
+            this.fillAcross(along, center - half - 1, center + half + 1, "#5a1a10");
+            this.fillAcross(along, center - half, center + half, "#e05a1e");
+            this.fillAcross(along, center - half * 0.45, center + half * 0.45, "#f8a030");
+        }
+    }
+}
+
 // ----- The bear -----
 
 // Wakes any sleeping bear within reach of something that just happened here (by is whoever caused it, if anyone)
@@ -4775,11 +5028,13 @@ function makeArenaFeatures() {
     for (const wall of arena.walls ?? []) made.push(new Wall(wall));
     for (const mast of arena.masts ?? []) made.push(new Prop(mast.x, mast.y, MAST_IMAGE, [3, 4, 11, 11], 11, 12));
     for (const grave of arena.graves ?? []) made.push(new Grave(grave.x, grave.y));
-    for (const barrel of arena.barrels ?? []) made.push(new Barrel(barrel.x, barrel.y));
+    for (const barrel of (arenaLayout ?? arena).barrels ?? []) made.push(new Barrel(barrel.x, barrel.y));
     for (const lantern of arena.lanterns ?? []) made.push(new Lantern(lantern.x, lantern.y));
     for (const sand of arena.quicksand ?? []) made.push(new Quicksand(sand.x, sand.y, sand.rx, sand.ry));
     for (const cactus of arena.cacti ?? []) made.push(new Prop(cactus.x, cactus.y, CACTUS_IMAGE, [2, 9, 8, 16], 16, 8));
     if (arena.tumbleweeds) made.push(new TumbleweedSpawner());
+    if (arena.dragons && simSettings.get("hazards")) made.push(new DragonSpawner());
+    if (arena.fissures && simSettings.get("shiftingGround")) made.push(new FissureSpawner());
     if (arena.lighthouse !== undefined) {
         made.push(new Prop(arena.lighthouse.x, arena.lighthouse.y, LIGHTHOUSE_IMAGE, [3, 18, 17, 24], 24, 18));
         made.push(new LighthouseBeam(arena.lighthouse.x + 9, arena.lighthouse.y + 3));
@@ -5071,6 +5326,9 @@ function pickRoundModifier(nextArena) {
     }
     const options = [];
     if (simSettings.get("weather")) options.push("wind", "rain");
+    if (nextArena.quiet) {
+        return options.length > 0 ? pick(options) : null;
+    }
     if (simSettings.get("hazards")) options.push("lightning", "catapult");
     // Horses only run on grass
     if (simSettings.get("hazards") && nextArena.grassy) options.push("horse");
@@ -5262,9 +5520,11 @@ function setArena(name) {
     }
     arenaName = name;
     arena = ARENAS[name];
-    rocks = arena.rocks.map(rock => new Rock(rock.x, rock.y, arena.rockImage));
+    arenaLayout = arena.layouts !== undefined ? pick(arena.layouts) : null;
+    const layout = arenaLayout ?? arena;
+    rocks = layout.rocks.map(rock => new Rock(rock.x, rock.y, arena.rockImage));
     trees = (arena.trees ?? []).map(tree => new Tree(tree.x, tree.y));
-    crates = (arena.crates ?? []).map(crate => new Crate(crate.x, crate.y));
+    crates = (layout.crates ?? []).map(crate => new Crate(crate.x, crate.y));
     grassRows = [];
     for (const [left, top, right, bottom] of arena.tallGrass) {
         for (let y = top; y <= bottom; y += 4) {
@@ -5363,6 +5623,9 @@ function startRound(quiet = false) {
     setPhase("ready");
     if (!quiet) {
         sound.ready();
+        if (arena.westernIntro) {
+            sound.western();
+        }
     }
 }
 
@@ -5513,6 +5776,7 @@ function updateHazards(walls) {
     for (const hole of holes) {
         hole.update();
     }
+    holes = holes.filter(hole => !hole.done);
     for (const horse of horses) {
         horse.update(walls);
     }
@@ -5525,7 +5789,7 @@ function updateHazards(walls) {
     }
 
     // Chickens, when nobody's been hit for a while (from round 3 on)
-    if (phase === "playing" && simSettings.get("hazards") && getRoundStage() === 2 && !arena.calm) {
+    if (phase === "playing" && simSettings.get("hazards") && getRoundStage() === 2 && !arena.calm && !arena.quiet) {
         calmTicks++;
         if (calmTicks >= CHICKEN_FIRST_TICKS && (calmTicks - CHICKEN_FIRST_TICKS) % CHICKEN_EVERY_TICKS === 0) {
             spawnChicken();
@@ -5597,6 +5861,7 @@ const POWERUP_NAMES = {
     throw: ["THROW SWORD!", "#e8e8f0", [230, 230, 240]],
     reverse: ["REVERSE!", "#c890f0", [190, 110, 230]],
     gun: ["GUN!", "#d0d0d8", [200, 200, 210]],
+    boogie: ["BOOGIE BOMB!", "#ff80e0", [255, 128, 224]],
 };
 
 function givePowerup(knight, type) {
@@ -5627,6 +5892,14 @@ function givePowerup(knight, type) {
         for (const other of others) {
             strikes.push(new Strike(other, knight));
         }
+    } else if (type === "boogie") {
+        // The other knight has to dance: he can walk about, but can't attack
+        for (const other of others) {
+            other.danceTicks = BOOGIE_TICKS;
+            popup("DANCE!", other.getGroundX(), other.getTopY() - 4, "#ff80e0");
+            particles.confetti(SCREEN_WIDTH, 2);
+        }
+        sound.boogie();
     } else if (type === "reverse") {
         for (const other of others) {
             other.reverseTicks = REVERSE_TICKS;
@@ -6688,6 +6961,7 @@ function draw() {
         critter.draw();
     }
     weather.draw();
+    drawSkyFlash();
     for (const skyRock of skyRocks) {
         skyRock.drawSky();
     }
@@ -6714,6 +6988,30 @@ function draw() {
 
     MDog.Draw.translate(0, 0);
     drawUI();
+}
+
+// In a quiet arena's rain (the showdown's), lightning flashes now and then far off, with thunder. It's only for show
+// (nothing gets struck), so it uses Math.random and isn't part of the game's state.
+let skyFlash = 0;
+
+function drawSkyFlash() {
+    if (!arena.quiet || weather.kind !== "rain" || phase === "title") {
+        skyFlash = 0;
+        return;
+    }
+    if (isPaused()) {
+        return;
+    }
+    if (skyFlash > 0) {
+        skyFlash--;
+    } else if (Math.random() < 1 / 500) {
+        skyFlash = 16;
+        sound.thunder();
+    }
+    // Two flickers
+    if (skyFlash > 10 || (skyFlash > 2 && skyFlash < 6)) {
+        MDog.Draw.rectangleFill(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, `rgba(235, 240, 255, ${skyFlash > 10 ? 0.45 : 0.25})`);
+    }
 }
 
 // Once a replay is over, the next round starts right away. After the match's replay, everything holds still on
@@ -6773,7 +7071,7 @@ function onOff(on) {
 
 const POWERUP_MENU_NAMES = {
     shield: "SHIELD", speed: "SPEED", thunder: "THUNDER", grow: "BIG", avalanche: "AVALANCHE",
-    fury: "FURY", throw: "THROW SWORD", reverse: "REVERSE", gun: "GUN",
+    fury: "FURY", throw: "THROW SWORD", reverse: "REVERSE", gun: "GUN", boogie: "BOOGIE BOMB",
 };
 
 function makePauseMenu() {
@@ -6964,7 +7262,7 @@ function captureState() {
         resultText, commentary, lastRoundWinner, streak, worstDeficit, hitstop, slowmo, flash, shake,
         closeCallCooldown, roundsUntilShowdown, roundsUntilJuggernaut, roundsUntilJoust, roundModifier,
         roundHazards, roundBoulders, juggernaut, calmTicks, replayBlowTick, replayReason, aftermath, gameTime,
-        rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom, lightningGlow,
+        rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom, lightningGlow, arenaLayout,
     };
 }
 
@@ -6976,7 +7274,7 @@ function restoreState(state) {
         resultText, commentary, lastRoundWinner, streak, worstDeficit, hitstop, slowmo, flash, shake,
         closeCallCooldown, roundsUntilShowdown, roundsUntilJuggernaut, roundsUntilJoust, roundModifier,
         roundHazards, roundBoulders, juggernaut, calmTicks, replayBlowTick, replayReason, aftermath, gameTime,
-        rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom, lightningGlow,
+        rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom, lightningGlow, arenaLayout,
     } = state);
 }
 
@@ -7000,6 +7298,7 @@ const CLASSES = {
     Rock, Tree, Crate, GrassRow, GroundHazard, Boulder, Powerup, Critter, Knight, ThrownSword, Bullet, Horse, SkyRock, Wall,
     Prop, Canyon, Platform, Grave, Barrel, Explosion, Chicken, Dragon, FirePatch, Bear, Storm, Tracks, Minecart, Lantern,
     Quicksand, Tumbleweed, TumbleweedSpawner, LighthouseBeam, Tornado, LavaLake, DemoBrain, Popup, Slash, Strike, Weather,
+    DragonSpawner, FissureSpawner, Fissure,
     SpriteSheetAnimation: MDog.Draw.SpriteSheetAnimation,
 };
 
@@ -7808,9 +8107,12 @@ export const testHooks = {
     get knights() { return knights; },
     get gameTime() { return gameTime; },
     get mode() { return mode; },
+    get arenaLayout() { return arenaLayout; },
     inviteLink,
     get replayTicksLeft() { return replayTicksLeft; },
     get simTicks() { return simTicks; },
+    // Gives a knight a power-up, for testing
+    givePowerup(index, type) { givePowerup(knights[index], type); },
     // A lightning strike coming down here, for seeing how it looks
     strikeAt(x, y) { strikes.push(new Strike(null, null, {x, y})); },
 };

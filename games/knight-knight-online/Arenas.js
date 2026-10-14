@@ -76,7 +76,9 @@ const ARENAS = {
         footprint: "rgba(20, 12, 12, 0.35)",
         critters: "embers",
         weathers: ["ash", "ash", "clear", "wind"],
-        hazards: ["fireball", "dragon"],
+        hazards: ["fireball"],
+        dragons: true, // a dragon every 7 to 13 seconds, every round (instead of being one of the random hazards)
+        fissures: true, // a crack of lava opens right across the field now and then, then closes up again
         music: "volcano",
     },
     FOREST: {
@@ -104,23 +106,53 @@ const ARENAS = {
         field: "knight-knight/field-showdown.png",
         fieldColor: "#ceac74",
         rockImage: "knight-knight/rock.png",
-        rocks: [{x: 26, y: 36}, {x: 198, y: 36}, {x: 26, y: 140}, {x: 198, y: 140}],
-        crates: [
-            {x: 64, y: 86}, {x: 162, y: 86}, {x: 113, y: 88},
-            {x: 84, y: 60}, {x: 142, y: 60}, {x: 84, y: 114}, {x: 142, y: 114},
-            {x: 100, y: 36}, {x: 126, y: 36}, {x: 100, y: 138}, {x: 126, y: 138},
-            {x: 46, y: 60}, {x: 180, y: 114},
+        rocks: [],
+        // One of these is picked each showdown: where the rocks, crates and barrels (which explode when they're shot,
+        // with a huge blast, and set each other off) are
+        layouts: [
+            // Classic: crates scattered about, a barrel in each corner of the middle
+            {
+                rocks: [{x: 26, y: 36}, {x: 198, y: 36}, {x: 26, y: 140}, {x: 198, y: 140}],
+                crates: [
+                    {x: 64, y: 86}, {x: 162, y: 86}, {x: 113, y: 88},
+                    {x: 84, y: 60}, {x: 142, y: 60}, {x: 84, y: 114}, {x: 142, y: 114},
+                    {x: 100, y: 36}, {x: 126, y: 36}, {x: 100, y: 138}, {x: 126, y: 138},
+                    {x: 46, y: 60}, {x: 180, y: 114},
+                ],
+                barrels: [{x: 58, y: 38}, {x: 170, y: 132}, {x: 110, y: 62}, {x: 122, y: 124}],
+            },
+            // The ring: crates in a circle round the middle, open on the left and right, with a barrel in the middle
+            {
+                rocks: [{x: 26, y: 36}, {x: 198, y: 36}, {x: 26, y: 140}, {x: 198, y: 140}],
+                crates: [
+                    {x: 157, y: 100}, {x: 137, y: 116}, {x: 113, y: 121}, {x: 89, y: 116}, {x: 69, y: 100},
+                    {x: 69, y: 70}, {x: 89, y: 54}, {x: 113, y: 49}, {x: 137, y: 54}, {x: 157, y: 70},
+                ],
+                barrels: [{x: 115, y: 82}],
+            },
+            // The powder keg: five barrels in the middle (shoot one and they all go), and crates out to the sides
+            {
+                rocks: [{x: 26, y: 36}, {x: 198, y: 36}, {x: 26, y: 140}, {x: 198, y: 140}],
+                crates: [
+                    {x: 60, y: 58}, {x: 60, y: 118}, {x: 166, y: 58}, {x: 166, y: 118},
+                    {x: 113, y: 36}, {x: 113, y: 140},
+                ],
+                barrels: [{x: 115, y: 82}, {x: 99, y: 70}, {x: 131, y: 70}, {x: 99, y: 96}, {x: 131, y: 96}],
+            },
         ],
         tallGrass: [],
-        // Explode when they're shot, with a huge blast
-        barrels: [{x: 58, y: 38}, {x: 170, y: 132}, {x: 110, y: 62}, {x: 122, y: 124}],
         guns: true, // everyone has a gun instead of a sword
         special: true, // only comes up now and then in mixed arenas
+        quiet: true, // just the two of them: no boulders, hazards, holes, chickens or round twists (but weather)
+        noBoulders: true,
+        solidGround: true,
+        tumbleweeds: true,
+        westernIntro: true, // a western wail as the round starts
         holeStyle: "dirt",
         footprint: "rgba(120, 90, 50, 0.35)",
         critters: null,
-        weathers: ["clear", "clear", "wind"],
-        hazards: ["catapult"],
+        weathers: ["clear", "clear", "wind", "rain"], // rain comes with lightning flashes (just for show)
+        hazards: [],
         music: "showdown",
     },
     // A dark mine lit by lanterns, with minecarts racing along two tracks
