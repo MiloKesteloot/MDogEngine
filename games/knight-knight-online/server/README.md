@@ -54,5 +54,6 @@ In another, serve the game:
 node games/knight-knight-online/tests/static-server.mjs
 ```
 
-Then open http://127.0.0.1:8000/?game=knight-knight-online in two browser windows. On `localhost` or `127.0.0.1`
-the game uses the local server automatically. Anywhere else, `?server=ws://...` in the address picks a server.
+Then open http://127.0.0.1:8000/?game=knight-knight-online&server=ws://127.0.0.1:8787 in two browser windows. The
+`server=` part makes the game use the server on your computer; without it, the game always uses the real one (even
+when the game itself is running on your computer).

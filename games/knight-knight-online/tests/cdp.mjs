@@ -90,6 +90,25 @@ export class Page {
         await sleep(60);
     }
 
+    // Where a spot in the game (in game pixels) is on the page
+    async gameToPage(x, y) {
+        const rect = await this.eval(`(() => { const r = document.querySelector("canvas").getBoundingClientRect(); return {left: r.left, top: r.top, width: r.width, height: r.height}; })()`);
+        return {x: rect.left + (x + 0.5) * rect.width / 240, y: rect.top + (y + 0.5) * rect.height / 180};
+    }
+
+    async mouseTo(x, y) {
+        await this.send("Input.dispatchMouseEvent", {type: "mouseMoved", x, y});
+        await sleep(80);
+    }
+
+    // A left click on the page (on the game, in the middle by default)
+    async click(x = 480, y = 360) {
+        await this.send("Input.dispatchMouseEvent", {type: "mousePressed", x, y, button: "left", clickCount: 1});
+        await sleep(40);
+        await this.send("Input.dispatchMouseEvent", {type: "mouseReleased", x, y, button: "left", clickCount: 1});
+        await sleep(60);
+    }
+
     async screenshot(file) {
         const {data} = await this.send("Page.captureScreenshot", {format: "png"});
         writeFileSync(join(shots, file), Buffer.from(data, "base64"));
@@ -107,6 +126,9 @@ export async function waitForGame(page) {
     for (let i = 0; i < 100; i++) {
         await sleep(200);
         if (await page.eval(`typeof knightKnightOnline === "object"`).catch(() => false)) {
+            // Menus start with their selector hidden: an arrow brings it back (on the first choice), so the tests
+            // can go on picking things with the keys
+            await page.press(...KEYS.down);
             return;
         }
     }

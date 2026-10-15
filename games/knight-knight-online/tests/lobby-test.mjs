@@ -8,7 +8,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {sleep, launch, Page, KEYS, setShotFolder, waitForGame} from "./cdp.mjs";
 
-const GAME = process.env.GAME_URL ?? "http://127.0.0.1:8000/?game=knight-knight-online";
+const GAME = process.env.GAME_URL ?? "http://127.0.0.1:8000/?game=knight-knight-online&server=ws://127.0.0.1:8787";
 const shots = process.argv[2] ?? join(tmpdir(), "knight-knight-shots");
 mkdirSync(shots, {recursive: true});
 setShotFolder(shots);
@@ -57,6 +57,7 @@ try {
     await host.press(...KEYS.enter);
     await sleep(200);
     await host.screenshot("lobby-1c-host-waiting-settings.png");
+    await host.press(...KEYS.down); // the menu's selector starts hidden: an arrow brings it back first
     await host.press(...KEYS.right);
     await host.press("Escape", "Escape", 27);
     await sleep(200);
@@ -71,7 +72,7 @@ try {
     await guest.press(...KEYS.enter);
     await waitFor(guest, `o.state === "syncing" && o.hostSettings !== null`, "the guest getting the settings");
     await guest.screenshot("lobby-2-guest-get-ready.png");
-    const seen = await kk(guest, "o.hostSettings.roundsToWin + ' ' + o.hostSettings.arena");
+    const seen = await kk(guest, "o.hostSettings.roundsToWin + ' ' + Object.keys(o.hostSettings.arenas).filter(name => o.hostSettings.arenas[name]).join()");
     seen === "5 MEADOW" ? ok("the guest sees the host's settings (changed while waiting) before the match: " + seen) : fail("the guest saw " + seen);
     const title = await host.eval("document.title");
     console.log("     the host's tab title when the friend joined: " + title + " (it only flashes when the host isn't looking at the tab)");
@@ -95,13 +96,14 @@ try {
     await guest.screenshot("lobby-5-guest-waiting.png");
 
     // The host changes ROUNDS TO WIN (the first thing on the menu): 5 to 7
+    await host.press(...KEYS.down); // the menu's selector starts hidden: an arrow brings it back first
     await host.press(...KEYS.right);
     await waitFor(guest, `o.hostSettings.roundsToWin === 7`, "the guest to see the new setting", 5);
     ok("the guest saw the host change the rounds to win, live");
     await guest.screenshot("lobby-6-guest-sees-change.png");
 
-    // Down to START MATCH (after the 9 settings)
-    for (let i = 0; i < 9; i++) {
+    // Down to START MATCH (after the 7 settings)
+    for (let i = 0; i < 7; i++) {
         await host.press(...KEYS.down);
     }
     await host.press(...KEYS.enter);

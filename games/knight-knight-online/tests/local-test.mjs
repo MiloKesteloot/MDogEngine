@@ -48,6 +48,13 @@ try {
     const blueSwinging = await page.eval("knightKnightOnline.knights[1].state");
     if (redSwinging !== "swing" && !(await page.eval("knightKnightOnline.knights[0].dead"))) fail("red didn't swing: " + redSwinging);
     if (blueSwinging !== "swing" && !(await page.eval("knightKnightOnline.knights[1].dead"))) fail("blue didn't swing: " + blueSwinging);
+    // A left click swings for blue (whose swing is Enter)
+    await sleep(600);
+    await page.click();
+    const clickRed = await page.eval("knightKnightOnline.knights[0].state");
+    const clickBlue = await page.eval("knightKnightOnline.knights[1].state");
+    if (clickBlue !== "swing" && !(await page.eval("knightKnightOnline.knights[1].dead"))) fail("a left click didn't swing for blue: " + clickBlue);
+    if (clickRed === "swing") fail("a left click swung for red too");
     await page.screenshot("local-1-match.png");
 
     // Mash for a while
@@ -67,6 +74,7 @@ try {
 
     // The pause menu pauses
     await page.press("Escape", "Escape", 27);
+    await page.press(...KEYS.down); // the menu's selector starts hidden: an arrow brings it back first
     const before = await page.eval("knightKnightOnline.gameTime");
     await sleep(500);
     const after = await page.eval("knightKnightOnline.gameTime");

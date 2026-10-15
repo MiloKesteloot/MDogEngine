@@ -2,7 +2,7 @@ import MDog from "../../MDogModules/MDogMain.js"
 import Sound from "./Sound.js";
 import Music from "./Music.js";
 import Particles from "./Particles.js";
-import Settings, {ROUNDS_CHOICES, BOULDER_CHOICES, ARENA_CHOICES, KILL_CAM_CHOICES, DEFAULTS} from "./Settings.js";
+import Settings, {ROUNDS_CHOICES, BOULDER_CHOICES, ARENA_NAMES, HAZARD_KINDS, WEATHER_KINDS, KILL_CAM_CHOICES, DEFAULTS, normalizeSettings, isOnIn} from "./Settings.js";
 import ARENAS from "./Arenas.js";
 import Weather from "./Weather.js";
 import Marks from "./Marks.js";
@@ -24,8 +24,8 @@ import Online, {CODE_LENGTH, cleanCode, isCodeLetter, fetchStats} from "./Online
 // Sumo rounds are on a platform in the
 // water, where hits only shove and the loser is whoever gets pushed in. Chickens show up when nobody's been hit for
 // a minute. Each knight can taunt, which leaves him stuck in place for a second. Every few rounds is a juggernaut
-// round, where whoever's behind is huge and slow, with 3 hearts. Now and then there's a joust instead: both
-// knights on horseback with momentum, and when they collide the faster one wins.
+// round, where one of the knights (picked at random) is huge and slow, with 3 hearts. Now and then there's a joust
+// instead: both knights on horseback with momentum, and when they collide the faster one wins.
 //
 // A match builds up: round 1 is a plain sword fight (just boulders and power-ups), round 2 adds one twist (like
 // wind or lightning), and from round 3 on anything goes, with the arena's hazards (and boulders) picked at random
@@ -116,7 +116,10 @@ const SHIELD_KNOCKBACK = 2.4;
 const SHIELD_STUN_TICKS = 16;
 const SHIELD_GRACE_TICKS = 40; // can't be hit for a moment after the shield breaks
 const GROW_TICKS = 8 * TICKS_PER_SECOND;
-const GROW_SCALE = 2;
+// Big stacks: each one picked up makes him bigger (and fills the time back up), up to the last of these
+const GROW_SCALES = [1, 2, 2.5, 3];
+// Shields and sword throws stack too, up to this many. (Everything else that lasts a while just fills back up.)
+const MAX_STACK = 3;
 const THUNDER_TRACK_TICKS = 0.8 * TICKS_PER_SECOND; // the target follows the knight this long...
 const THUNDER_LOCK_TICKS = 0.5 * TICKS_PER_SECOND; // ...then stays put this long before it strikes
 const THUNDER_RADIUS = 13;
@@ -246,15 +249,20 @@ const GRASS_CUT_REACH = 2; // how far past the sword's edge tall grass gets cut
 const JOUST_ACCEL = 0.012; // how hard holding a direction speeds up a horse
 const JOUST_FRICTION = 0.995; // horses coast a long way
 const JOUST_SAFETY_SPEED = 4; // only so nothing can pass through a fence (or another rider) in one tick
-const JOUST_SPUR = 1.2; // the kick of speed from spurring (the swing button)
 const LANCE_REACH_ACROSS = 20; // how far in front of a horse the lance tip is, going sideways...
 const LANCE_REACH_UP_DOWN = 12; // ...and going up or down the screen
 const LANCE_TIP_REACH = 1; // how close the lance tip has to get to count, past the edge of the other rider
 const RIDER_LIFT = 9; // how far up a knight sits on his horse
 const DEMO_EDGE_ROOM = 4; // how far the title screen's knights keep from edges
 const RAFT_LEEWAY = 2; // on the lava lake, how far past a raft's edge your feet can be before you fall in
-const JOUST_SPUR_COOLDOWN_TICKS = 2 * TICKS_PER_SECOND;
 const JOUST_TIE = 0.3; // riders going within this much of each other's speed both bounce off
+const CHICKEN_MIN_ROUNDS = 5; // a chicken round comes up every this many rounds...
+const CHICKEN_MAX_ROUNDS = 8; // ...to this many (waiting for an arena it works on)
+const CHICKEN_SWAP_TICKS = 10 * TICKS_PER_SECOND; // in a chicken round, the chicken and the knight swap this often...
+const CHICKEN_FREEZE_TICKS = TICKS_PER_SECOND; // ...after everything holds still for this long
+// The red pixels of the chicken's comb (the same in both frames), which a blue player's chicken has in blue
+const CHICKEN_COMB = [[5, 0], [6, 0], [4, 1]];
+const CHICKEN_TAUNTS = ["BAWK BAWK!", "BUK BUK BUKAWK!", "CAN'T CATCH ME!"];
 const JOUST_MIN_ROUNDS = 5; // a joust comes up every this many rounds...
 const JOUST_MAX_ROUNDS = 8; // ...to this many, when the arena's mixed
 const STORM_MIN_WAIT_TICKS = 2.2 * TICKS_PER_SECOND;
@@ -329,7 +337,7 @@ const PLAYERS = [
         textColor: "#6a96ea",
         lightTextColor: "#b4ccff",
         plumeColor: [50, 90, 190],
-        keys: {south: "ArrowDown", east: "ArrowRight", north: "ArrowUp", west: "ArrowLeft", swing: ["Enter", "NumpadEnter"], taunt: ["Slash"]},
+        keys: {south: "ArrowDown", east: "ArrowRight", north: "ArrowUp", west: "ArrowLeft", swing: ["Enter", "NumpadEnter", "MouseLeft"], taunt: ["Slash"]},
         startX: 190,
         facing: "west",
         scoreSide: 1, // pips go along the right
@@ -1262,17 +1270,18 @@ class Knight {
         this.walkTicks = 0;
         this.footSide = 1;
 
-        this.shield = false;
+        this.shield = 0; // shields, stacked up: each one takes a hit
         this.speedTicks = 0; // speed boots time left
         this.graceTicks = 0; // can't be hit, after his shield breaks
         this.growTicks = 0; // time left being big
-        this.scale = 1; // grows and shrinks smoothly toward GROW_SCALE or 1
+        this.growLevel = 0; // how many Bigs he's stacked up (see GROW_SCALES)
+        this.scale = 1; // grows and shrinks smoothly toward how big he should be
         this.furyTicks = 0;
         this.reverseTicks = 0; // controls are backwards
         this.danceTicks = 0; // dancing from a boogie bomb: can walk, but can't attack
         this.gunAmmo = 0;
         this.gunCooldown = 0;
-        this.throwCharges = 0; // with one, the next swing throws the sword
+        this.throwCharges = 0; // with one, the next swing throws the sword (they stack: throw, pick it up, throw again)
         this.hasSword = true;
         this.newSwordTicks = 0; // counting down to a new sword, after losing his
         this.noSwordCooldown = 0;
@@ -1302,7 +1311,8 @@ class Knight {
         this.baseScale = 1;
         this.speedFactor = 1;
         this.mounted = false; // on horseback, for a joust
-        this.spurCooldown = 0;
+        this.isChicken = false; // a chicken, in a chicken round: walks and picks things up, but can't attack
+        this.chickenFlip = player.facing === "west"; // which way he faces as a chicken (only ever left or right)
         this.gallop = 0; // how far the horse has run, for its legs
         this.brain = null; // plays him on the title screen, instead of the keyboard
         this.tauntTicks = 0; // stuck taunting
@@ -1423,10 +1433,19 @@ class Knight {
             return;
         }
 
-        const swingPressed = this.brain !== null ? this.brain.takeSwing() : canAct && inputs[this.index].swing;
+        let swingPressed = this.brain !== null ? this.brain.takeSwing() : canAct && inputs[this.index].swing;
+        if (swingPressed && this.isChicken) {
+            // A chicken can't attack
+            swingPressed = false;
+            if (this.noSwordCooldown === 0) {
+                this.noSwordCooldown = 50;
+                popup("BAWK!", this.getGroundX(), this.getTopY() - 4, "#ffffff");
+                sound.cluck();
+            }
+        }
 
         if (this.mounted) {
-            this.ride(canAct, swingPressed);
+            this.ride(canAct);
             return;
         }
 
@@ -1477,6 +1496,9 @@ class Knight {
         }
         if (moving) {
             this.faceToward(move);
+            if (move.x !== 0) {
+                this.chickenFlip = move.x < 0;
+            }
 
             // Same speed diagonally as straight. Each way is tried on its own, so he slides along rocks.
             const length = Math.sqrt(move.x * move.x + move.y * move.y);
@@ -1557,6 +1579,7 @@ class Knight {
         if (this.growTicks > 0) {
             this.growTicks--;
             if (this.growTicks === 0) {
+                this.growLevel = 0;
                 particles.dust(this.getGroundX(), this.getGroundY(), 6);
                 sound.shrink();
             }
@@ -1570,7 +1593,8 @@ class Knight {
             this.spinTicks--;
             this.facing = ["south", "east", "north", "west"][Math.floor(this.spinTicks / 4) % 4];
         }
-        const targetScale = this.growTicks > 0 ? Math.max(GROW_SCALE, this.baseScale) : this.baseScale;
+        const biggest = GROW_SCALES[GROW_SCALES.length - 1];
+        const targetScale = this.growTicks > 0 ? Math.min(biggest, Math.max(GROW_SCALES[this.growLevel], this.baseScale)) : this.baseScale;
         this.scale += (targetScale - this.scale) * 0.08;
         if (Math.abs(targetScale - this.scale) < 0.02) {
             this.scale = targetScale;
@@ -1617,23 +1641,11 @@ class Knight {
         return true;
     }
 
-    // On horseback: holding a direction speeds the horse up that way, and it keeps going after you let go. The swing
-    // button spurs it on, for a burst of speed.
-    ride(canAct, spurPressed) {
-        if (this.spurCooldown > 0) this.spurCooldown--;
+    // On horseback: holding a direction speeds the horse up that way, and it keeps going after you let go. That's all:
+    // the swing button does nothing on a horse.
+    ride(canAct) {
         const move = canAct ? this.getMoveInput() : {x: 0, y: 0};
         const boost = this.speedTicks > 0 ? SPEED_BOOST : 1;
-
-        if (spurPressed && this.spurCooldown === 0) {
-            this.spurCooldown = JOUST_SPUR_COOLDOWN_TICKS;
-            const speed = dhypot(this.vx, this.vy);
-            const dir = speed > 0.1 ? {x: this.vx / speed, y: this.vy / speed} : DIRS[this.facing];
-            this.vx += dir.x * JOUST_SPUR;
-            this.vy += dir.y * JOUST_SPUR;
-            popup("CHARGE!", this.getGroundX(), this.getTopY() - 12, this.player.lightTextColor);
-            particles.dust(this.getGroundX(), this.getGroundY(), 5);
-            sound.neigh();
-        }
         if (move.x !== 0 || move.y !== 0) {
             const length = dhypot(move.x, move.y);
             this.vx += move.x / length * JOUST_ACCEL * boost;
@@ -1655,6 +1667,17 @@ class Knight {
             particles.dust(this.getGroundX() - Math.sign(this.vx) * 8, this.getGroundY(), 1);
         }
         this.setState("idle");
+    }
+
+    // Turned into a chicken in a chicken round, or back into himself
+    setChicken(chicken) {
+        this.isChicken = chicken;
+        this.setState("idle");
+        this.windupTicks = 0;
+        this.swingBuffer = 0;
+        this.vx = 0;
+        this.vy = 0;
+        this.chickenFlip = this.facing === "west";
     }
 
     makeMounted() {
@@ -1695,6 +1718,12 @@ class Knight {
 
     // A copy of him as he is now, that fades
     leaveGhost() {
+        if (this.isChicken) {
+            const scale = this.getDrawScale();
+            const spot = this.getChickenSpot(scale);
+            this.trail.push({chicken: true, x: spot.x, y: spot.y, scale, frame: this.getChickenFrame(), flip: this.chickenFlip, life: TRAIL_TICKS});
+            return;
+        }
         const animation = this.getAnimation();
         const scale = this.getDrawScale();
         const spot = this.getSpriteSpot(scale);
@@ -1752,7 +1781,7 @@ class Knight {
     }
 
     throwSword() {
-        this.throwCharges = 0;
+        this.throwCharges--;
         this.hasSword = false;
         const dir = DIRS[this.facing];
         const hand = this.scaledPoint(SPRITE_SIZE / 2 + dir.x * 4, FEET_Y);
@@ -1838,7 +1867,7 @@ class Knight {
         this.tauntTicks = TAUNT_TICKS;
         this.tauntFacing = this.facing;
         this.setState("idle");
-        popup(pick(TAUNTS), this.getGroundX(), this.getTopY() - 4, this.player.textColor);
+        popup(pick(this.isChicken ? CHICKEN_TAUNTS : TAUNTS), this.getGroundX(), this.getTopY() - 4, this.player.textColor);
         stats[this.player.color].taunts++;
         sound.taunt();
     }
@@ -1923,7 +1952,7 @@ class Knight {
     // His shield takes the hit instead of him
     breakShield(pushX, pushY) {
         this.lastBlock = gameTime;
-        this.shield = false;
+        this.shield--;
         this.graceTicks = SHIELD_GRACE_TICKS;
         this.vx = pushX * SHIELD_KNOCKBACK;
         this.vy = pushY * SHIELD_KNOCKBACK;
@@ -1953,6 +1982,9 @@ class Knight {
 
     // The top of his head, for popups
     getTopY() {
+        if (this.isChicken) {
+            return this.getGroundY() - 10 * this.scale;
+        }
         return this.scaledPoint(0, 4).y - this.getRiderLift();
     }
 
@@ -1978,6 +2010,10 @@ class Knight {
         if (this.mounted && !this.dead) {
             // The horse and rider together
             return {left: this.getGroundX() - 11, right: this.getGroundX() + 11, top: this.getGroundY() - 22, bottom: this.getGroundY()};
+        }
+        if (this.isChicken && !this.dead) {
+            // As small as a chicken
+            return {left: this.getGroundX() - 4 * this.scale, right: this.getGroundX() + 4 * this.scale, top: this.getGroundY() - 8 * this.scale, bottom: this.getGroundY()};
         }
         return this.scaledBox(BODY_BOXES[this.facing]);
     }
@@ -2086,10 +2122,14 @@ class Knight {
     }
 
     goDown() {
+        if (this.isChicken) {
+            this.isChicken = false;
+            particles.feathers(this.getGroundX(), this.getGroundY() - 4, [245, 245, 240], 14);
+        }
         this.checkSwingNearMiss();
         this.dead = true;
         this.deadTicks = 0;
-        this.shield = false;
+        this.shield = 0;
         this.speedTicks = 0;
         this.furyTicks = 0;
         this.reverseTicks = 0;
@@ -2112,7 +2152,8 @@ class Knight {
             drawOval(this.getGroundX() - 1, poolY, this.bloodPool * 0.6, this.bloodPool * 0.25, "rgba(150, 20, 20, 0.6)");
         }
         if (this.fallHole === null) {
-            drawShadow(this.getGroundX(), this.getGroundY(), this.mounted && !this.dead ? 22 : Math.round((this.dead ? 13 : 10) * this.scale));
+            const size = this.mounted && !this.dead ? 22 : Math.round((this.dead ? 13 : this.isChicken ? 6 : 10) * this.scale);
+            drawShadow(this.getGroundX(), this.getGroundY(), size);
         }
     }
 
@@ -2125,7 +2166,12 @@ class Knight {
         const [r, g, b] = this.player.plumeColor;
         for (const ghost of this.trail) {
             const alpha = 0.5 * ghost.life / TRAIL_TICKS;
-            this.drawFrame(ghost.fileName, ghost.frame, ghost.x, ghost.y, `rgba(${r}, ${g}, ${b}, ${alpha})`, ghost.scale);
+            const tint = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            if (ghost.chicken) {
+                MDog.Draw.image(CHICKEN_IMAGE, ghost.x, ghost.y, {width: 10, offsetX: 10 * ghost.frame, flipX: ghost.flip, tint, scale: ghost.scale});
+            } else {
+                this.drawFrame(ghost.fileName, ghost.frame, ghost.x, ghost.y, tint, ghost.scale);
+            }
         }
 
         const scale = this.getDrawScale();
@@ -2161,8 +2207,16 @@ class Knight {
             this.drawHorse();
         }
         const riderY = y - this.getRiderLift();
-        MDog.Draw.animation(animation, x, riderY, {update: false, scale: scale});
-        const overlay = tint => this.drawFrame(animation.fileName, animation.getFrame(), x, riderY, tint, scale);
+        let overlay;
+        if (this.isChicken) {
+            overlay = tint => this.drawChicken(scale, bop, tint);
+            overlay(undefined);
+        } else {
+            // (mirrored is only ever set for cover screenshots, to draw him as the mirror image of facing the other
+            // way: see tests/cover-shot.mjs)
+            MDog.Draw.animation(animation, x, riderY, {update: false, scale: scale, flipX: this.mirrored === true});
+            overlay = tint => this.drawFrame(animation.fileName, animation.getFrame(), x, riderY, tint, scale);
+        }
         if (this.mounted) {
             this.drawLance();
         }
@@ -2207,6 +2261,30 @@ class Knight {
             this.drawHearts();
         }
         this.drawTimers();
+    }
+
+    // Where the chicken sprite's top left goes, with its feet where his are
+    getChickenSpot(scale) {
+        return {x: Math.round(this.getGroundX() - 5 * scale), y: Math.round(this.getGroundY() - 10 * scale)};
+    }
+
+    // Flapping along while he walks
+    getChickenFrame() {
+        return this.state === "walk" ? Math.floor(this.walkTicks / 6) % 2 : 0;
+    }
+
+    // As a chicken: red's looks like any chicken, and blue's has a blue comb
+    drawChicken(scale, bop, tint) {
+        const spot = this.getChickenSpot(scale);
+        const y = spot.y - bop;
+        MDog.Draw.image(CHICKEN_IMAGE, spot.x, y, {width: 10, offsetX: 10 * this.getChickenFrame(), flipX: this.chickenFlip, tint, scale});
+        if (tint === undefined && this.player.color === "blue") {
+            const [r, g, b] = this.player.plumeColor;
+            for (const [px, py] of CHICKEN_COMB) {
+                const left = spot.x + (this.chickenFlip ? 9 - px : px) * scale;
+                MDog.Draw.rectangleFill(Math.round(left), Math.round(y + py * scale), Math.ceil(scale), Math.ceil(scale), `rgb(${r + 20}, ${g + 30}, ${b + 40})`);
+            }
+        }
     }
 
     // Quicksand up his legs, higher the further he's sunk
@@ -2308,26 +2386,29 @@ class Knight {
 
     // Little purple stars going round his head while his controls are backwards
     drawDizzy() {
-        const head = this.scaledPoint(SPRITE_SIZE / 2, 2);
+        const head = this.isChicken ? {x: this.getGroundX(), y: this.getGroundY() - 10 * this.scale} : this.scaledPoint(SPRITE_SIZE / 2, 2);
         for (let i = 0; i < 2; i++) {
             const angle = this.trailTimer / 10 + i * Math.PI;
             MDog.Draw.rectangleFill(Math.round(head.x + dcos(angle) * 5), Math.round(head.y + dsin(angle) * 2), 1, 1, "#d8a0ff");
         }
     }
 
-    // A shimmering bubble around him
+    // A shimmering bubble around him (a ring for each shield he has)
     drawShield() {
-        const center = this.scaledPoint(SPRITE_SIZE / 2, 10);
-        const radius = 10 * this.scale;
+        const center = this.isChicken ? {x: this.getGroundX(), y: this.getGroundY() - 5 * this.scale} : this.scaledPoint(SPRITE_SIZE / 2, 10);
+        const size = (this.isChicken ? 7 : 10) * this.scale;
         const time = this.trailTimer / 12;
-        const dots = Math.round(44 * this.scale);
-        for (let i = 0; i < dots; i++) {
-            const angle = i / dots * Math.PI * 2;
-            const alpha = 0.3 + 0.3 * dsin(time + i / 3);
-            MDog.Draw.rectangleFill(Math.round(center.x + dcos(angle) * radius), Math.round(center.y + dsin(angle) * radius), 1, 1, `rgba(170, 215, 255, ${alpha})`);
+        for (let ring = 0; ring < this.shield; ring++) {
+            const radius = size + ring * 3;
+            const dots = Math.round(4.4 * radius);
+            for (let i = 0; i < dots; i++) {
+                const angle = i / dots * Math.PI * 2;
+                const alpha = 0.3 + 0.3 * dsin(time + i / 3 + ring);
+                MDog.Draw.rectangleFill(Math.round(center.x + dcos(angle) * radius), Math.round(center.y + dsin(angle) * radius), 1, 1, `rgba(170, 215, 255, ${alpha})`);
+            }
         }
         // A shine at the top left
-        const shine = this.scaledPoint(SPRITE_SIZE / 2 - 6, 4);
+        const shine = {x: center.x - size * 0.6, y: center.y - size * 0.6};
         MDog.Draw.rectangleFill(Math.round(shine.x), Math.round(shine.y), 2, 1, "rgba(255, 255, 255, 0.8)");
         MDog.Draw.rectangleFill(Math.round(shine.x) - 1, Math.round(shine.y) + 1, 1, 1, "rgba(255, 255, 255, 0.8)");
     }
@@ -2335,7 +2416,7 @@ class Knight {
     // Whoever's winning wears a little crown over his plume
     drawCrown() {
         const size = Math.max(1, Math.round(this.scale));
-        const left = Math.round(this.scaledPoint(7, -1).x);
+        const left = this.isChicken ? Math.round(this.getGroundX() - 2.5 * size) : Math.round(this.scaledPoint(7, -1).x);
         // Bobbing a pixel up and down
         const top = this.getCrownTop() + (Math.floor(this.trailTimer / 40) % 2);
         const pixel = (x, y, width, color) => MDog.Draw.rectangleFill(left + x * size, top + y * size, width * size, size, color);
@@ -2348,6 +2429,9 @@ class Knight {
 
     // The top of his crown (before it bobs)
     getCrownTop() {
+        if (this.isChicken) {
+            return Math.round(this.getGroundY() - 14 * this.scale);
+        }
         return Math.round(this.scaledPoint(7, -1).y) - this.getRiderLift();
     }
 
@@ -5166,17 +5250,17 @@ function makeArenaFeatures() {
     for (const sand of arena.quicksand ?? []) made.push(new Quicksand(sand.x, sand.y, sand.rx, sand.ry));
     for (const cactus of arena.cacti ?? []) made.push(new Prop(cactus.x, cactus.y, CACTUS_IMAGE, [2, 9, 8, 16], 16, 8));
     if (arena.tumbleweeds) made.push(new TumbleweedSpawner());
-    if (arena.dragons && simSettings.get("hazards")) made.push(new DragonSpawner());
-    if (arena.fissures && simSettings.get("shiftingGround")) made.push(new FissureSpawner());
+    if (arena.dragons && isHazardOn("dragon")) made.push(new DragonSpawner());
+    if (arena.fissures && isHazardOn("holes")) made.push(new FissureSpawner());
     if (arena.lighthouse !== undefined) {
         made.push(new Prop(arena.lighthouse.x, arena.lighthouse.y, LIGHTHOUSE_IMAGE, [3, 18, 17, 24], 24, 18));
         made.push(new LighthouseBeam(arena.lighthouse.x + 9, arena.lighthouse.y + 3));
     }
     // Things that attack on their own are hazards, which can be turned off in the settings
     // (and wait until round 3, since the first rounds are kept simple)
-    if (simSettings.get("hazards") && getRoundStage() === 2) {
-        if (arena.bear !== undefined) made.push(new Bear(arena.bear.x, arena.bear.y));
-        if (arena.storm) made.push(new Storm(1, true));
+    if (getRoundStage() === 2) {
+        if (arena.bear !== undefined && isHazardOn("bear")) made.push(new Bear(arena.bear.x, arena.bear.y));
+        if (arena.storm && isHazardOn("lightning")) made.push(new Storm(1, true));
     }
     // The mine's carts aren't a hazard you can turn off, they're what the mine is (like the lava lake's rafts)
     if (arena.tracks !== undefined) {
@@ -5420,6 +5504,10 @@ let replayBlowTick = null; // when the kill cam should play back a blow, the tic
 let roundsUntilShowdown = 0;
 let roundsUntilJuggernaut = 0;
 let roundsUntilJoust = 0;
+let roundsUntilChicken = 0;
+let chickenRound = false; // one knight's a chicken, and every so often they swap
+let chickenTicks = 0; // since the last swap
+let chickenFreeze = 0; // ticks left of everything holding still before they swap
 let roundModifier = null; // round 2's one twist: wind, rain, lightning, holes, horse or catapult
 let roundHazards = []; // which of the arena's hazards are on this round
 let roundBoulders = true; // whether boulders roll in this round
@@ -5436,16 +5524,13 @@ const MODIFIER_LABELS = {lightning: "LIGHTNING STORM", holes: "SHAKY GROUND", ho
 function pickRoundHazards() {
     roundBoulders = !arena.calm && (getRoundStage() < 2 || rng() < BOULDER_ROUND_CHANCE);
     roundHazards = [];
-    if (!simSettings.get("hazards")) {
-        return;
-    }
     if (getRoundStage() < 2) {
         if (roundModifier === "horse" || roundModifier === "catapult") {
             roundHazards = [roundModifier];
         }
         return;
     }
-    const kinds = [...new Set(arena.hazards)].filter(() => rng() < HAZARD_ROUND_CHANCE);
+    const kinds = [...new Set(arena.hazards)].filter(kind => isHazardOn(kind)).filter(() => rng() < HAZARD_ROUND_CHANCE);
     while (kinds.length > MAX_ROUND_HAZARDS) {
         kinds.splice(Math.floor(rng() * kinds.length), 1);
     }
@@ -5460,19 +5545,31 @@ function canFallOff(someArena) {
 }
 
 function pickRoundModifier(nextArena) {
-    if (roundNumber !== 2) {
+    if (roundNumber !== 2 || nextArena.calm) {
         return null;
     }
     const options = [];
-    if (simSettings.get("weather")) options.push(...(canFallOff(nextArena) ? ["rain"] : ["wind", "rain"]));
+    if (isWeatherOn("wind") && !canFallOff(nextArena)) options.push("wind");
+    if (isWeatherOn("rain")) options.push("rain");
     if (nextArena.quiet) {
         return options.length > 0 ? pick(options) : null;
     }
-    if (simSettings.get("hazards")) options.push("lightning", "catapult");
+    for (const kind of ["lightning", "catapult"]) {
+        if (isHazardOn(kind)) options.push(kind);
+    }
     // Horses only run on grass
-    if (simSettings.get("hazards") && nextArena.grassy) options.push("horse");
-    if (simSettings.get("shiftingGround")) options.push("holes");
+    if (isHazardOn("horse") && nextArena.grassy) options.push("horse");
+    if (isHazardOn("holes") && !nextArena.solidGround) options.push("holes");
     return options.length > 0 ? pick(options) : null;
+}
+
+// Which hazards and weather the match's settings allow
+function isHazardOn(kind) {
+    return simSettings.isOn("hazards", kind);
+}
+
+function isWeatherOn(kind) {
+    return simSettings.isOn("weathers", kind);
 }
 let juggernaut = null; // the knight who's the juggernaut this round, if anyone
 let calmTicks = 0; // since anyone got hit, for the chickens
@@ -5490,6 +5587,13 @@ window.addEventListener("keydown", e => {
     }
     if (!e.repeat) {
         pressedCodes.add(e.code);
+    }
+});
+
+// A left click swings too: for blue in a local match (whose swing is Enter), or your own knight online
+window.addEventListener("mousedown", e => {
+    if (e.button === 0) {
+        pressedCodes.add("MouseLeft");
     }
 });
 
@@ -5621,35 +5725,95 @@ function startMatch(quiet = false) {
     roundsUntilShowdown = Math.floor(random(SHOWDOWN_MIN_ROUNDS, SHOWDOWN_MAX_ROUNDS + 1));
     roundsUntilJuggernaut = Math.floor(random(3, 6));
     roundsUntilJoust = Math.floor(random(4, 7));
+    roundsUntilChicken = Math.floor(random(2, 5));
     marks.clear();
     killCam.clear();
     startRound(quiet);
 }
 
-// Picks the arena for the next round: the one in the settings, or a different one each round, with a showdown
-// every few rounds
+// ---------- Game modes ----------
+
+// The game modes besides normal rounds. Showdowns and jousts are arenas, so they're on when their arena is.
+const GAME_MODES = ["juggernaut", "chicken", "showdown", "joust"];
+
+function isModeOn(values, mode) {
+    return mode === "normal" ? values.normalRounds !== false
+        : mode === "juggernaut" ? values.juggernaut !== false
+        : mode === "chicken" ? values.chickenRounds !== false
+        : isOnIn(values, "arenas", mode.toUpperCase());
+}
+
+// The arenas a game mode can be played on, of the ones that are on
+function getModeArenas(mode) {
+    const on = getArenasOn(simSettings.values);
+    if (mode === "showdown" || mode === "joust") {
+        return on.filter(name => name === mode.toUpperCase());
+    }
+    if (mode === "chicken") {
+        return on.filter(name => canHaveChickenRound(ARENAS[name]));
+    }
+    // A juggernaut: anywhere he can swing a sword, except the sumo ring
+    return on.filter(name => !ARENAS[name].special && !ARENAS[name].sumo);
+}
+
+// With normal rounds off: which mode this round is, from the ones that are on and have an arena to be played on. If
+// none can be (only chickens on, say, with only the sumo ring on), it's a normal round after all. Null with normal
+// rounds on.
+function pickForcedMode() {
+    if (simSettings.get("normalRounds") !== false) {
+        return null;
+    }
+    const modes = GAME_MODES.filter(mode => isModeOn(simSettings.values, mode) && getModeArenas(mode).length > 0);
+    return modes.length > 0 ? pick(modes) : null;
+}
+
+// A different arena from last round, if there's another one the mode works on
+function pickArenaForMode(mode) {
+    const arenas = getModeArenas(mode);
+    const others = arenas.filter(name => name !== arenaName);
+    return pick(others.length > 0 ? others : arenas);
+}
+
+// The arenas the settings have on
+function getArenasOn(values) {
+    return ARENA_NAMES.filter(name => ARENAS[name] !== undefined && !ARENAS[name].disabled && isOnIn(values, "arenas", name));
+}
+
+// Picks the arena for the next round. With just one on, it's always that one. Otherwise it's a different one each
+// round (starting on the meadow and river, if they're on), with a showdown or a joust now and then, if they're on.
 function pickArena() {
-    const choice = simSettings.get("arena");
-    if (choice !== "MIXED" && ARENAS[choice] !== undefined && !ARENAS[choice].disabled) {
-        return choice;
+    const on = getArenasOn(simSettings.values);
+    if (on.length <= 1) {
+        return on[0] ?? "MEADOW";
     }
+    const usual = on.filter(name => !ARENAS[name].special);
+    // Only special ones: they take turns
+    if (usual.length === 0) {
+        return pick(on.filter(name => name !== arenaName));
+    }
+    const easy = ["MEADOW", "RIVER"].filter(name => usual.includes(name));
     if (roundNumber === 1) {
-        return "MEADOW";
+        return easy[0] ?? pick(usual);
     }
-    if (roundNumber === 2) {
-        return pick(["MEADOW", "RIVER"]);
+    if (roundNumber === 2 && easy.length > 0) {
+        return pick(easy);
     }
-    roundsUntilShowdown--;
-    if (roundsUntilShowdown <= 0) {
-        roundsUntilShowdown = Math.floor(random(SHOWDOWN_MIN_ROUNDS, SHOWDOWN_MAX_ROUNDS + 1));
-        return "SHOWDOWN";
+    if (on.includes("SHOWDOWN")) {
+        roundsUntilShowdown--;
+        if (roundsUntilShowdown <= 0) {
+            roundsUntilShowdown = Math.floor(random(SHOWDOWN_MIN_ROUNDS, SHOWDOWN_MAX_ROUNDS + 1));
+            return "SHOWDOWN";
+        }
     }
-    roundsUntilJoust--;
-    if (roundsUntilJoust <= 0) {
-        roundsUntilJoust = Math.floor(random(JOUST_MIN_ROUNDS, JOUST_MAX_ROUNDS + 1));
-        return "JOUST";
+    if (on.includes("JOUST")) {
+        roundsUntilJoust--;
+        if (roundsUntilJoust <= 0) {
+            roundsUntilJoust = Math.floor(random(JOUST_MIN_ROUNDS, JOUST_MAX_ROUNDS + 1));
+            return "JOUST";
+        }
     }
-    return pick(Object.keys(ARENAS).filter(name => name !== arenaName && !ARENAS[name].special && !ARENAS[name].disabled));
+    const others = usual.filter(name => name !== arenaName);
+    return pick(others.length > 0 ? others : usual);
 }
 
 function setArena(name) {
@@ -5687,9 +5851,9 @@ function setArena(name) {
     }
     // Clear for the first round, only round 2's twist if that's wind or rain, then whatever the arena has
     let kind = "clear";
-    if (simSettings.get("weather") && !arena.calm) {
+    if (!arena.calm) {
         if (getRoundStage() === 2) {
-            const weathers = arena.weathers.filter(choice => choice !== "wind" || !canFallOff(arena));
+            const weathers = arena.weathers.filter(choice => (choice === "clear" || isWeatherOn(choice)) && (choice !== "wind" || !canFallOff(arena)));
             kind = weathers.length > 0 ? pick(weathers) : "clear";
         } else if (roundModifier === "wind" || roundModifier === "rain") {
             kind = roundModifier;
@@ -5702,8 +5866,10 @@ function setArena(name) {
 
 function startRound(quiet = false) {
     roundNumber++;
+    // With normal rounds turned off, every round is one of the game modes that are on (but not the title screen's)
+    const roundMode = quiet ? null : pickForcedMode();
     // The twist depends on the arena (no horses off the grass), and setting up the arena depends on the twist
-    const nextArena = pickArena();
+    const nextArena = roundMode !== null ? pickArenaForMode(roundMode) : pickArena();
     roundModifier = pickRoundModifier(ARENAS[nextArena]);
     setArena(nextArena);
     pickRoundHazards();
@@ -5721,15 +5887,34 @@ function startRound(quiet = false) {
             knight.makeMounted();
         }
     }
-    // Every few rounds, whoever's behind is the juggernaut (but not in a showdown or sumo, and it waits for the
-    // next round if it lands on one)
+    // Every few rounds, one of the knights (at random) starts as a chicken, on an arena where that works (and it waits
+    // for the next round if it lands on one that doesn't)
+    chickenRound = false;
+    chickenTicks = 0;
+    chickenFreeze = 0;
+    if (roundMode === "chicken") {
+        chickenRound = true;
+        pick(knights).setChicken(true);
+    } else if (roundMode === null && simSettings.get("chickenRounds") !== false && getRoundStage() === 2) {
+        roundsUntilChicken--;
+        if (roundsUntilChicken <= 0 && canHaveChickenRound(arena)) {
+            roundsUntilChicken = Math.floor(random(CHICKEN_MIN_ROUNDS, CHICKEN_MAX_ROUNDS + 1));
+            chickenRound = true;
+            pick(knights).setChicken(true);
+        }
+    }
+    // Every few rounds, one of the knights (at random) is the juggernaut (but not in a showdown, sumo or a chicken
+    // round, and it waits for the next round if it lands on one)
     juggernaut = null;
-    if (simSettings.get("juggernaut") && getRoundStage() === 2) {
+    if (roundMode === "juggernaut") {
+        juggernaut = pick(knights);
+        juggernaut.makeJuggernaut();
+    } else if (roundMode === null && simSettings.get("juggernaut") && getRoundStage() === 2) {
         roundsUntilJuggernaut--;
-        if (roundsUntilJuggernaut <= 0 && !arena.guns && !arena.sumo && !arena.joust) {
+        if (roundsUntilJuggernaut <= 0 && !arena.guns && !arena.sumo && !arena.joust && !chickenRound) {
             roundsUntilJuggernaut = Math.floor(random(JUGGERNAUT_MIN_ROUNDS, JUGGERNAUT_MAX_ROUNDS + 1));
-            const [red, blue] = knights;
-            juggernaut = scores.red < scores.blue ? red : scores.blue < scores.red ? blue : pick(knights);
+            // Either knight, at random (not whoever's behind)
+            juggernaut = pick(knights);
             juggernaut.makeJuggernaut();
         }
     }
@@ -5767,6 +5952,35 @@ function startRound(quiet = false) {
             sound.western();
         }
     }
+}
+
+// Chicken rounds are on the normal arenas, but not the bridge, sumo or the lighthouse
+function canHaveChickenRound(someArena) {
+    return !someArena.special && !someArena.calm && !someArena.guns && !someArena.sumo
+        && someArena.cliffs === undefined && someArena.lighthouse === undefined;
+}
+
+// Everything held still for a moment, then the chicken and the knight swap
+function updateChickenFreeze() {
+    chickenFreeze--;
+    if (chickenFreeze === 0) {
+        for (const knight of knights.filter(knight => !knight.dead)) {
+            knight.setChicken(!knight.isChicken);
+            particles.feathers(knight.getGroundX(), knight.getGroundY() - 4, [245, 245, 240], 10);
+            particles.dust(knight.getGroundX(), knight.getGroundY(), 4);
+        }
+        addShake(2);
+        sound.bawk();
+    }
+    weather.update();
+    marks.update();
+    particles.update();
+    for (const effect of [...popups, ...slashes]) {
+        effect.update();
+    }
+    popups = popups.filter(popup => popup.life > 0);
+    slashes = slashes.filter(slash => slash.life > 0);
+    usePresses();
 }
 
 function setPhase(newPhase) {
@@ -5842,7 +6056,7 @@ function findClearSpot(knightDistance) {
 function updatePowerups() {
     // There's always one on the field: a new one comes soon after the last one's gone
     // (none at all in a calm arena, like the jousting yard, or in a showdown, where it's just guns)
-    const allowed = arena.calm || arena.guns ? [] : SPAWNING_POWERUPS.filter(type => simSettings.isPowerupOn(type));
+    const allowed = arena.calm || arena.guns ? [] : SPAWNING_POWERUPS.filter(type => simSettings.isPowerupOn(type) && !(chickenRound && type === "throw"));
     if (phase === "playing" && powerups.length === 0 && allowed.length > 0) {
         powerupWait--;
         if (powerupWait <= 0) {
@@ -5901,7 +6115,7 @@ function updateHazards(walls) {
     }
 
     // The ground cracking open
-    if (phase === "playing" && simSettings.get("shiftingGround") && !arena.solidGround && (getRoundStage() === 2 || roundModifier === "holes")) {
+    if (phase === "playing" && isHazardOn("holes") && !arena.solidGround && (getRoundStage() === 2 || roundModifier === "holes")) {
         holeWait--;
         if (holeWait <= 0) {
             holeWait = random(HOLE_MIN_WAIT, HOLE_MAX_WAIT);
@@ -5929,7 +6143,7 @@ function updateHazards(walls) {
     }
 
     // Chickens, when nobody's been hit for a while (from round 3 on)
-    if (phase === "playing" && simSettings.get("hazards") && getRoundStage() === 2 && !arena.calm && !arena.quiet) {
+    if (phase === "playing" && isHazardOn("chicken") && getRoundStage() === 2 && !arena.calm && !arena.quiet && !chickenRound) {
         calmTicks++;
         if (calmTicks >= CHICKEN_FIRST_TICKS && (calmTicks - CHICKEN_FIRST_TICKS) % CHICKEN_EVERY_TICKS === 0) {
             spawnChicken();
@@ -6006,7 +6220,12 @@ const POWERUP_NAMES = {
 
 function givePowerup(knight, type) {
     const [name, textColor, sparkColor] = POWERUP_NAMES[type];
-    popup(name, knight.getGroundX(), knight.getTopY() - 4, textColor);
+    // The ones that stack say how many he has now, like "SHIELD X2!"
+    const stack = type === "shield" ? Math.min(MAX_STACK, knight.shield + 1)
+        : type === "grow" ? Math.min(GROW_SCALES.length - 1, knight.growLevel + 1)
+        : type === "throw" ? Math.min(MAX_STACK, knight.throwCharges + 1) : 1;
+    const label = stack > 1 ? name.replace("!", "") + " X" + stack + "!" : name;
+    popup(label, knight.getGroundX(), knight.getTopY() - 4, textColor);
     particles.sparks(knight.getGroundX(), knight.getGroundY() - 8, 12, sparkColor);
     sound.pickup();
 
@@ -6014,17 +6233,18 @@ function givePowerup(knight, type) {
     const others = knights.filter(other => other !== knight && !other.dead);
 
     if (type === "shield") {
-        knight.shield = true;
+        knight.shield = stack;
     } else if (type === "speed") {
         knight.speedTicks = SPEED_BOOST_TICKS;
     } else if (type === "grow") {
+        knight.growLevel = stack;
         knight.growTicks = GROW_TICKS;
         sound.grow();
     } else if (type === "fury") {
         knight.furyTicks = FURY_TICKS;
         sound.fury();
     } else if (type === "throw") {
-        knight.throwCharges = 1;
+        knight.throwCharges = stack;
     } else if (type === "gun") {
         knight.gunAmmo = GUN_AMMO;
         knight.gunCooldown = 0;
@@ -6359,6 +6579,10 @@ function checkHits() {
 
     for (const hit of hits) {
         const body = boxCenter(hit.target.getBodyBox());
+        hit.wasChicken = hit.target.isChicken;
+        if (hit.wasChicken) {
+            sound.bawk();
+        }
         if (hit.cause === "fall" || hit.cause === "quicksand") {
             hit.target.fall(hit.source);
         } else {
@@ -6376,7 +6600,7 @@ function checkHits() {
         }
         // Knocked down by his own lightning, avalanche, bullet...
         const ownGoal = hit.source.owner === hit.target;
-        const word = ownGoal ? "OWN GOAL!" : getKnockdownWord(hit);
+        const word = ownGoal ? "OWN GOAL!" : hit.wasChicken && hit.cause === "sword" ? "PLUCKED!" : getKnockdownWord(hit);
         if (word !== null) {
             popup(word, body.x, body.y - 14, "#ffe680");
         }
@@ -6608,6 +6832,10 @@ function update() {
         updateAftermath();
         return;
     }
+    if (chickenFreeze > 0) {
+        updateChickenFreeze();
+        return;
+    }
     gameTime++;
     phaseTicks++;
 
@@ -6617,6 +6845,18 @@ function update() {
     }
     if (phase === "playing") {
         roundTicks++;
+        if (chickenRound) {
+            chickenTicks++;
+            const left = CHICKEN_SWAP_TICKS - chickenTicks;
+            if (left > 0 && left <= 3 * TICKS_PER_SECOND && left % TICKS_PER_SECOND === 0) {
+                sound.menuMove(); // ticking down to the swap
+            }
+            if (left <= 0) {
+                chickenTicks = 0;
+                chickenFreeze = CHICKEN_FREEZE_TICKS;
+                sound.cluck();
+            }
+        }
     }
     if (phase === "roundOver" && phaseTicks >= ROUND_OVER_TICKS) {
         startRound();
@@ -6868,7 +7108,7 @@ function drawTitle() {
     // The menu: local or online
     TITLE_CHOICES.forEach((choice, i) => {
         const y = 102 + i * 10;
-        const selected = i === titleChoice;
+        const selected = i === titleChoice && titleSelectorShown;
         drawText(choice, y, selected ? "#ffcc33" : "#ffffff", 1);
         if (selected && Math.floor(liveTicks / 40) % 2 === 0) {
             const half = Math.ceil(choice.length * 5 / 2);
@@ -6912,13 +7152,13 @@ function getTitleBoxLines() {
         return [
             line("JOIN A FRIEND'S MATCH WITH THEIR CODE", "#ffffff"),
             gap(2),
-            line("WASD OR ARROWS MOVE, SPACE OR ENTER SWING", hint, 9),
+            line("WASD/ARROWS MOVE, SPACE/ENTER/CLICK SWING", hint, 9),
             line("E OR / TAUNT", hint, 9),
         ];
     }
     return [
         line("RED: WASD MOVE, SPACE SWING, E TAUNT", PLAYERS[0].lightTextColor, 9),
-        line("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", PLAYERS[1].lightTextColor, 9),
+        line("BLUE: ARROWS MOVE, ENTER/CLICK SWING, / TAUNT", PLAYERS[1].lightTextColor, 9),
         gap(3),
         line("ESC: SETTINGS", hint, 9),
     ];
@@ -6972,19 +7212,50 @@ function drawTextWithDots(text, y, color) {
     MDog.Draw.textImage(dots, x, y, color, FONT, {alignX: "left", alignY: "center"});
 }
 
+// How many of a list are on, in a few words: "ALL", "NONE", or like "6 OF 9"
+function countOn(values, group, names) {
+    const on = names.filter(name => isOnIn(values, group, name)).length;
+    return on === names.length ? "ALL" : on === 0 ? "NONE" : on + " OF " + names.length;
+}
+
+// The game modes in a few words: which special rounds come up, or (with normal rounds off) which are the only ones
+function describeModes(values) {
+    const names = {juggernaut: "JUGGERNAUT", chicken: "CHICKEN", showdown: "SHOWDOWN", joust: "JOUST"};
+    const on = GAME_MODES.filter(mode => isModeOn(values, mode));
+    if (values.normalRounds === false) {
+        return on.length === GAME_MODES.length ? "ONLY SPECIAL ROUNDS" : "ONLY " + on.map(mode => names[mode]).join("/");
+    }
+    return on.length === GAME_MODES.length ? "ALL GAME MODES" : on.length === 0 ? "NO SPECIAL ROUNDS" : on.length + " OF " + GAME_MODES.length + " SPECIAL ROUNDS";
+}
+
+function describeArenas(values) {
+    const on = getArenasOn(values);
+    // (by its short name, so the line fits)
+    return on.length === 1 ? on[0] + " ONLY" : on.length === ARENA_NAMES.length ? "ALL ARENAS" : on.length + " ARENAS";
+}
+
 // A match's settings in three short lines, for showing before it starts
-function describeSettings(values) {
-    const offPowerups = SPAWNING_POWERUPS.filter(type => values.powerups?.[type] === false).length;
-    const powerups = offPowerups === 0 ? "" : offPowerups === SPAWNING_POWERUPS.length ? ", NO POWER-UPS" : ", " + offPowerups + " POWER-UPS OFF";
-    const killCam = {"COOL KILLS": "ON", "FINAL BLOW": "LAST HIT", OFF: "OFF"}[values.killCam] ?? values.killCam;
+function describeSettings(saved) {
+    const values = normalizeSettings(saved);
+    const killCam = {"COOL KILLS": "ON", "FINAL BLOW": "LAST", OFF: "OFF"}[values.killCam] ?? values.killCam;
+    const words = (group, names, what) => {
+        const count = countOn(values, group, names);
+        return count === "NONE" ? "NO " + what : count + " " + what;
+    };
     return [
-        "FIRST TO " + values.roundsToWin + " - " + (values.arena === "MIXED" ? "MIXED ARENAS" : values.arena) + powerups,
-        "BOULDERS " + values.boulders + ", HAZARDS " + onOff(values.hazards) + ", WEATHER " + onOff(values.weather),
-        "HOLES " + onOff(values.shiftingGround) + ", JUGGERNAUTS " + onOff(values.juggernaut) + ", KILL CAM " + killCam,
+        "FIRST TO " + values.roundsToWin + " - " + describeArenas(values) + ", " + words("powerups", SPAWNING_POWERUPS, "POWER-UPS"),
+        "BOULDERS " + values.boulders + ", " + words("hazards", HAZARD_KINDS, "HAZARDS") + ", " + words("weathers", WEATHER_KINDS, "WEATHER"),
+        describeModes(values) + ", KILL CAM " + killCam,
     ];
 }
 
+// For taking cover screenshots: just the field, with none of the score, round text and so on over it
+let hideUI = false;
+
 function drawUI() {
+    if (hideUI) {
+        return;
+    }
     if (phase === "title") {
         // With the settings open, just the arena shows behind them
         if (!isPaused() && !isOnTitleScreens()) {
@@ -7009,15 +7280,29 @@ function drawUI() {
             drawText("PUSH THEM INTO THE WATER!", 100, "#ffcc33", 1);
         }
         if (arena.joust) {
-            drawText("JOUST! THE FASTER RIDER WINS", 100, "#ffcc33", 1);
-            drawText("HOLD A WAY TO GALLOP, SWING TO SPUR", 110, "#ffffff", 1);
+            drawText("JOUST! WHEN YOU CLASH, THE FASTER HORSE WINS", 100, "#ffcc33", 1);
+            drawText("HOLD A DIRECTION TO BUILD UP SPEED", 110, "#ffffff", 1);
         }
         if (juggernaut !== null) {
             drawText(juggernaut.player.color.toUpperCase() + " IS THE JUGGERNAUT!", 100, juggernaut.player.lightTextColor, 1);
             drawText("HUGE AND SLOW, WITH 3 HEARTS", 110, "#ffcc33", 1);
         }
+        const chicken = knights.find(knight => knight.isChicken);
+        if (chickenRound && chicken !== undefined) {
+            drawText("CHICKEN ROUND! " + chicken.player.color.toUpperCase() + " STARTS AS THE CHICKEN", 100, chicken.player.lightTextColor, 1);
+            drawText("CHICKENS CAN'T ATTACK", 110, "#ffcc33", 1);
+            drawText("EVERY 10 SECONDS, YOU SWAP", 120, "#ffffff", 1);
+        }
     } else if (phase === "playing" && phaseTicks < FIGHT_TEXT_TICKS) {
         drawText("FIGHT!", 60, "#ffffff", 2);
+    }
+    if (chickenRound && phase === "playing") {
+        if (chickenFreeze > 0) {
+            drawText("SWAP!", 60, "#ffffff", 2);
+        } else {
+            const left = Math.ceil((CHICKEN_SWAP_TICKS - chickenTicks) / TICKS_PER_SECOND);
+            drawText("SWAP IN " + left, 20, left <= 3 ? "#ffcc33" : "#e8f0e0", 1);
+        }
     }
 
     if (resultText !== null && !killCam.playing) {
@@ -7194,6 +7479,9 @@ class Menu {
         this.items = items;
         this.hint = hint ?? null;
         this.choice = 0;
+        // The yellow selector only shows once it's been moved to (with the keys or the mouse). Moving the mouse off
+        // the items hides it again.
+        this.showSelection = false;
         this.isPauseMenu = false; // the pause menu is laid out a bit differently, with the controls under it
     }
 }
@@ -7225,39 +7513,378 @@ function makePauseMenu() {
     return menu;
 }
 
-function settingToggle(label, key, after) {
+// info is a line about the setting, shown under the menu while it's picked
+function settingToggle(label, key, info, after) {
     return {
         onOff: true,
-        label: () => label + ": " + onOff(settings.get(key)),
-        change: () => { settings.toggle(key); after?.(); },
+        label: () => label + ": " + onOff(settings.get(key) !== false),
+        change: () => { settings.set(key, settings.get(key) === false); after?.(); },
+        info,
     };
 }
 
-function settingCycle(label, key, choices, after) {
+function settingCycle(label, key, choices, info, after) {
     return {
         label: () => label + ": " + settings.get(key),
         change: direction => { settings.cycle(key, choices, direction); after?.(); },
+        info,
     };
+}
+
+// One thing in an on-or-off list (a hazard, a kind of weather...)
+function listToggle(label, group, name, info) {
+    return {
+        onOff: true,
+        label: () => label + ": " + onOff(settings.isOn(group, name)),
+        change: () => settings.setOn(group, name, !settings.isOn(group, name)),
+        info,
+    };
+}
+
+// Turns a whole list on, or (if it's all on already) off
+function allToggle(group, names) {
+    const allOn = () => names.every(name => settings.isOn(group, name));
+    return {
+        label: () => allOn() ? "TURN ALL OFF" : "TURN ALL ON",
+        pick: () => {
+            const on = !allOn();
+            for (const name of names) {
+                settings.setOn(group, name, on);
+            }
+            sound.menuMove();
+        },
+    };
+}
+
+// A setting that opens its own menu, showing how much of it is on
+function submenuItem(label, summary, makeMenu, info) {
+    return {
+        label: () => label + ": " + summary(),
+        pick: () => openMenu(makeMenu()),
+        change: direction => { if (direction > 0) openMenu(makeMenu()); },
+        info,
+    };
+}
+
+const backItem = () => ({label: () => "BACK", pick: () => backMenu()});
+
+const HAZARD_LABELS = {
+    holes: ["SHAKY GROUND", "HOLES CRACK OPEN, AND THE VOLCANO SPLITS"],
+    horse: ["RUNAWAY HORSES", "HORSES STAMPEDE ACROSS THE GRASSY ARENAS"],
+    catapult: ["CATAPULTS", "ROCKS FLY IN. WATCH FOR WHERE THEY LAND"],
+    lightning: ["LIGHTNING", "STRIKES WHERE THE TARGET SHOWS, AND THE STORM"],
+    tornado: ["TORNADOES", "WANDER AROUND, AND FLING ANYONE THEY CATCH"],
+    dragon: ["DRAGONS", "FLY OVER, LEAVING A LINE OF FIRE"],
+    fireball: ["FIREBALLS", "THE VOLCANO AND LAVA LAKE RAIN FIRE"],
+    bear: ["BEARS", "ONE SLEEPS IN THE FOREST. DON'T WAKE IT"],
+    chicken: ["WILD CHICKENS", "SHOW UP IF NOBODY'S BEEN HIT IN A WHILE"],
+};
+const WEATHER_LABELS = {
+    wind: ["WIND", "PUSHES EVERYONE AROUND (NEVER NEAR EDGES)"],
+    rain: ["RAIN", "SLOWS BOULDERS DOWN"],
+    snow: ["SNOW", "FALLS ON THE SNOWFIELD, JUST FOR LOOKS"],
+    ash: ["ASH", "FALLS ON THE VOLCANO, JUST FOR LOOKS"],
+};
+const ARENA_BLURBS = {
+    MEADOW: "GRASS, ROCKS, AND TALL GRASS TO HIDE IN",
+    RIVER: "A RIVER DOWN THE MIDDLE, WITH TWO BRIDGES",
+    SNOW: "SLIPPERY ICE: YOU SLIDE AROUND",
+    VOLCANO: "LAVA POOLS, FIREBALLS, AND THE GROUND SPLITS",
+    FOREST: "DARK TREES, AND A BEAR ASLEEP",
+    MINE: "DARK, WITH MINECARTS RACING ALONG TRACKS",
+    LIGHTHOUSE: "AN ISLAND AT NIGHT, LIT BY THE BEAMS",
+    BRIDGE: "PLANK BRIDGES THAT BREAK IF YOU STAND STILL",
+    LAVALAKE: "STONE RAFTS MOVING ROUND A LAKE OF LAVA",
+    RING: "A TINY BOXING RING. THE CROWD THROWS ROCKS",
+    STORM: "A HILLTOP WITH LIGHTNING ALL ROUND",
+    SUMO: "PUSH THEM OFF THE PLATFORM TO WIN",
+    SHIP: "THE DECK TIPS, SO EVERYTHING SLIDES",
+    SHOWDOWN: "GAME MODE: GUNS ONLY. COMES UP NOW AND THEN",
+    JOUST: "GAME MODE: ON HORSEBACK. NOW AND THEN",
+};
+
+function describeArenaSetting() {
+    const on = getArenasOn(settings.values);
+    return on.length === 1 ? ARENAS[on[0]].title + " ONLY" : on.length === ARENA_NAMES.length ? "ALL" : on.length + " OF " + ARENA_NAMES.length;
 }
 
 // The settings that change how a match plays (the rest, like the music, are just yours)
 function matchSettingItems() {
     return [
-        settingCycle("ROUNDS TO WIN", "roundsToWin", ROUNDS_CHOICES),
-        settingCycle("ARENA", "arena", ARENA_CHOICES, () => {
-            // On the title screen, the field behind the menu changes to show it (a mixed match starts on the meadow)
-            if (phase === "title") {
-                showTitle();
-            }
-        }),
-        settingCycle("BOULDERS", "boulders", BOULDER_CHOICES),
-        {label: () => "POWER-UPS", pick: () => openMenu(makePowerupMenu())},
-        settingToggle("WEATHER", "weather"),
-        settingToggle("HAZARDS", "hazards"),
-        settingToggle("SHIFTING GROUND", "shiftingGround"),
-        settingToggle("JUGGERNAUT ROUNDS", "juggernaut"),
-        settingCycle("KILL CAM", "killCam", KILL_CAM_CHOICES),
+        settingCycle("ROUNDS TO WIN", "roundsToWin", ROUNDS_CHOICES, "ROUNDS YOU NEED TO WIN THE MATCH"),
+        submenuItem("ARENAS", describeArenaSetting, makeArenaMenu, "PICK WHICH ARENAS YOU FIGHT IN"),
+        submenuItem("POWER-UPS", () => countOn(settings.values, "powerups", SPAWNING_POWERUPS), makePowerupMenu, "PICK WHICH POWER-UPS CAN SHOW UP"),
+        submenuItem("HAZARDS", () => countOn(settings.values, "hazards", HAZARD_KINDS), makeHazardMenu, "BOULDERS, HORSES, DRAGONS, BEARS..."),
+        submenuItem("WEATHER", () => countOn(settings.values, "weathers", WEATHER_KINDS), makeWeatherMenu, "WIND, RAIN, SNOW AND ASH"),
+        submenuItem("GAME MODES", () => countGameModes(), makeGameModesMenu, "NORMAL ROUNDS, JUGGERNAUTS, CHICKENS..."),
+        settingCycle("KILL CAM", "killCam", KILL_CAM_CHOICES, "REPLAYS THE COOLEST KNOCKDOWNS"),
     ];
+}
+
+function makeHazardMenu() {
+    return new Menu("HAZARDS", [
+        settingCycle("BOULDERS", "boulders", BOULDER_CHOICES, "ROLL IN FROM THE EDGES. SWING TO HIT THEM BACK"),
+        ...HAZARD_KINDS.map(kind => listToggle(HAZARD_LABELS[kind][0], "hazards", kind, HAZARD_LABELS[kind][1])),
+        allToggle("hazards", HAZARD_KINDS),
+        backItem(),
+    ], "ENTER OR CLICK: ON/OFF.  ESC: BACK");
+}
+
+function makeWeatherMenu() {
+    return new Menu("WEATHER", [
+        ...WEATHER_KINDS.map(kind => listToggle(WEATHER_LABELS[kind][0], "weathers", kind, WEATHER_LABELS[kind][1])),
+        allToggle("weathers", WEATHER_KINDS),
+        backItem(),
+    ], "ENTER OR CLICK: ON/OFF.  ESC: BACK");
+}
+
+// Showdowns and jousts are arenas (they're in the arena picker too)
+function countGameModes() {
+    const on = ["normal", ...GAME_MODES].filter(mode => isModeOn(settings.values, mode));
+    if (!on.includes("normal")) {
+        return on.length === 1 ? on[0].toUpperCase() + " ONLY" : "NO NORMAL ROUNDS";
+    }
+    return on.length === GAME_MODES.length + 1 ? "ALL" : on.length + " OF " + (GAME_MODES.length + 1);
+}
+
+// Turning off normal rounds or a game mode, there has to be something left on to play
+function isLastModeOn(mode) {
+    return isModeOn(settings.values, mode) && ["normal", ...GAME_MODES].filter(other => isModeOn(settings.values, other)).length === 1;
+}
+
+let modeWarningTicks = 0; // showing that at least one game mode has to be on
+
+function refuseLastMode() {
+    sound.noSword();
+    modeWarningTicks = 2 * TICKS_PER_SECOND;
+}
+
+function makeGameModesMenu() {
+    const modeToggle = (label, mode, key, info) => ({
+        onOff: true,
+        label: () => label + ": " + onOff(isModeOn(settings.values, mode)),
+        change: () => {
+            if (isLastModeOn(mode)) {
+                refuseLastMode();
+            } else {
+                settings.set(key, !isModeOn(settings.values, mode));
+            }
+        },
+        info: () => modeWarningTicks > 0 ? "AT LEAST ONE HAS TO BE ON" : info,
+    });
+    const arenaToggle = (label, name, info) => ({
+        onOff: true,
+        label: () => label + ": " + onOff(settings.isOn("arenas", name)),
+        change: () => toggleArena(name),
+        info: () => modeWarningTicks > 0 ? "AT LEAST ONE HAS TO BE ON" : info,
+    });
+    const menu = new Menu("GAME MODES", [
+        modeToggle("NORMAL ROUNDS", "normal", "normalRounds", "OFF: EVERY ROUND IS ONE OF THE OTHERS"),
+        modeToggle("JUGGERNAUTS", "juggernaut", "juggernaut", "ONE KNIGHT IS HUGE AND SLOW, WITH 3 HEARTS"),
+        modeToggle("CHICKENS", "chicken", "chickenRounds", "ONE'S A CHICKEN, AND EVERY 10 SECONDS YOU SWAP"),
+        arenaToggle("SHOWDOWNS", "SHOWDOWN", "GUNS ONLY, AMONG CRATES"),
+        arenaToggle("JOUSTS", "JOUST", "ON HORSEBACK: THE FASTER HORSE WINS"),
+        backItem(),
+    ], "ENTER OR CLICK: ON/OFF.  ESC: BACK");
+    // (the warning counts down while this menu's open)
+    menu.everyTick = () => { if (modeWarningTicks > 0) modeWarningTicks--; };
+    return menu;
+}
+
+// Turns an arena on or off, but never the last one that's on (or a showdown or joust that's the last game mode on).
+// Returns whether it changed.
+function toggleArena(name) {
+    const on = getArenasOn(settings.values);
+    if (on.length === 1 && on[0] === name) {
+        sound.noSword();
+        arenaWarningTicks = 2 * TICKS_PER_SECOND;
+        return false;
+    }
+    if ((name === "SHOWDOWN" || name === "JOUST") && isLastModeOn(name.toLowerCase())) {
+        refuseLastMode();
+        arenaWarningTicks = 2 * TICKS_PER_SECOND;
+        return false;
+    }
+    settings.setOn("arenas", name, !settings.isOn("arenas", name));
+    sound.menuMove();
+    if (phase === "title") {
+        // The field behind the menu changes to the first arena a match would be on
+        showTitle();
+    }
+    return true;
+}
+
+// ---------- The arena picker ----------
+
+const ARENA_THUMB_WIDTH = 40; // a sixth of the screen
+const ARENA_THUMB_HEIGHT = 30;
+const ARENA_COLUMNS = 5;
+const ARENA_GAP_X = 6;
+const ARENA_GAP_Y = 6;
+const ARENA_GRID_LEFT = Math.round((SCREEN_WIDTH - ARENA_COLUMNS * ARENA_THUMB_WIDTH - (ARENA_COLUMNS - 1) * ARENA_GAP_X) / 2);
+const ARENA_GRID_TOP = 26;
+const ARENA_BUTTONS_Y = 158;
+let arenaWarningTicks = 0; // showing that at least one arena has to be on
+
+function getArenaThumb(name) {
+    return "knight-knight-online/arena-" + name.toLowerCase() + ".png";
+}
+
+function getArenaCell(i) {
+    const column = i % ARENA_COLUMNS;
+    const row = Math.floor(i / ARENA_COLUMNS);
+    return {
+        left: ARENA_GRID_LEFT + column * (ARENA_THUMB_WIDTH + ARENA_GAP_X),
+        top: ARENA_GRID_TOP + row * (ARENA_THUMB_HEIGHT + ARENA_GAP_Y),
+        width: ARENA_THUMB_WIDTH,
+        height: ARENA_THUMB_HEIGHT,
+    };
+}
+
+// A grid of pictures of the arenas to turn on and off, then ALL ON and BACK under it. choice is which arena (or,
+// past the arenas, which button) is picked.
+function makeArenaMenu() {
+    const menu = new Menu("ARENAS", []);
+    const buttons = [
+        {text: "ALL ON", x: CENTER_X - 32, pick: () => {
+            for (const name of ARENA_NAMES) settings.setOn("arenas", name, true);
+            if (phase === "title") showTitle();
+            sound.menuMove();
+        }},
+        {text: "BACK", x: CENTER_X + 32, pick: () => backMenu()},
+    ];
+    const count = ARENA_NAMES.length + buttons.length;
+    const pickChoice = i => i < ARENA_NAMES.length ? toggleArena(ARENA_NAMES[i]) : buttons[i - ARENA_NAMES.length].pick();
+    const getBox = i => {
+        if (i < ARENA_NAMES.length) {
+            const cell = getArenaCell(i);
+            return {left: cell.left - 1, right: cell.left + cell.width + 1, top: cell.top - 1, bottom: cell.top + cell.height + 1};
+        }
+        const button = buttons[i - ARENA_NAMES.length];
+        const half = Math.ceil(button.text.length * 5 / 2) + 4;
+        return {left: button.x - half, right: button.x + half, top: ARENA_BUTTONS_Y - 5, bottom: ARENA_BUTTONS_Y + 5};
+    };
+    const rows = Math.ceil(ARENA_NAMES.length / ARENA_COLUMNS);
+
+    menu.update = () => {
+        // The mouse: over one picks it, and a click turns it on or off
+        let over = -1;
+        if (Mouse.getOnScreen()) {
+            const x = Mouse.getX();
+            const y = Mouse.getY();
+            for (let i = 0; i < count; i++) {
+                const box = getBox(i);
+                if (x >= box.left && x < box.right && y >= box.top && y < box.bottom) {
+                    over = i;
+                }
+            }
+        }
+        Mouse.requestStyle(over >= 0 ? "pointer" : "default");
+        if (mouseMoved()) {
+            menu.showSelection = over >= 0;
+            if (over >= 0) {
+                menu.choice = over;
+            }
+        }
+        if (Mouse.getClick(0) && over >= 0) {
+            menu.choice = over;
+            menu.showSelection = true;
+            useClick();
+            pickChoice(over);
+            return;
+        }
+
+        const clicked = keys => keys.some(key => Keyboard.isClicked(key));
+        const left = clicked(["a", "ArrowLeft"]);
+        const right = clicked(["d", "ArrowRight"]);
+        const up = clicked(["w", "ArrowUp"]);
+        const down = clicked(["s", "ArrowDown"]);
+        const enter = clicked([" ", "Enter"]);
+        if ((left || right || up || down || enter) && !menu.showSelection) {
+            menu.showSelection = true;
+            menuTicks = 0;
+            sound.menuMove();
+            return;
+        }
+        const old = menu.choice;
+        const onButtons = menu.choice >= ARENA_NAMES.length;
+        if (left || right) {
+            const step = right ? 1 : -1;
+            if (onButtons) {
+                menu.choice = ARENA_NAMES.length + (menu.choice - ARENA_NAMES.length + step + buttons.length) % buttons.length;
+            } else {
+                const rowStart = menu.choice - menu.choice % ARENA_COLUMNS;
+                const rowLength = Math.min(ARENA_COLUMNS, ARENA_NAMES.length - rowStart);
+                menu.choice = rowStart + (menu.choice - rowStart + step + rowLength) % rowLength;
+            }
+        } else if (down) {
+            if (onButtons) {
+                menu.choice = menu.choice - ARENA_NAMES.length === 0 ? 0 : Math.min(ARENA_COLUMNS - 1, ARENA_NAMES.length - 1);
+            } else if (Math.floor(menu.choice / ARENA_COLUMNS) === rows - 1 || menu.choice + ARENA_COLUMNS >= ARENA_NAMES.length) {
+                // Off the bottom of the pictures, to whichever button's nearer
+                menu.choice = ARENA_NAMES.length + (menu.choice % ARENA_COLUMNS < ARENA_COLUMNS / 2 ? 0 : 1);
+            } else {
+                menu.choice += ARENA_COLUMNS;
+            }
+        } else if (up) {
+            if (onButtons) {
+                const column = menu.choice - ARENA_NAMES.length === 0 ? 1 : 3;
+                menu.choice = Math.min(ARENA_NAMES.length - 1, (rows - 1) * ARENA_COLUMNS + column);
+            } else if (menu.choice < ARENA_COLUMNS) {
+                menu.choice = ARENA_NAMES.length + (menu.choice < ARENA_COLUMNS / 2 ? 0 : 1);
+            } else {
+                menu.choice -= ARENA_COLUMNS;
+            }
+        } else if (enter) {
+            pickChoice(menu.choice);
+        }
+        if (menu.choice !== old) {
+            menuTicks = 0;
+            sound.menuMove();
+        }
+    };
+
+    menu.draw = () => {
+        if (arenaWarningTicks > 0) {
+            arenaWarningTicks--;
+        }
+        ARENA_NAMES.forEach((name, i) => {
+            const cell = getArenaCell(i);
+            const on = settings.isOn("arenas", name);
+            const selected = menu.showSelection && menu.choice === i;
+            // A frame round each: yellow round the one that's picked, green round the ones that are on
+            const frame = selected ? (Math.floor(menuTicks / 40) % 2 === 0 ? "#ffcc33" : "#c89a20") : on ? "#5cbf5c" : "#3a443a";
+            MDog.Draw.rectangleFill(cell.left - 1, cell.top - 1, cell.width + 2, cell.height + 2, frame);
+            MDog.Draw.image(getArenaThumb(name), cell.left, cell.top);
+            if (!on) {
+                // Dimmed, with OFF over it
+                MDog.Draw.rectangleFill(cell.left, cell.top, cell.width, cell.height, "rgba(8, 12, 8, 0.7)");
+                drawText("OFF", cell.top + cell.height / 2, "#c8d4c0", 1, cell.left + cell.width / 2);
+            }
+        });
+        // The picked one's name and what it's like
+        const picked = menu.showSelection && menu.choice < ARENA_NAMES.length ? ARENA_NAMES[menu.choice] : null;
+        if (arenaWarningTicks > 0) {
+            drawText(modeWarningTicks > 0 ? "AT LEAST ONE GAME MODE HAS TO BE ON" : "AT LEAST ONE ARENA HAS TO BE ON", 140, "#ff9a8a", 1);
+        } else if (picked !== null) {
+            const on = settings.isOn("arenas", picked);
+            drawText(ARENAS[picked].title + ": " + onOff(on), 134, on ? "#9cf09c" : "#c8d4c0", 1);
+            drawText(ARENA_BLURBS[picked] ?? "", 145, "#8a9a88", 1);
+        } else {
+            drawText(describeArenaSetting() === "ALL" ? "ALL ARENAS ARE ON" : describeArenaSetting() + " ARENAS ON", 140, "#c8d4c0", 1);
+        }
+        buttons.forEach((button, i) => {
+            const selected = menu.showSelection && menu.choice === ARENA_NAMES.length + i;
+            drawText(button.text, ARENA_BUTTONS_Y, selected ? "#ffcc33" : "#c8d4c0", 1, button.x);
+            if (selected && Math.floor(menuTicks / 40) % 2 === 0) {
+                const half = Math.ceil(button.text.length * 5 / 2);
+                drawText(">", ARENA_BUTTONS_Y, "#ffcc33", 1, button.x - half - 8);
+                drawText("<", ARENA_BUTTONS_Y, "#ffcc33", 1, button.x + half + 7);
+            }
+        });
+        drawText("ENTER OR CLICK: ON/OFF.  ESC: BACK", 170, "#8a9a88", 1);
+    };
+    return menu;
 }
 
 function makeSettingsMenu() {
@@ -7282,22 +7909,31 @@ function makeSettingsMenu() {
     };
     return new Menu("SETTINGS", [
         ...matchSettingItems(),
-        settingToggle("MUSIC", "music", () => music.setEnabled(settings.get("music"))),
+        settingToggle("MUSIC", "music", null, () => music.setEnabled(settings.get("music"))),
         {onOff: true, label: () => "SOUND: " + onOff(!sound.muted), change: () => sound.toggleMute()},
         resetItem,
         {label: () => "BACK", pick: () => backMenu()},
-    ]);
+    ], "ENTER: OPEN.  LEFT/RIGHT: CHANGE.  ESC: BACK");
 }
 
+const POWERUP_INFO = {
+    shield: "TAKES A HIT FOR YOU (THEY STACK)",
+    speed: "RUN FASTER FOR A WHILE",
+    thunder: "LIGHTNING STRIKES YOUR OPPONENT",
+    grow: "GROW BIGGER, WITH A LONGER REACH",
+    avalanche: "BOULDERS ROLL AT YOUR OPPONENT",
+    fury: "SWING FASTER FOR A WHILE",
+    throw: "YOUR NEXT SWING THROWS YOUR SWORD",
+    reverse: "YOUR OPPONENT'S CONTROLS GO BACKWARDS",
+    boogie: "YOUR OPPONENT HAS TO DANCE: NO ATTACKING",
+};
+
 function makePowerupMenu() {
-    const items = SPAWNING_POWERUPS.map(type => ({
-        onOff: true,
-        label: () => POWERUP_MENU_NAMES[type] + ": " + onOff(settings.isPowerupOn(type)),
-        change: () => settings.togglePowerup(type),
-    }));
-    items.push({label: () => "ALL ON", pick: () => SPAWNING_POWERUPS.filter(type => !settings.isPowerupOn(type)).forEach(type => settings.togglePowerup(type))});
-    items.push({label: () => "BACK", pick: () => backMenu()});
-    return new Menu("POWER-UPS", items);
+    return new Menu("POWER-UPS", [
+        ...SPAWNING_POWERUPS.map(type => listToggle(POWERUP_MENU_NAMES[type], "powerups", type, POWERUP_INFO[type])),
+        allToggle("powerups", SPAWNING_POWERUPS),
+        backItem(),
+    ], "ENTER OR CLICK: ON/OFF.  ESC: BACK");
 }
 
 function openMenu(menu) {
@@ -7332,11 +7968,103 @@ window.addEventListener("blur", () => {
     }
 });
 
+// ---------- The mouse in menus ----------
+
+const Mouse = MDog.Input.Mouse;
+let lastMouse = null; // where the mouse was last tick, so only moving it changes what's selected
+
+// Which of a list of lines of text the mouse is over (lines are {y, text}, centered on the screen), or -1
+function getMouseOverLine(lines, rowHeight) {
+    if (!Mouse.getOnScreen()) {
+        return -1;
+    }
+    const x = Mouse.getX();
+    const y = Mouse.getY();
+    return lines.findIndex(line => Math.abs(y - line.y) <= rowHeight / 2
+        && Math.abs(x - CENTER_X) <= Math.ceil(line.text.length * 5 / 2) + 10);
+}
+
+// Has the mouse moved since last tick? (Checked once a tick.)
+function mouseMoved() {
+    const now = Mouse.getOnScreen() ? Mouse.getX() + "," + Mouse.getY() : "off";
+    const moved = lastMouse !== null && now !== lastMouse;
+    lastMouse = now;
+    return moved;
+}
+
+// A click that a menu used isn't also a swing
+function useClick() {
+    pressedCodes.delete("MouseLeft");
+}
+
+// Where a menu's items are on the screen (see drawMenu)
+function getMenuLines(menu) {
+    const top = menu.isPauseMenu ? 34 : 14;
+    const spacing = menu.items.length > 8 ? 10 : 14;
+    const firstY = top + (menu.isPauseMenu ? 30 : 20);
+    return {lines: menu.items.map((item, i) => ({y: firstY + i * spacing, text: item.label()})), spacing};
+}
+
+// The mouse moving over a list's items selects the one it's on (and nothing when it's off them), and a click picks
+// it. select(index) and pick(index) do those; -1 is nothing. Returns whether it used a click.
+function updateMouseOverList(lines, rowHeight, select, pick) {
+    const over = getMouseOverLine(lines, rowHeight);
+    Mouse.requestStyle(over >= 0 ? "pointer" : "default");
+    if (mouseMoved()) {
+        select(over);
+    }
+    if (Mouse.getClick(0) && over >= 0) {
+        select(over);
+        pick(over);
+        useClick();
+        return true;
+    }
+    return false;
+}
+
 function updateMenu() {
     menuTicks++;
     const menu = menus[menus.length - 1];
+    menu.everyTick?.();
+    if (modeWarningTicks > 0 && menu.everyTick === undefined) {
+        modeWarningTicks--;
+    }
+    if (menu.update !== undefined) {
+        menu.update();
+        return;
+    }
+    const {lines, spacing} = getMenuLines(menu);
+    const clickedItem = updateMouseOverList(lines, spacing, index => {
+        if (index >= 0 && (index !== menu.choice || !menu.showSelection)) {
+            menuTicks = 0;
+        }
+        menu.showSelection = index >= 0;
+        if (index >= 0) {
+            menu.choice = index;
+        }
+    }, index => {
+        // A click does what Space or Enter would, and steps a list of choices along (like right does)
+        const item = menu.items[index];
+        if (item.pick !== undefined) {
+            item.pick();
+        } else if (item.change !== undefined) {
+            item.change(1);
+            sound.menuMove();
+        }
+    });
+    if (clickedItem || menus[menus.length - 1] !== menu) {
+        return;
+    }
     // Either player can use the menu
     const clicked = keys => keys.some(key => Keyboard.isClicked(key));
+    const anyKey = clicked(["w", "ArrowUp", "s", "ArrowDown", "a", "ArrowLeft", "d", "ArrowRight", " ", "Enter"]);
+    if (anyKey && !menu.showSelection) {
+        // The selector comes back where it was, before anything happens
+        menu.showSelection = true;
+        menuTicks = 0;
+        sound.menuMove();
+        return;
+    }
     if (clicked(["w", "ArrowUp", "s", "ArrowDown"])) {
         const down = clicked(["s", "ArrowDown"]);
         menu.choice = (menu.choice + (down ? 1 : -1) + menu.items.length) % menu.items.length;
@@ -7365,12 +8093,16 @@ function drawMenu() {
     MDog.Draw.rectangleFill(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, mode === "online" ? "rgba(8, 14, 8, 0.6)" : "rgba(8, 14, 8, 0.85)");
     const top = menu.isPauseMenu ? 34 : 14;
     drawText(menu.title, top, "#ffffff", 2);
+    if (menu.draw !== undefined) {
+        menu.draw();
+        return;
+    }
 
     const spacing = menu.items.length > 8 ? 10 : 14;
     const firstY = top + (menu.isPauseMenu ? 30 : 20);
     menu.items.forEach((item, i) => {
         const y = firstY + i * spacing;
-        const selected = i === menu.choice;
+        const selected = i === menu.choice && menu.showSelection;
         const label = item.label();
         drawText(label, y, selected ? "#ffcc33" : "#c8d4c0", 1);
         // Arrows either side of the one that's picked, blinking slowly
@@ -7383,9 +8115,14 @@ function drawMenu() {
 
     if (menu.isPauseMenu) {
         drawText("RED: WASD MOVE, SPACE SWING, E TAUNT", 136, PLAYERS[0].lightTextColor, 1);
-        drawText("BLUE: ARROWS MOVE, ENTER SWING, / TAUNT", 146, PLAYERS[1].lightTextColor, 1);
+        drawText("BLUE: ARROWS MOVE, ENTER/CLICK SWING, / TAUNT", 146, PLAYERS[1].lightTextColor, 1);
         drawText("ESC: RESUME", 162, "#c8d4c0", 1);
     } else {
+        // A line about whichever setting's picked
+        const info = menu.showSelection ? menu.items[menu.choice]?.info : null;
+        if (info) {
+            drawText(typeof info === "function" ? info() : info, 158, "#e8f0e0", 1);
+        }
         drawText(menu.hint ?? "LEFT AND RIGHT TO CHANGE.  ESC: BACK", 170, "#8a9a88", 1);
     }
 }
@@ -7401,6 +8138,7 @@ function captureState() {
         boulderWait, powerupWait, hazardWait, holeWait, stats, scores, phase, phaseTicks, roundTicks, roundNumber,
         resultText, commentary, lastRoundWinner, streak, worstDeficit, hitstop, slowmo, flash, shake,
         closeCallCooldown, roundsUntilShowdown, roundsUntilJuggernaut, roundsUntilJoust, roundModifier,
+        roundsUntilChicken, chickenRound, chickenTicks, chickenFreeze,
         roundHazards, roundBoulders, juggernaut, calmTicks, replayBlowTick, replayReason, aftermath, gameTime,
         rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom, lightningGlow, arenaLayout,
     };
@@ -7413,6 +8151,7 @@ function restoreState(state) {
         boulderWait, powerupWait, hazardWait, holeWait, stats, scores, phase, phaseTicks, roundTicks, roundNumber,
         resultText, commentary, lastRoundWinner, streak, worstDeficit, hitstop, slowmo, flash, shake,
         closeCallCooldown, roundsUntilShowdown, roundsUntilJuggernaut, roundsUntilJoust, roundModifier,
+        roundsUntilChicken, chickenRound, chickenTicks, chickenFreeze,
         roundHazards, roundBoulders, juggernaut, calmTicks, replayBlowTick, replayReason, aftermath, gameTime,
         rngState, inputs, rematchVotes, simTicks, replayTicksLeft, replayFrom, lightningGlow, arenaLayout,
     } = state);
@@ -7445,15 +8184,20 @@ const CLASSES = {
 // The settings an online match is played with: the host's, sent over when it starts
 class MatchSettings {
     constructor(values) {
-        this.values = values;
+        // (older-style settings are turned into the new kind)
+        this.values = normalizeSettings(values);
     }
 
     get(key) {
         return this.values[key];
     }
 
+    isOn(group, name) {
+        return isOnIn(this.values, group, name);
+    }
+
     isPowerupOn(type) {
-        return this.values.powerups?.[type] !== false;
+        return this.isOn("powerups", type);
     }
 }
 
@@ -7588,6 +8332,7 @@ function leaveOnline() {
 
 const TITLE_CHOICES = ["LOCAL MATCH", "QUICK MATCH", "HOST ONLINE MATCH", "JOIN ONLINE MATCH"];
 let titleChoice = 0;
+let titleSelectorShown = false; // the selector only shows once it's been moved to, with the keys or the mouse
 let joinTyping = null; // the code typed so far on the join screen, or null when it's not open
 let copiedTicks = 0; // "COPIED!" shows for a moment after copying the invite link
 
@@ -7665,30 +8410,53 @@ function updateTitleMenu() {
         return;
     }
 
-    if (clickedAny(["w", "ArrowUp"])) {
+    // The mouse: over a choice selects it, off them selects nothing, and a click picks one
+    const lines = TITLE_CHOICES.map((choice, i) => ({y: 102 + i * 10, text: choice}));
+    if (updateMouseOverList(lines, 10, index => {
+        titleSelectorShown = index >= 0;
+        if (index >= 0) {
+            if (index !== titleChoice) {
+                sound.menuMove();
+            }
+            titleChoice = index;
+        }
+    }, index => pickTitleChoice(index))) {
+        return;
+    }
+
+    const arrows = clickedAny(["w", "ArrowUp", "s", "ArrowDown"]);
+    if ((arrows || clickedAny([" ", "Enter"])) && !titleSelectorShown) {
+        // The selector comes back where it was, before anything happens
+        titleSelectorShown = true;
+        sound.menuMove();
+    } else if (clickedAny(["w", "ArrowUp"])) {
         titleChoice = (titleChoice + TITLE_CHOICES.length - 1) % TITLE_CHOICES.length;
         sound.menuMove();
     } else if (clickedAny(["s", "ArrowDown"])) {
         titleChoice = (titleChoice + 1) % TITLE_CHOICES.length;
         sound.menuMove();
     } else if (clickedAny([" ", "Enter"])) {
-        const choice = TITLE_CHOICES[titleChoice];
-        if (choice === "LOCAL MATCH") {
-            startMatch();
-        } else if (choice === "QUICK MATCH") {
-            online.quick(JSON.parse(JSON.stringify(DEFAULTS)));
-            sound.menuSelect();
-        } else if (choice === "HOST ONLINE MATCH") {
-            online.host(JSON.parse(JSON.stringify(settings.values)));
-            sound.menuSelect();
-        } else {
-            joinTyping = "";
-            sound.menuSelect();
-        }
+        pickTitleChoice(titleChoice);
     }
     // While QUICK MATCH is picked, it keeps checking if anyone's waiting
     if (TITLE_CHOICES[titleChoice] === "QUICK MATCH") {
         updateQuickStats();
+    }
+}
+
+function pickTitleChoice(index) {
+    const choice = TITLE_CHOICES[index];
+    if (choice === "LOCAL MATCH") {
+        startMatch();
+    } else if (choice === "QUICK MATCH") {
+        online.quick(JSON.parse(JSON.stringify(DEFAULTS)));
+        sound.menuSelect();
+    } else if (choice === "HOST ONLINE MATCH") {
+        online.host(JSON.parse(JSON.stringify(settings.values)));
+        sound.menuSelect();
+    } else {
+        joinTyping = "";
+        sound.menuSelect();
     }
 }
 
@@ -7739,7 +8507,8 @@ function drawCodeBoxes(code, y) {
         MDog.Draw.rectangleFill(x - 9, y - 11, 18, 21, "rgba(0, 0, 0, 0.45)");
         MDog.Draw.rectangle(x - 9, y - 11, 18, 21, cursor ? "#ffcc33" : "rgba(255, 255, 255, 0.35)");
         if (i < code.length) {
-            drawText(code[i], y, "#ffd84a", 3, x + 1);
+            // Centered in the box: the letter (12 wide, 15 tall at this size) and its shadow under it fit inside
+            drawText(code[i], y - 3, "#ffd84a", 3, x);
         }
     }
 }
@@ -8197,7 +8966,7 @@ function gameTick() {
     }
     if (killCam.playing) {
         killCam.update();
-        if (wasPressed(["Space", "Enter", "NumpadEnter"])) {
+        if (wasPressed(["Space", "Enter", "NumpadEnter", "MouseLeft"])) {
             killCam.stop();
         }
         usePresses();
@@ -8247,12 +9016,24 @@ export const testHooks = {
     get knights() { return knights; },
     get gameTime() { return gameTime; },
     get mode() { return mode; },
+    // What's selected: the title menu's choice, or the open menu's item (-1 when the selector's hidden)
+    get titleSelection() { return titleSelectorShown ? titleChoice : -1; },
+    get menuSelection() { const menu = menus[menus.length - 1]; return menu === undefined ? null : menu.showSelection ? menu.choice : -1; },
     get arenaLayout() { return arenaLayout; },
+    get chickenRound() { return chickenRound; },
+    get chickenTicks() { return chickenTicks; },
+    get chickenFreeze() { return chickenFreeze; },
     inviteLink,
     get replayTicksLeft() { return replayTicksLeft; },
     get simTicks() { return simTicks; },
+    // For cover screenshots: the sparks and so on move on a few ticks without the game moving, and a twinkle
+    moveParticles(ticks) { for (let i = 0; i < ticks; i++) particles.update(); },
+    clearParticles() { particles.clear(); },
+    twinkle(x, y) { particles.glint(x, y); },
     // Gives a knight a power-up, for testing
     givePowerup(index, type) { givePowerup(knights[index], type); },
+    // Just the field, without the score and so on (for screenshots)
+    set hideUI(hide) { hideUI = hide; },
     // A lightning strike coming down here, for seeing how it looks
     strikeAt(x, y) { strikes.push(new Strike(null, null, {x, y})); },
 };
@@ -8265,7 +9046,7 @@ if (typeof document !== "undefined") {
 }
 showTitle();
 const images = [FONT, BOULDER_IMAGE, POWERUP_IMAGE, TREE_IMAGE, HORSE_IMAGE, SWORD_IMAGE, CRATE_IMAGE, TOMBSTONE_IMAGE,
-    MAST_IMAGE, BARREL_IMAGE, CHICKEN_IMAGE, BEAR_IMAGE, CACTUS_IMAGE, LIGHTHOUSE_IMAGE];
+    MAST_IMAGE, BARREL_IMAGE, CHICKEN_IMAGE, BEAR_IMAGE, CACTUS_IMAGE, LIGHTHOUSE_IMAGE, ...ARENA_NAMES.map(getArenaThumb)];
 for (const name in ARENAS) {
     images.push(ARENAS[name].field, ARENAS[name].rockImage);
 }

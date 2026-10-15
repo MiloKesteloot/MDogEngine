@@ -167,6 +167,7 @@ const ARENAS = {
         lanterns: [{x: 20, y: 50}, {x: 220, y: 50}, {x: 60, y: 146}, {x: 180, y: 146}, {x: 120, y: 112}, {x: 80, y: 50}, {x: 160, y: 50}],
         dark: true,
         knightLight: 28,
+        solidGround: true, // no holes: it's a mine
         noBoulders: true, // the minecarts are enough (an avalanche power-up still sends some, rolling along the tracks)
         boulderDirection: "horizontal",
         tallGrass: [],
@@ -180,7 +181,7 @@ const ARENAS = {
     // Sand, cacti, tumbleweeds, and quicksand that swallows anyone who stands still in it
     DESERT: {
         title: "DESERT",
-        disabled: true, // taken out for now: never picked. Remove this line (and add it back to ARENA_CHOICES) to bring it back.
+        disabled: true, // taken out for now: never picked. Remove this line (and add it back to ARENA_NAMES in Settings.js) to bring it back.
         field: "knight-knight/field-desert.png",
         fieldColor: "#e0c488",
         rockImage: "knight-knight/rock.png",
@@ -301,7 +302,7 @@ const ARENAS = {
     GRAVEYARD: {
         title: "GRAVEYARD",
         grassy: true,
-        disabled: true, // taken out for now: never picked. Remove this line (and add it back to ARENA_CHOICES) to bring it back.
+        disabled: true, // taken out for now: never picked. Remove this line (and add it back to ARENA_NAMES in Settings.js) to bring it back.
         field: "knight-knight/field-graveyard.png",
         fieldColor: "#344e34",
         rockImage: "knight-knight/rock.png",

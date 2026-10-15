@@ -10,7 +10,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {sleep, launch, Page, KEYS, setShotFolder} from "./cdp.mjs";
 
-const GAME = process.env.GAME_URL ?? "http://127.0.0.1:8000/?game=knight-knight-online";
+const GAME = process.env.GAME_URL ?? "http://127.0.0.1:8000/?game=knight-knight-online&server=ws://127.0.0.1:8787";
 const seconds = Number(process.argv[2] ?? 30);
 const shots = process.argv[3] ?? join(tmpdir(), "knight-knight-shots");
 mkdirSync(shots, {recursive: true});
@@ -41,6 +41,8 @@ try {
             console.log(page.logs.slice(0, 10).join("\n"), await page.eval("location.href + document.body.innerHTML.slice(0, 200)"));
             throw new Error(page.name + "'s game never loaded");
         }
+        // The title menu's selector starts hidden: an arrow brings it back (on the first choice)
+        await page.press(...KEYS.down);
     }
     // Sitting on the title screen for a while first, like people do
     await sleep(Number(process.env.TITLE_WAIT ?? 1500));
@@ -132,6 +134,7 @@ try {
 
     // Leaving: the other one hears
     await guest.press("Escape", "Escape", 27);
+    await guest.press(...KEYS.down); // the menu's selector starts hidden: an arrow brings it back first
     await sleep(300);
     await guest.screenshot("6-guest-menu.png");
     // LEAVE MATCH is last on the menu: up from the top wraps round to it

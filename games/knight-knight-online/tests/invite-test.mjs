@@ -3,7 +3,7 @@
 
 import {sleep, launch, Page, KEYS, waitForGame} from "./cdp.mjs";
 
-const GAME = (process.env.GAME_URL ?? "http://127.0.0.1:8000/?game=knight-knight-online") + "&extra=keep";
+const GAME = (process.env.GAME_URL ?? "http://127.0.0.1:8000/?game=knight-knight-online&server=ws://127.0.0.1:8787") + "&extra=keep";
 const browsers = [await launch(9361), await launch(9362)];
 const [host, guest] = [new Page("host", browsers[0].url), new Page("guest", browsers[1].url)];
 let failed = false;
@@ -51,6 +51,7 @@ try {
     // The host opens the match settings and changes the rounds to win (5 to 7), and is still in the menu when the
     // friend joins
     await host.press(...KEYS.enter);
+    await host.press(...KEYS.down); // the menu's selector starts hidden: an arrow brings it back first
     await host.press(...KEYS.right);
     await sleep(200);
 
@@ -60,6 +61,11 @@ try {
     await waitFor(guest, `k.mode === "online" && o.state === "playing"`, "the guest to be in the match");
     await waitFor(host, `k.mode === "online" && o.state === "playing"`, "the host to be in the match");
     ok("opening the link joined the match straight away");
+    // Online, a left click swings for your own knight (the guest is blue, the host red)
+    await waitFor(host, `k.phase === "playing"`, "the round to start");
+    await host.click();
+    await waitFor(host, `k.knights[0].state === "swing"`, "the host's click to swing red");
+    ok("a left click swings your own knight online");
     const rounds = await kk(guest, "o.hostSettings.roundsToWin");
     rounds === 7 ? ok("the friend joining closed the host's settings, and the match has what was picked: first to 7")
         : fail("the match is first to " + rounds);

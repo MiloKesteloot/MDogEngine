@@ -7,7 +7,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {sleep, launch, Page, KEYS, setShotFolder, waitForGame} from "./cdp.mjs";
 
-const GAME = process.env.GAME_URL ?? "http://127.0.0.1:8000/?game=knight-knight-online";
+const GAME = process.env.GAME_URL ?? "http://127.0.0.1:8000/?game=knight-knight-online&server=ws://127.0.0.1:8787";
 const SERVER = process.env.STATS_URL ?? "http://127.0.0.1:8787";
 const shots = process.argv[2] ?? join(tmpdir(), "knight-knight-shots");
 mkdirSync(shots, {recursive: true});
@@ -66,8 +66,8 @@ try {
     await waitFor(second, `k.mode === "online" && o.state === "playing"`, "the second one's match");
     const roles = [await kk(first, "o.role"), await kk(second, "o.role")];
     roles[0] === "host" && roles[1] === "guest" ? ok("paired up: the one who waited hosts") : fail("roles " + roles);
-    const used = await kk(second, "o.hostSettings.roundsToWin + ' ' + o.hostSettings.arena");
-    used === "5 MIXED" ? ok("they play with the standard settings, not the host's own") : fail("settings used: " + used);
+    const used = await kk(second, "o.hostSettings.roundsToWin + ' ' + JSON.stringify(o.hostSettings.arenas)");
+    used === "5 {}" ? ok("they play with the standard settings, not the host's own") : fail("settings used: " + used);
     await sleep(600);
     await second.screenshot("quick-4-match.png");
     await sleep(6000);
@@ -80,6 +80,7 @@ try {
 
     // Leaving: the other is told their opponent left
     await second.press("Escape", "Escape", 27);
+    await second.press(...KEYS.down); // the menu's selector starts hidden: an arrow brings it back first
     await second.press(...KEYS.up);
     await second.press(...KEYS.enter);
     await waitFor(first, `o.state === "ended"`, "the first to hear they left");

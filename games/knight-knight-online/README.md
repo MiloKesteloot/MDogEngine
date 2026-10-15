@@ -25,6 +25,18 @@ the bottom right corner, with "(SERVER)" next to it when the match is going thro
 between you. F3 (or CONNECTION INFO in the menu) shows more: the ping, the input delay, how often the game is going
 back to fix a wrong guess, how in step the two games are, and the sync checks.
 
+Esc on the title screen opens the settings. Arenas, power-ups, hazards, weather and game modes each open their
+own menu, where every one can be turned on or off separately, and a line under the menu says what the picked one
+does. The arena picker shows a picture of each arena (made by `tests/arena-thumbs.mjs` and `tests/arena_thumbs.py`,
+saved in `assets/knight-knight-online/`). With one arena on, every round is there; with more, it's a different one
+each round. In GAME MODES, turning NORMAL ROUNDS off makes every round one of the modes that are on (juggernauts,
+chickens, showdowns, jousts), on an arena that mode works on. Settings saved by an older version are converted (`normalizeSettings` in `Settings.js`).
+
+Every few rounds (from round 3) there's a **chicken round**, on any arena but the bridge, sumo, the lighthouse, the
+showdown and the joust: one knight starts as a chicken (blue's has a blue comb), which walks like a knight and picks
+up power-ups but can't attack. Every 10 seconds everything holds still for a second and they swap. There are no sword
+throws and no wild chickens in a chicken round, and never a juggernaut at the same time.
+
 Before online play works on milo.games the server has to be put online. That takes a few minutes and it's free; see
 [server/README.md](server/README.md).
 
@@ -78,15 +90,19 @@ From `games/knight-knight-online/tests`, with Node 22 or newer:
 | Test | Checks |
 |---|---|
 | `node sync-test.mjs` | Two copies of the game given the same presses stay identical in every arena, and going back and replaying comes out the same |
-| `node long-mixed.mjs` | The same over a long mixed match (juggernauts, showdowns, jousts...) |
+| `node long-mixed.mjs` | The same over a long mixed match (juggernauts, chicken rounds, showdowns, jousts...) |
 | `node net-test.mjs` | Real matches with the rollback netcode over pretend networks: good, laggy, jittery, losing packets, changing delay, and one knocked out of sync on purpose that has to fix itself |
 | `node serialize-test.mjs` | A copy of the game sent as JSON comes back exactly the same |
 | `node hash-sanity.mjs`, `node detmath-test.mjs`, `node replay-check.mjs` | The fingerprint notices tiny differences, the math is accurate, and online kill cams play |
 | `node server-test.mjs` | The server's rooms (needs `npm run dev` in `server/`) |
 | `node browser-test.mjs` | Two real headless Chrome browsers play an online match through the local server. `NO_DIRECT=1` forces it through the server. (Needs the server and `node static-server.mjs`.) |
 | `node local-test.mjs` | Local two player still works in a real browser |
+| `node mouse-test.mjs` | Menus with the mouse: hovering selects, moving off selects nothing, arrows bring the selector back, clicking picks |
 | `node quick-test.mjs`, `node invite-test.mjs` | Quick match pairing and cancelling, and invite links joining in one click, in two real browsers |
 | `node lobby-test.mjs` | The settings shown before a match, the lobby between matches, and F3, in two real browsers |
+| `node chicken-round-check.mjs` | Chicken rounds come up (never on the bridge, sumo or lighthouse), swap after a second's freeze, chickens never swing, and no sword throws drop |
+| `node modes-check.mjs` | With normal rounds off, every round is one of the game modes that are on, in sync between two copies |
+| `node settings-look.mjs` | The settings menus: the arena picker with the keys and the mouse, the hazards menu, and screenshots of them |
 | `node showdown-check.mjs` | The showdown: all three layouts come up, and nothing extra (boulders, hazards, holes, chickens...) ever does |
 | `node boxin-check.mjs`, `node fissure-edges.mjs` | The volcano's fissures boxing the knights in (always away from them, both on the same side, never too small), and reaching edge to edge |
 | `node volcano-check.mjs` | The volcano's dragons every 7 to 13 seconds, and falling into a fissure |
