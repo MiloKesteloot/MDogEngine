@@ -101,6 +101,9 @@ From `games/knight-knight-online/tests`, with Node 22 or newer:
 | `node quick-test.mjs`, `node invite-test.mjs` | Quick match pairing and cancelling, and invite links joining in one click, in two real browsers |
 | `node lobby-test.mjs` | The settings shown before a match, the lobby between matches, and F3, in two real browsers |
 | `node chicken-round-check.mjs` | Chicken rounds come up (never on the bridge, sumo or lighthouse), swap after a second's freeze, chickens never swing, and no sword throws drop |
+| `node frenzy-check.mjs` | The frenzy block drops 12 power-ups away from the knights and is a third as common as the others, and the winner can still go down after the round's decided without the score changing |
+| `node grass-check.mjs` | Lightning and rolling boulders cut the tall grass, and a chicken knocked down stays a chicken (for the roast) |
+| `node mine-holes-check.mjs` | No holes ever open in the mine |
 | `node modes-check.mjs` | With normal rounds off, every round is one of the game modes that are on, in sync between two copies |
 | `node settings-look.mjs` | The settings menus: the arena picker with the keys and the mouse, the hazards menu, and screenshots of them |
 | `node showdown-check.mjs` | The showdown: all three layouts come up, and nothing extra (boulders, hazards, holes, chickens...) ever does |

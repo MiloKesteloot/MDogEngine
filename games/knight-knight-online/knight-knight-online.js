@@ -85,7 +85,7 @@ const EPIC_ROUND_TICKS = 40 * TICKS_PER_SECOND; // one that goes longer is "WHAT
 
 const READY_TICKS = 150; // "READY" before each round
 const FIGHT_TEXT_TICKS = 70; // how long "FIGHT!" stays up after the round starts
-const ROUND_OVER_TICKS = 260 + 1.5 * TICKS_PER_SECOND; // from a knight going down to the next round (when there's no replay)
+const ROUND_OVER_TICKS = 260 + 0.5 * TICKS_PER_SECOND; // from a knight going down to the next round (when there's no replay)
 const RESTART_DELAY_TICKS = 120; // after the match, so a late swing press doesn't skip the win screen
 
 const BOULDER_SPEED = 70 / TICKS_PER_SECOND; // pixels per tick
@@ -110,6 +110,11 @@ const GIANT_SPEED = 0.7; // giants roll this much as fast
 // There's always one power-up on the field. When it's picked up or it fades away, the next one comes this soon.
 const POWERUP_RESPAWN_TICKS = 1.5 * TICKS_PER_SECOND;
 const POWERUP_LIFE_TICKS = 12 * TICKS_PER_SECOND; // how long one sits there before it's gone
+const FRENZY_COUNT = 12; // power-ups a frenzy block drops all over the arena...
+const FRENZY_KNIGHT_DISTANCE = 24; // ...none of them this close to a knight
+const FRENZY_RARITY = 3; // every other power-up is this many times as likely to show up
+const FRENZY_DROP_GAP_TICKS = 5; // they come down one after another, this far apart
+const POWERUP_DROP_HEIGHT = 40; // a dropped power-up falls from this high
 const SPEED_BOOST_TICKS = 7 * TICKS_PER_SECOND;
 const SPEED_BOOST = 1.5; // walking speed
 const SHIELD_KNOCKBACK = 2.4;
@@ -298,7 +303,7 @@ const BEAR_IMAGE = "knight-knight/bear.png";
 const CACTUS_IMAGE = "knight-knight/cactus.png";
 const LIGHTHOUSE_IMAGE = "knight-knight/lighthouse.png";
 const POWERUP_SIZE = 9;
-const POWERUP_TYPES = ["shield", "speed", "thunder", "grow", "avalanche", "freeze", "fury", "throw", "reverse", "gun", "boogie"]; // in the order they are in the image (the boogie bomb's isn't: it's drawn in code)
+const POWERUP_TYPES = ["shield", "speed", "thunder", "grow", "avalanche", "freeze", "fury", "throw", "reverse", "gun", "boogie", "frenzy"]; // in the order they are in the image (the boogie bomb's and frenzy's aren't: they're drawn in code)
 // The gun isn't found lying around any more, it's what everyone uses in a showdown
 // Freeze was taken out (its icon is still in the image, so the others stay in place)
 const SPAWNING_POWERUPS = POWERUP_TYPES.filter(type => type !== "gun" && type !== "freeze");
@@ -511,6 +516,73 @@ function drawDiscoBall(x, y, time, icon) {
         const [r, g, b] = DISCO_COLORS[(i + glint) % DISCO_COLORS.length];
         MDog.Draw.rectangleFill(x + dx, y + dy, 1, 1, (i + glint) % 3 === 0 ? "#ffffff" : `rgb(${r}, ${g}, ${b})`);
     });
+}
+
+// A chicken knight that went down: a roast chicken on a plate, legs in the air, steaming. x and y are the middle of
+// the plate, on the ground. (b golden brown, l where it shines, d the crispy edge, w the bones)
+const ROAST_CHICKEN = [
+    "ww.........ww",
+    "wdb.......bdw",
+    ".dbb.....bbd.",
+    "..dbbbbbbbd..",
+    ".dbblllbbbbd.",
+    "dbbllbbbbbbbd",
+    "dbbbbbbbbbbbd",
+    ".dbbbbbbbbbd.",
+    "..ddddddddd..",
+];
+const ROAST_COLORS = {b: "#c8762a", l: "#f0b060", d: "#7a3e14", w: "#f4efe2"};
+
+function drawRoastChicken(x, y, size, flip, time, white) {
+    const width = ROAST_CHICKEN[0].length;
+    // The plate
+    drawOval(x, y, 9 * size, 3 * size, white ? "#ffffff" : "#b8b8c8");
+    drawOval(x, y - 1, 8 * size, 2 * size, white ? "#ffffff" : "#eeeef4");
+    const left = Math.round(x - width / 2 * size);
+    const top = Math.round(y - (ROAST_CHICKEN.length + 1) * size);
+    ROAST_CHICKEN.forEach((row, dy) => {
+        for (let dx = 0; dx < width; dx++) {
+            const pixel = row[flip ? width - 1 - dx : dx];
+            if (pixel !== ".") {
+                MDog.Draw.rectangleFill(left + dx * size, top + dy * size, size, size, white ? "#ffffff" : ROAST_COLORS[pixel]);
+            }
+        }
+    });
+    // Steam curling up off it
+    for (let i = 0; i < 3; i++) {
+        const rise = (time / 3 + i * 9) % 27;
+        const sx = x + (i - 1) * 3 * size + Math.round(dsin((time + i * 40) / 14));
+        MDog.Draw.rectangleFill(Math.round(sx), Math.round(top - 2 - rise), 1, 1, `rgba(255, 255, 255, ${0.6 * (1 - rise / 27)})`);
+    }
+}
+
+// The frenzy power-up's icon: a golden question mark block, 9 by 9, with a shine that sweeps across it now and then
+const QUESTION_MARK = [".xxx.", "x...x", "...x.", "..x..", ".....", "..x.."];
+
+function drawQuestionBlock(x, y, time) {
+    MDog.Draw.rectangleFill(x, y, 9, 9, "#7a3c08"); // the dark edge
+    MDog.Draw.rectangleFill(x, y, 8, 8, "#f8b800");
+    MDog.Draw.rectangleFill(x, y, 8, 1, "#ffe080"); // lit from the top left
+    MDog.Draw.rectangleFill(x, y, 1, 8, "#ffe080");
+    // The question mark, with a shadow
+    QUESTION_MARK.forEach((row, dy) => {
+        for (let dx = 0; dx < row.length; dx++) {
+            if (row[dx] === "x") {
+                MDog.Draw.rectangleFill(x + 2 + dx, y + 2 + dy, 1, 1, "#7a3c08");
+                MDog.Draw.rectangleFill(x + 1 + dx, y + 1 + dy, 1, 1, "#ffffff");
+            }
+        }
+    });
+    // A shine sweeping across every couple of seconds
+    const sweep = Math.floor(time / 3) % 60;
+    if (sweep < 10) {
+        for (let i = 0; i < 8; i++) {
+            const sx = sweep - i;
+            if (sx >= 0 && sx < 8) {
+                MDog.Draw.rectangleFill(x + sx, y + i, 1, 1, "rgba(255, 255, 255, 0.6)");
+            }
+        }
+    }
 }
 
 // One strip per animation per direction per color, cut from knight.png
@@ -1107,9 +1179,34 @@ class Powerup {
         this.y = y;
         this.life = POWERUP_LIFE_TICKS;
         this.age = 0;
+        this.delay = 0; // ticks until it appears (a frenzy's come down one after another)
+        this.z = 0; // height, while it's falling
+    }
+
+    // Dropped from the sky, after a wait
+    drop(delay) {
+        this.delay = delay;
+        this.z = POWERUP_DROP_HEIGHT;
+    }
+
+    // Only once it's down can it be picked up
+    isLanded() {
+        return this.delay === 0 && this.z === 0;
     }
 
     update() {
+        if (this.delay > 0) {
+            this.delay--;
+            return;
+        }
+        if (this.z > 0) {
+            this.z = Math.max(0, this.z - 2);
+            if (this.z === 0) {
+                particles.sparks(this.x, this.y - 4, 6, POWERUP_NAMES[this.type][2]);
+                particles.dust(this.x, this.y, 2);
+            }
+            return;
+        }
         this.life--;
         this.age++;
         if (this.age % 50 === 0) {
@@ -1126,21 +1223,28 @@ class Powerup {
     }
 
     drawShadow() {
-        drawShadow(this.x, this.y, 7);
+        if (this.delay === 0) {
+            // (smaller the higher it is)
+            drawShadow(this.x, this.y, Math.max(3, Math.round(7 - this.z / 10)));
+        }
     }
 
     draw() {
         // Blinks when it's about to go
-        if (this.life < 2 * TICKS_PER_SECOND && Math.floor(this.life / 8) % 2 === 0) {
+        if (this.delay > 0 || (this.life < 2 * TICKS_PER_SECOND && Math.floor(this.life / 8) % 2 === 0)) {
             return;
         }
         // Bobs up and down over its shadow
         const bob = Math.round(dsin(this.age / 20) * 1.5);
         const frame = POWERUP_TYPES.indexOf(this.type);
         const x = Math.round(this.x - POWERUP_SIZE / 2);
-        const y = Math.round(this.y - 13 + bob);
+        const y = Math.round(this.y - 13 + bob - this.z);
         if (this.type === "boogie") {
             drawDiscoBall(x + 4, y + 4, this.age, true);
+            return;
+        }
+        if (this.type === "frenzy") {
+            drawQuestionBlock(x, y, this.age);
             return;
         }
         MDog.Draw.image(POWERUP_IMAGE, x, y, {width: POWERUP_SIZE, offsetX: POWERUP_SIZE * frame});
@@ -2089,7 +2193,8 @@ class Knight {
         this.fallHole = hole;
         this.fallSpot = hole.getFallSpot !== undefined ? hole.getFallSpot(this.getGroundX(), this.getGroundY()) : {x: hole.x, y: hole.y};
         const animation = this.getAnimation();
-        this.fallFrame = {fileName: animation.fileName, frame: animation.getFrame()};
+        this.fallFrame = this.isChicken ? {chicken: true, frame: this.getChickenFrame(), flip: this.chickenFlip}
+            : {fileName: animation.fileName, frame: animation.getFrame()};
         this.vx = 0;
         this.vy = 0;
         sound.fall();
@@ -2123,8 +2228,7 @@ class Knight {
 
     goDown() {
         if (this.isChicken) {
-            this.isChicken = false;
-            particles.feathers(this.getGroundX(), this.getGroundY() - 4, [245, 245, 240], 14);
+            particles.feathers(this.getGroundX(), this.getGroundY() - 4, [245, 245, 240], 24);
         }
         this.checkSwingNearMiss();
         this.dead = true;
@@ -2152,7 +2256,7 @@ class Knight {
             drawOval(this.getGroundX() - 1, poolY, this.bloodPool * 0.6, this.bloodPool * 0.25, "rgba(150, 20, 20, 0.6)");
         }
         if (this.fallHole === null) {
-            const size = this.mounted && !this.dead ? 22 : Math.round((this.dead ? 13 : this.isChicken ? 6 : 10) * this.scale);
+            const size = this.mounted && !this.dead ? 22 : Math.round((this.dead ? (this.isChicken ? 10 : 13) : this.isChicken ? 6 : 10) * this.scale);
             drawShadow(this.getGroundX(), this.getGroundY(), size);
         }
     }
@@ -2177,9 +2281,7 @@ class Knight {
         const scale = this.getDrawScale();
         const spot = this.getSpriteSpot(scale);
         const x = spot.x;
-        // Hops up and down while taunting
-        const bop = this.tauntTicks > 0 ? Math.round(Math.abs(dsin(this.tauntTicks / 8)) * 3)
-            : this.danceTicks > 0 ? Math.round(Math.abs(dsin(this.danceTicks / 6)) * 2) : 0;
+        const bop = this.getBop();
         const y = spot.y - bop;
 
         if (this.fallHole !== null) {
@@ -2189,7 +2291,12 @@ class Knight {
                 const fallScale = Math.max(0.25, Math.round(scale * left * 4) / 4);
                 const fallSpot = this.getSpriteSpot(fallScale);
                 const tint = this.fallHole.style === "lava" ? `rgba(255, 110, 30, ${0.8 * (1 - left)})` : undefined;
-                this.drawFrame(this.fallFrame.fileName, this.fallFrame.frame, fallSpot.x, fallSpot.y + Math.round((1 - left) * 4), tint, fallScale);
+                if (this.fallFrame.chicken) {
+                    const spot = this.getChickenSpot(fallScale);
+                    MDog.Draw.image(CHICKEN_IMAGE, spot.x, spot.y + Math.round((1 - left) * 4), {width: 10, offsetX: 10 * this.fallFrame.frame, flipX: this.fallFrame.flip, tint, scale: fallScale});
+                } else {
+                    this.drawFrame(this.fallFrame.fileName, this.fallFrame.frame, fallSpot.x, fallSpot.y + Math.round((1 - left) * 4), tint, fallScale);
+                }
             }
             return;
         }
@@ -2197,6 +2304,10 @@ class Knight {
         if (this.dead) {
             // Flashes white for a moment as he goes down, then lies there
             const flash = this.deadTicks < 30 && Math.floor(this.deadTicks / 6) % 2 === 0;
+            if (this.isChicken) {
+                drawRoastChicken(Math.round(this.getGroundX()), Math.round(this.getGroundY()), Math.max(1, Math.round(this.scale)), this.fallFlip, this.deadTicks, flash);
+                return;
+            }
             MDog.Draw.image(this.deadImage, x, y + Math.round(2 * scale), {flipX: this.fallFlip, tint: flash ? "#ffffff" : undefined, scale: scale});
             return;
         }
@@ -2221,7 +2332,10 @@ class Knight {
             this.drawLance();
         }
 
-        if (this.stunTicks > 0 && Math.floor(this.stunTicks / 4) % 2 === 0) {
+        if (chickenFreeze > 0 && Math.floor(chickenFreeze / 8) % 2 === 0) {
+            // About to swap
+            overlay(`rgba(255, 255, 255, ${0.3 + 0.5 * (1 - chickenFreeze / CHICKEN_FREEZE_TICKS)})`);
+        } else if (this.stunTicks > 0 && Math.floor(this.stunTicks / 4) % 2 === 0) {
             // Flickers while stunned
             overlay("rgba(255, 255, 255, 0.6)");
         } else if (this.graceTicks > 0 && Math.floor(this.graceTicks / 4) % 2 === 0) {
@@ -2287,6 +2401,12 @@ class Knight {
         }
     }
 
+    // How far up he's hopped: up and down while taunting or dancing
+    getBop() {
+        return this.tauntTicks > 0 ? Math.round(Math.abs(dsin(this.tauntTicks / 8)) * 3)
+            : this.danceTicks > 0 ? Math.round(Math.abs(dsin(this.danceTicks / 6)) * 2) : 0;
+    }
+
     // Quicksand up his legs, higher the further he's sunk
     drawSand() {
         const height = Math.round(Math.min(1, this.sinkTicks / QUICKSAND_TICKS) * 14 * this.scale);
@@ -2303,7 +2423,7 @@ class Knight {
         const spacing = 5;
         const left = Math.round(this.getGroundX() - (this.maxLives * spacing - 2) / 2);
         // Above his crown, if he's wearing one
-        const top = Math.min(Math.round(this.getTopY() - 10), isLeading(this) ? this.getCrownTop() - 6 : Infinity);
+        const top = Math.min(Math.round(this.getTopY() - 10), isLeading(this) ? this.getCrownTop() - 6 : Infinity) - this.getBop();
         for (let i = 0; i < this.maxLives; i++) {
             const color = i < this.lives ? "#e8303c" : "rgba(40, 20, 24, 0.7)";
             HEART.forEach((row, y) => {
@@ -2387,6 +2507,7 @@ class Knight {
     // Little purple stars going round his head while his controls are backwards
     drawDizzy() {
         const head = this.isChicken ? {x: this.getGroundX(), y: this.getGroundY() - 10 * this.scale} : this.scaledPoint(SPRITE_SIZE / 2, 2);
+        head.y -= this.getBop();
         for (let i = 0; i < 2; i++) {
             const angle = this.trailTimer / 10 + i * Math.PI;
             MDog.Draw.rectangleFill(Math.round(head.x + dcos(angle) * 5), Math.round(head.y + dsin(angle) * 2), 1, 1, "#d8a0ff");
@@ -2418,7 +2539,7 @@ class Knight {
         const size = Math.max(1, Math.round(this.scale));
         const left = this.isChicken ? Math.round(this.getGroundX() - 2.5 * size) : Math.round(this.scaledPoint(7, -1).x);
         // Bobbing a pixel up and down
-        const top = this.getCrownTop() + (Math.floor(this.trailTimer / 40) % 2);
+        const top = this.getCrownTop() + (Math.floor(this.trailTimer / 40) % 2) - this.getBop();
         const pixel = (x, y, width, color) => MDog.Draw.rectangleFill(left + x * size, top + y * size, width * size, size, color);
         pixel(0, 0, 1, "#ffd84a");
         pixel(2, 0, 1, "#ffd84a");
@@ -5960,16 +6081,33 @@ function canHaveChickenRound(someArena) {
         && someArena.cliffs === undefined && someArena.lighthouse === undefined;
 }
 
-// Everything held still for a moment, then the chicken and the knight swap
+// Feathers bursting off a knight: the chicken's white ones and his plume's
+function featherBurst(knight, count) {
+    const x = knight.getGroundX();
+    const y = knight.getGroundY() - 5;
+    particles.feathers(x, y, [245, 245, 240], count);
+    particles.feathers(x, y, knight.player.plumeColor, Math.ceil(count / 2));
+}
+
+// Everything held still for a moment (with feathers swirling off both of them), then the chicken and the knight swap
+// in an explosion of feathers
 function updateChickenFreeze() {
     chickenFreeze--;
-    if (chickenFreeze === 0) {
-        for (const knight of knights.filter(knight => !knight.dead)) {
-            knight.setChicken(!knight.isChicken);
-            particles.feathers(knight.getGroundX(), knight.getGroundY() - 4, [245, 245, 240], 10);
-            particles.dust(knight.getGroundX(), knight.getGroundY(), 4);
+    const alive = knights.filter(knight => !knight.dead);
+    if (chickenFreeze > 0 && chickenFreeze % 16 === 0) {
+        for (const knight of alive) {
+            featherBurst(knight, 3);
         }
-        addShake(2);
+    }
+    if (chickenFreeze === 0) {
+        for (const knight of alive) {
+            knight.setChicken(!knight.isChicken);
+            featherBurst(knight, 30);
+            particles.dust(knight.getGroundX(), knight.getGroundY(), 10);
+            particles.sparks(knight.getGroundX(), knight.getGroundY() - 6, 10, [255, 255, 255]);
+        }
+        addShake(4);
+        flash = Math.max(flash, 6);
         sound.bawk();
     }
     weather.update();
@@ -6053,19 +6191,79 @@ function findClearSpot(knightDistance) {
     return null;
 }
 
+// The power-ups that can show up right now (none in a calm arena or a showdown, no sword throws in a chicken round)
+function getAllowedPowerups() {
+    if (arena.calm || arena.guns) {
+        return [];
+    }
+    return SPAWNING_POWERUPS.filter(type => simSettings.isPowerupOn(type) && !(chickenRound && type === "throw"));
+}
+
+// A frenzy: a shower of power-ups, all over the arena, but not right next to anyone
+function dropFrenzy() {
+    const types = getAllowedPowerups().filter(type => type !== "frenzy");
+    if (types.length === 0) {
+        return;
+    }
+    let dropped = 0;
+    for (let tries = 0; tries < FRENZY_COUNT * 4 && dropped < FRENZY_COUNT; tries++) {
+        const spot = findClearSpot(FRENZY_KNIGHT_DISTANCE);
+        // Not on top of each other either
+        if (spot === null || powerups.some(other => other.life > 0 && dhypot(other.x - spot.x, other.y - spot.y) < 14)) {
+            continue;
+        }
+        const powerup = new Powerup(pick(types), spot.x, spot.y);
+        powerup.drop(dropped * FRENZY_DROP_GAP_TICKS);
+        powerups.push(powerup);
+        dropped++;
+    }
+    particles.confetti(SCREEN_WIDTH, 2);
+    addShake(2);
+}
+
+// Tall grass gets flattened by more than swords: rolling boulders, stampeding horses, lightning, catapult rocks,
+// fireballs, explosions, dragon fire and tornadoes
+function cutGrass() {
+    if (grassRows.length === 0) {
+        return;
+    }
+    const around = (x, y, radius) => ({left: x - radius, right: x + radius, top: y - radius * 0.6, bottom: y + radius * 0.6});
+    const boxes = [];
+    for (const boulder of boulders) {
+        if (boulder.landed) boxes.push(boulder.getBox());
+    }
+    for (const horse of horses) {
+        if (horse.isActive() && horse.z === 0) boxes.push(horse.getBox());
+    }
+    for (const blast of [...strikes, ...skyRocks]) {
+        if (blast.firedNow) boxes.push(around(blast.x, blast.y, 14));
+    }
+    for (const feature of features) {
+        if (feature instanceof Explosion && feature.ticks <= 1) boxes.push(around(feature.x, feature.y, 24));
+        if (feature instanceof FirePatch) boxes.push(around(feature.x, feature.y, DRAGON_FIRE_RADIUS));
+        if (feature instanceof Tornado) boxes.push(around(feature.x, feature.y, TORNADO_CATCH + 4));
+    }
+    for (const box of boxes) {
+        for (const row of grassRows) {
+            row.cutBox(box);
+        }
+    }
+}
+
 function updatePowerups() {
     // There's always one on the field: a new one comes soon after the last one's gone
     // (none at all in a calm arena, like the jousting yard, or in a showdown, where it's just guns)
-    const allowed = arena.calm || arena.guns ? [] : SPAWNING_POWERUPS.filter(type => simSettings.isPowerupOn(type) && !(chickenRound && type === "throw"));
+    const allowed = getAllowedPowerups();
     if (phase === "playing" && powerups.length === 0 && allowed.length > 0) {
         powerupWait--;
         if (powerupWait <= 0) {
             const spot = findClearSpot(36);
             if (spot !== null) {
+                // Each one's in the list a few times, except frenzy, so that's rarer
+                const choices = allowed.flatMap(type => Array(type === "frenzy" ? 1 : FRENZY_RARITY).fill(type));
                 // Throwing a sword is a good way to wake a bear from a safe distance, so it comes up more with one around
-                const choices = [...allowed];
                 if (allowed.includes("throw") && features.some(feature => feature instanceof Bear)) {
-                    choices.push("throw", "throw");
+                    choices.push(...Array(2 * FRENZY_RARITY).fill("throw"));
                 }
                 powerups.push(new Powerup(pick(choices), spot.x, spot.y));
                 particles.sparks(spot.x, spot.y - 6, 10, [255, 255, 255]);
@@ -6076,7 +6274,7 @@ function updatePowerups() {
 
     for (const powerup of powerups) {
         powerup.update();
-        const knight = knights.find(knight => !knight.dead && boxesOverlap(knight.getFeetBox(), powerup.getBox()));
+        const knight = !powerup.isLanded() ? undefined : knights.find(knight => !knight.dead && boxesOverlap(knight.getFeetBox(), powerup.getBox()));
         if (knight !== undefined) {
             givePowerup(knight, powerup.type);
             stats[knight.player.color].powerups++;
@@ -6216,6 +6414,7 @@ const POWERUP_NAMES = {
     reverse: ["REVERSE!", "#c890f0", [190, 110, 230]],
     gun: ["GUN!", "#d0d0d8", [200, 200, 210]],
     boogie: ["BOOGIE BOMB!", "#ff80e0", [255, 128, 224]],
+    frenzy: ["FRENZY!", "#ffd84a", [248, 184, 0]],
 };
 
 function givePowerup(knight, type) {
@@ -6252,6 +6451,8 @@ function givePowerup(knight, type) {
         for (const other of others) {
             strikes.push(new Strike(other, knight));
         }
+    } else if (type === "frenzy") {
+        dropFrenzy();
     } else if (type === "boogie") {
         // The other knight has to dance: he can walk about, but can't attack
         for (const other of others) {
@@ -6477,7 +6678,8 @@ function useUp(danger) {
     }
 }
 
-function checkHits() {
+// late: the round's already decided, so anyone going down doesn't change the score
+function checkHits(late = false) {
     // Close calls: dangerous things going right past someone
     if (closeCallCooldown > 0) {
         closeCallCooldown--;
@@ -6606,6 +6808,12 @@ function checkHits() {
         }
         hit.ownGoal = ownGoal;
     }
+    if (late) {
+        // Too late to count, so it's just a bump, not the big knockdown
+        sound.hit();
+        addShake(4);
+        return;
+    }
     sound.hit();
     addShake(6);
     flash = FLASH_TICKS;
@@ -6733,7 +6941,7 @@ function scoreRound(hits) {
         music.setSong(null);
         // The loser bleeds, from now until the next match
         const loserKnight = knights.find(knight => knight.player === loser);
-        if (loserKnight.fallHole === null) {
+        if (loserKnight.fallHole === null && !loserKnight.isChicken) {
             loserKnight.bleeding = true;
             particles.blood(loserKnight.getGroundX(), loserKnight.getGroundY() - 6, 24, bloodLanded);
         }
@@ -6855,6 +7063,9 @@ function update() {
                 chickenTicks = 0;
                 chickenFreeze = CHICKEN_FREEZE_TICKS;
                 sound.cluck();
+                for (const knight of knights.filter(knight => !knight.dead)) {
+                    featherBurst(knight, 14);
+                }
             }
         }
     }
@@ -6876,13 +7087,16 @@ function update() {
     updatePowerups();
     updateHazards(walls);
     updateProjectiles(walls);
+    cutGrass();
     checkSwords();
     if (phase === "playing") {
         checkJousts();
     }
-    // Once the round's decided, nobody else can go down
+    // Once the round's decided the score can't change, but the winner can still go down (walking into lava, say)
     if (phase === "playing") {
         checkHits();
+    } else if (phase === "roundOver" || phase === "matchOver") {
+        checkHits(true);
     }
 
     // Anything that moves scares the butterflies
@@ -7499,7 +7713,7 @@ function onOff(on) {
 
 const POWERUP_MENU_NAMES = {
     shield: "SHIELD", speed: "SPEED", thunder: "THUNDER", grow: "BIG", avalanche: "AVALANCHE",
-    fury: "FURY", throw: "THROW SWORD", reverse: "REVERSE", gun: "GUN", boogie: "BOOGIE BOMB",
+    fury: "FURY", throw: "THROW SWORD", reverse: "REVERSE", gun: "GUN", boogie: "BOOGIE BOMB", frenzy: "FRENZY",
 };
 
 function makePauseMenu() {
@@ -7926,6 +8140,7 @@ const POWERUP_INFO = {
     throw: "YOUR NEXT SWING THROWS YOUR SWORD",
     reverse: "YOUR OPPONENT'S CONTROLS GO BACKWARDS",
     boogie: "YOUR OPPONENT HAS TO DANCE: NO ATTACKING",
+    frenzy: "RARE! DROPS 12 POWER-UPS ALL OVER",
 };
 
 function makePowerupMenu() {
