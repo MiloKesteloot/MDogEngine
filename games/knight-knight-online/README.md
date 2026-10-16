@@ -11,7 +11,8 @@ On the title screen:
   title screen says if anyone's waiting and how many matches are being played. Quick matches use the standard
   settings (the host can change them in the lobby after the first one).
 - **HOST ONLINE MATCH**: you get a 4 letter code. Send it to a friend, or press C to copy a link that joins in one
-  click (the address you're on, plus `&code=` and the code). You're
+  click (`milo.games/knight-knight?code=` and the code, set as `SHARE_URL` in `config.js`; the portfolio's
+  `knight-knight.html` passes the code on to the game. Run on your own computer, it's that address instead). You're
   red, and you pick the match's settings while you wait (Enter on the code screen); whatever they're set to when your
   friend joins is the match. When your friend joins, a doorbell plays, and if you're in another tab its title flashes
   "FRIEND JOINED!".

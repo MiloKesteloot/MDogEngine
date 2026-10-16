@@ -5,7 +5,9 @@ ROOT = r"C:\Users\milo\Documents\GitHub\MDogEngine"
 DRAFTS = os.path.join(ROOT, "games", "knight-knight-online", "cover-drafts")
 ALPH = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!~-.,?[]/:*'\"><_"
 FONT = Image.open(os.path.join(ROOT, "assets", "fonts", "marsfont.png")).convert("RGBA")
-left, top, width, height, scale = 66, 56, 136, 102, 8
+# python cover_title.py square: a square one instead (for the portfolio), taller, with more of the meadow above
+square = len(sys.argv) > 1 and sys.argv[1] == "square"
+left, top, width, height, scale = (66, 44, 136, 136, 6) if square else (66, 56, 136, 102, 8)
 shot = Image.open(os.path.join(DRAFTS, "cover-ingame-raw.png")).convert("RGBA").crop((left, top, left + width, top + height))
 
 def text_mask(text):
@@ -91,5 +93,5 @@ band = Image.new("RGBA", shot.size, (0, 0, 0, 0))
 ImageDraw.Draw(band).rectangle((0, 0, width, 22), fill=(10, 16, 10, 140))
 shot.alpha_composite(band)
 draw_text(shot, "KNIGHT KNIGHT", width // 2, 11, (0xff, 0xd8, 0x4a, 255), 2)
-shot.resize((width * scale, height * scale), Image.NEAREST).convert("RGB").save(os.path.join(DRAFTS, "cover-ingame.png"))
+shot.resize((width * scale, height * scale), Image.NEAREST).convert("RGB").save(os.path.join(DRAFTS, "cover-square.png" if square else "cover-ingame.png"))
 print("saved", width * scale, "x", height * scale)

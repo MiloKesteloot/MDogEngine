@@ -10,6 +10,7 @@ import KillCam, {BEFORE_TICKS as REPLAY_BEFORE_TICKS, AFTER_TICKS as REPLAY_AFTE
 import {dsin, dcos, datan2, dhypot, makeRandomState, nextRandom} from "./DetMath.js";
 import {cloneState, hashState, deepFreeze, serializeState, deserializeState, nameFrozenThings} from "./Snapshot.js";
 import Online, {CODE_LENGTH, cleanCode, isCodeLetter, fetchStats} from "./Online.js";
+import {SHARE_URL} from "./config.js";
 
 // Knight Knight: a two player knight duel. One hit knocks a knight down, and the first to win 5 rounds wins.
 // Swords that meet clang off each other (a parry). Boulders roll through that can be hit back at the other knight,
@@ -8553,7 +8554,12 @@ let copiedTicks = 0; // "COPIED!" shows for a moment after copying the invite li
 
 // A link straight into the host's match: exactly the address the host's on, with the code on the end. Opening it
 // joins the match right away.
+// The link C copies on the code screen: the game on milo.games, with the code. (Run on this computer, for testing, it's
+// this address instead, so the link joins the same test copy.)
 function inviteLink() {
+    if (!["localhost", "127.0.0.1", ""].includes(location.hostname)) {
+        return SHARE_URL + "?code=" + online.code;
+    }
     const url = new URL(location.href);
     url.searchParams.delete("room");
     url.searchParams.set("game", "knight-knight-online");
